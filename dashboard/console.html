@@ -419,7 +419,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
   // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
   const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
-    review_stale: '검토 대기 방치', context: '맥락 포화', cost: '비용 핫스팟', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
+    review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
   // status_detail wording that usually means a person still has to do something (keyword guess; refined by work cards later).
   const FOLLOWUP_RX = /(merge|병합|머지|설치|install|남음|남았|needs? your|your click|left to|수동|직접 (확인|설치|실행)|점검 필요|승인)/i;
   // A permission prompt the session is waiting on (platform wording seen in real data: "Approve or deny <tool>", "Waiting on permission: <tool>").
@@ -436,7 +436,6 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const P = { ...DEFAULT_POLICY, ...S.ledger.policy }; const now = Date.now(); const out = [];
     const ageH = (iso) => iso ? Math.max(0, (now - Date.parse(iso)) / 3600000) : 0;
     const bonus = (hrs) => Math.min(15, 3 * Math.log2(hrs + 1));
-    const costBonus = (s) => Math.min(10, 3 * Math.log10(1 + (s.cost || 0))); // an expensive session waiting on one answer is worth unblocking first
     const add = (it) => {
       const st = S.ledger.inbox[inboxDocId(it.key)]; let state = 'open';
       if (st) {
@@ -453,7 +452,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         const kind = APPROVAL_RX.test(ask + ' ' + (s.detail || '')) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
         const old = hrs > 24 * 7;
         const notes = [old ? '7일 넘게 방치됐습니다. 답하거나 보관해 정리하세요.' : '', SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
-        add({ key: kind + ':' + s.id, kind, s, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) + costBonus(s) - (old ? 40 : 0),
+        add({ key: kind + ':' + s.id, kind, s, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - (old ? 40 : 0),
           detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
         continue;
       }
@@ -462,7 +461,6 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       if (b === 'REVIEW_READY' && hrs > 72) add({ key: 'review_stale:' + s.id, kind: 'review_stale', s, prio: 50 + bonus(hrs) / 3, detail: s.detail || '검토를 기다립니다.', sig });
       if (b === 'COMPLETED' && hrs <= 24 * 14 && needsHuman(s.detail)) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: 60, detail: s.detail, note: 'status_detail 키워드로 추정했습니다.', sig });
       if ((s.ctxUsed || 0) >= 600000 && b !== 'COMPLETED') add({ key: 'context:' + s.id, kind: 'context', s, prio: 45, detail: '맥락 ' + compact(s.ctxUsed) + '. 인계 메모를 받아 새 세션으로 옮기는 것을 검토하세요.', sig: 'ctx' });
-      if ((s.cost || 0) >= 300 && hrs <= 72) add({ key: 'cost:' + s.id, kind: 'cost', s, prio: 40, detail: '누적 ' + usd(s.cost) + ', 최근 3일 안에 활동.', sig: String(Math.floor((s.cost || 0) / 100)) });
     }
     const byRepo = {};
     for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s))) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
@@ -643,17 +641,19 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const t = $('tiles'); t.replaceChildren();
     const live = S.sessions.filter((s) => !archived(s));
     const working = live.filter((s) => B(s) === 'WORKING').length; const blocked = live.filter((s) => B(s) === 'BLOCKED').length;
-    const day = S.sessions.filter((s) => mins(s.updated) <= 1440 && s.cost != null);
-    const daySum = day.reduce((a, s) => a + s.cost, 0);
+    // Collaboration view: whose turn it is and how long the human side has kept AI work waiting. Cost stays a reference figure in the session table.
+    const waits = mine.filter((i) => ['approval', 'merge', 'decision'].includes(i.kind) && i.s && i.s.updated).map((i) => (Date.now() - Date.parse(i.s.updated)) / 3600000).sort((a, b) => a - b);
+    const dur = (hrs) => hrs < 1 ? '1시간 미만' : hrs < 48 ? Math.round(hrs) + '시간' : Math.round(hrs / 24) + '일';
+    const followups = mine.filter((i) => i.kind === 'followup').length;
     const open = alerts.filter((a) => !a.muted);
     const enabled = S.triggers.filter((x) => x.enabled).length;
     const tile = (k, v, s, cls) => h('div', { class: 'tile ' + (cls || '') }, h('span', { class: 'k', text: k }), h('span', { class: 'v', text: v }), h('span', { class: 's', text: s }));
     const ready = S.sessionsAt != null;
     t.append(
       tile('당신 차례', ready ? String(mine.length) : '—', '긴급 ' + urgent + '건 · 미룸·처리 ' + hidden + '건', urgent ? 'bad' : (mine.length ? 'warn' : '')),
-      tile('작업 중', ready ? String(working) : '—', '보관 제외 ' + live.length + '개 중', ''),
-      tile('막힘', ready ? String(blocked) : '—', '입력·승인 대기', blocked ? 'bad' : ''),
-      tile('24시간 활동 세션 비용', ready ? usd(daySum) : '—', '그 세션들의 누적 비용 합 · ' + day.length + '개', ''),
+      tile('AI 작업 중', ready ? String(working) : '—', '보관 제외 ' + live.length + '개 중 · 막힘 ' + blocked, ''),
+      tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(waits[Math.floor(waits.length / 2)]) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
+      tile('숨은 후속', ready ? String(followups) : '—', '완료 세션에 남은 사람 몫(추정)', ''),
       tile('켜진 예약 작업', S.triggersAt != null ? String(enabled) : '—', '목록 ' + S.triggers.length + '개 중', ''),
     );
   }

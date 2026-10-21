@@ -66,7 +66,7 @@ agent-ops-kit/
 │  ├─ patterns/{brd,watchdog,cleanroom,loop,curator,budget}.md   # 기능별 런북
 │  ├─ rollout.md                   # 단계, 시험 T1–T6, KPI, 결정 D1–D9
 │  ├─ dashboard.md                 # 관제실 콘솔
-│  └─ proposals/control-tower-v2.md # 제안: 모든 세션의 중간관리자·비서(합의 전)
+│  └─ proposals/{control-tower-v2,workspace-atlas}.md   # 제안: 모든 세션의 중간관리자·비서, 다음 과제 작업공간 지도(합의 전)
 ├─ schemas/{aok1,tree,ledger,claim,card,seed,cleanroom-report}.schema.json
 ├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden}/SKILL.md
 ├─ .claude/agents/{verifier,adjudicator}.md                      # 읽기 전용 도구
