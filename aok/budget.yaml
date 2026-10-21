@@ -1,0 +1,70 @@
+# AOK v1 — budget defaults (plan §3⑥ 예산 가드, decision D3)
+#
+# 모든 수치는 [추론] 기본값이다. 실측으로 정한 값이 아니며 D3 결정으로 바꾼다.
+# 금액은 list 가격 기준 USD. 구독 사용량 한도(5시간·7일)는 따로 있다.
+# 사용자가 품질을 우선하므로 초과 시 기본 동작은 경보(notify)이지 감속이 아니다.
+#
+# 이 파일의 값은 원장 config_policy 문서(schemas/ledger.schema.json#/$defs/config_policy)와
+# 트리 문서(schemas/tree.schema.json)의 기본값이 된다. 대응표는 파일 끝에 있다.
+
+version: 1
+
+tree:
+  cap_usd: 50              # [추론] D3. 트리 상한. 허브 자신의 비용을 포함한다
+  include_hub_cost: true   # 원칙 5: 비용의 대부분은 오래 사는 허브다
+  soft: 0.7                # [추론] 상한의 70%에서 경고, 100%에서 초과 경보 (②)
+  max_depth: 1             # [추론] 허브 아래 자식까지만. 손자 세션 금지 (S6)
+  max_concurrent: 3        # [추론] 동시에 실행하는 자식 수
+  on_overrun: notify       # notify | interrupt. interrupt일 때만 interrupt_session 사용 (D6: 자동 중단은 끔)
+
+child:
+  cap_usd: 15              # [추론] D3. 자식 하나의 상한(역할별 상한도 이 값을 넘지 않는다)
+  default_role_cap_usd: 10 # [추론] 아래 표에 없는 역할의 상한
+  role_caps_usd:           # [추론] 역할별 상한. 근거는 계획의 비용 추정
+    dev: 15                #   ④ 라운드당 $1–5 [추론] × 최대 3라운드
+    reviewer: 10           #   §3⑥ 예시값
+    cleanroom: 5           #   ③ $1–5, 15–60분 [추론]
+    repro-l2: 5            #   ① L2는 재현 로그만 만든다. ③과 같은 규모로 본다
+    watchdog: 1            #   ② B층 회당 $0.3–0.6 [추론]. 조건부 v1.x (T1·T3 통과 후)
+    curator: 5             #   ⑤ 1회 0.5–1.5M 토큰 [추론]. v1은 허브에서 수동 실행
+
+hub_rotate:                # 둘 중 하나에 닿으면 HANDOFF를 쓰고 새 허브로 옮긴다
+  context_tokens: 250000   # [추론] D3
+  hub_cost_usd: 25         # [추론] D3
+
+fork:                      # §3⑥ 적용 지점 6
+  max_hub_context_tokens: 100000  # [추론] 허브 맥락이 이보다 작을 때만 포크
+  max_per_session: 3              # [추론] 세션당 포크 횟수 상한
+
+watch:                     # ② 정지·비용 감시기 신호 기준
+  stale_minutes: 30        # [추론] WORKING인데 updated_at이 이 시간 넘게 그대로면 정지 의심 (T4로 확인)
+  loop_cost_jump_usd: 3    # [추론] 커밋·봉투 없이 cost_usd가 이만큼 늘면 루프 의심
+
+account:
+  daily_cap_usd: null      # [미확인] 계획에 기본값이 없다. 계정 단위 일일 경보선을 쓰려면 직접 정한다
+
+model_tier:
+  # S7: 판정은 effort가 설정된 쪽(허브·서브에이전트·UI로 만든 세션)이 한다.
+  #     원격 자식은 실행과 재현 로그를 맡는다.
+  # D8: 모델 변경(예: watchdog을 Haiku로)은 사용자의 명시적 요청이 있어야 한다.
+  #     Haiku가 auto 모드를 지원하는지는 [미확인]이며 T1에서 확인한다.
+  default: inherit         # create_session 기본값: 호출한 세션의 모델을 물려받는다
+  roles:
+    dev: inherit
+    reviewer: inherit
+    cleanroom: inherit
+    repro-l2: inherit
+    watchdog: inherit      # 저가 모델 후보. 사용자 요청 전에는 inherit 유지
+    curator: inherit
+  change_requires_user_request: true
+
+# 원장 config_policy 대응표
+#   tree_default_cap_usd      <- tree.cap_usd
+#   child_cap_usd             <- child.cap_usd
+#   soft_ratio                <- tree.soft
+#   hub_rotate_context_tokens <- hub_rotate.context_tokens
+#   hub_rotate_cost_usd       <- hub_rotate.hub_cost_usd
+#   stale_minutes             <- watch.stale_minutes
+#   loop_cost_jump_usd        <- watch.loop_cost_jump_usd
+#   daily_cap_usd             <- account.daily_cap_usd
+#   refresh_seconds           (원장을 읽는 페이지 설정. 이 파일에는 없다)

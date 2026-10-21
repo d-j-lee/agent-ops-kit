@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/claim.schema.json",
+  "title": "AOK claim (evidence convention)",
+  "description": "One graded claim under the AOK evidence convention (plan §2.1). Rules: (1) a [확인] claim needs at least one evidence item with a re-runnable or re-queryable `ref`; without one a verifier downgrades it to [추론]. (2) A conclusion takes the grade of its weakest premise. (3) Ratio claims (e.g. 'completion 80%') only from n>=10; before that report raw counts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "claim", "grade"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Claim identifier, unique within its document or claim ledger.",
+      "examples": ["C7"]
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The claim as a declarative sentence."
+    },
+    "grade": {
+      "$ref": "#/$defs/grade",
+      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = verbatim tool/product documentation."
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence items backing the claim. Required (minItems 1) when grade is 확인.",
+      "items": {
+        "$ref": "#/$defs/evidence_item"
+      }
+    },
+    "scope": {
+      "type": "string",
+      "description": "Where the claim holds: environment, versions and observation time.",
+      "examples": ["claude.ai cloud container, 2026-10-20T15:30Z"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "grade": {
+            "const": "확인",
+            "description": "Condition: the claim is graded 확인."
+          }
+        },
+        "required": ["grade"]
+      },
+      "then": {
+        "required": ["evidence"],
+        "properties": {
+          "evidence": {
+            "minItems": 1,
+            "description": "At least one re-runnable evidence item."
+          }
+        }
+      },
+      "description": "A 확인 claim needs at least one evidence item (§2.1 rule 1)."
+    }
+  ],
+  "$defs": {
+    "grade": {
+      "type": "string",
+      "enum": ["확인", "도출", "추론", "미확인", "기록됨", "문서"],
+      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = verbatim tool/product documentation."
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "description": "One pointer to evidence that can be re-run or re-read.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["cmd", "event", "file", "url"],
+          "description": "Evidence type: cmd = a command to re-run; event = a session transcript event; file = a file at a commit; url = a public URL."
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Re-runnable pointer: `session_id/event_uuid` for event, `path@sha` for file, the command line for cmd, the URL for url.",
+          "examples": ["session_<id>/<event_uuid>", "README.md@abc1234", "python3 -m unittest discover -s tests"]
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "Short verbatim excerpt of the evidence. Mask emails and personal names before storing."
+        }
+      }
+    }
+  }
+}

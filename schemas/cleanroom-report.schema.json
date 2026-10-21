@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/cleanroom-report.schema.json",
+  "title": "AOK cleanroom reproduction report",
+  "description": "Report from a cleanroom reproduction child (feature ③, plan §3③). The child runs the entry document's commands verbatim at a fixed sha in a minimal environment; any action the document does not state is itself a defect. Documents must not be edited (checked by diff). The report goes to a PR comment and the ledger, and the parent gets an `AOK/1 result`. Assurance covers a clean cloud environment only; steps needing internal networks, devices or secrets are recorded as env_limit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repo", "sha", "env", "steps", "findings", "result"],
+  "properties": {
+    "repo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository under test, `owner/repo` or clone URL.",
+      "examples": ["example-org/example-repo"]
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{4,40}$",
+      "description": "Commit checked out (create_session source_revision); full 40-char sha recommended."
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["env_id"],
+      "description": "Environment facts, recorded because setup scripts, CLAUDE.md and hooks can fill prerequisites the docs do not state.",
+      "properties": {
+        "env_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "environment_id the child ran in (should be the minimal environment, D9)."
+        },
+        "cc_version": {
+          "type": "string",
+          "description": "Claude Code version reported by the child."
+        },
+        "session_start_tail": {
+          "type": "string",
+          "description": "Tail of the SessionStart hook / setup output."
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Commands executed, in order, exactly as written in the documents.",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "first_failure": {
+      "description": "First failing step with its raw stderr preserved; null when nothing failed.",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["n", "cmd"],
+          "properties": {
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Step number of the first failure."
+            },
+            "cmd": {
+              "type": "string",
+              "description": "Command that failed, verbatim."
+            },
+            "stderr_head": {
+              "type": "string",
+              "description": "Head of the raw stderr of the failure."
+            }
+          }
+        }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "description": "Defects found.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "evidence"],
+        "description": "One defect.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["doc_missing", "doc_wrong", "env_limit", "flaky", "test_fail"],
+            "description": "doc_missing = a needed action is not documented; doc_wrong = documented command is wrong; env_limit = needs internal network/device/secret (recorded, not a defect of the docs); flaky = differs across two runs at the same sha; test_fail = tests fail."
+          },
+          "step": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "description": "Step number the finding refers to; null if not tied to a step."
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Raw output excerpt or explanation backing the finding."
+          }
+        }
+      }
+    },
+    "result": {
+      "type": "string",
+      "enum": ["pass", "partial", "fail"],
+      "description": "Overall result."
+    },
+    "cost_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Child session cost in USD as read from get_session."
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n", "cmd", "exit"],
+      "description": "One executed step.",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Step number, starting at 1."
+        },
+        "doc_ref": {
+          "type": "string",
+          "description": "Where the command comes from, `file#anchor`.",
+          "examples": ["README.md#setup"]
+        },
+        "cmd": {
+          "type": "string",
+          "description": "Command run, verbatim from the document."
+        },
+        "exit": {
+          "type": ["integer", "null"],
+          "description": "Exit code; null if the step could not be run."
+        },
+        "sec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wall-clock seconds."
+        },
+        "tail": {
+          "type": "string",
+          "description": "Tail of combined output."
+        },
+        "deviation": {
+          "type": ["string", "null"],
+          "description": "Any action taken that the document does not state (itself a defect); null if none."
+        }
+      }
+    }
+  }
+}
