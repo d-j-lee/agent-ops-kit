@@ -418,12 +418,16 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   const isAok = (s) => !!S.ledger.reg[s.id] || s.tags.includes('aok:v1');
 
   // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
-  const INBOX_LABEL = { approval: '권한 승인 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
+  const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
     review_stale: '검토 대기 방치', context: '맥락 포화', cost: '비용 핫스팟', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
   // status_detail wording that usually means a person still has to do something (keyword guess; refined by work cards later).
   const FOLLOWUP_RX = /(merge|병합|머지|설치|install|남음|남았|needs? your|your click|left to|수동|직접 (확인|설치|실행)|점검 필요|승인)/i;
   // A permission prompt the session is waiting on (platform wording seen in real data: "Approve or deny <tool>", "Waiting on permission: <tool>").
   const APPROVAL_RX = /(approve or deny|waiting on permission|권한 승인|승인 대기)/i;
+  const MERGE_RX = /(merge|병합|머지)/i;
+  // The session asks the human to change settings or permission rules: badge only, never acted on from here (S4, S8).
+  const SETTINGS_RX = /(\/config|settings?\b|permission rule|auto mode|설정 (변경|바꾸|끄)|권한 규칙)/i;
+  const isChild = (s) => !!s.parent || s.origin === 'claude_code_mcp_seed';
   // Drop phrases that report a finished merge before looking for follow-up wording ("병합 완료" is not a to-do).
   const needsHuman = (t) => !!t && FOLLOWUP_RX.test(String(t).replace(/(병합|머지|merged?|merges)\s*(완료|됨|했|done|complete[d]?)/gi, ''));
   const sessionUrl = (id) => 'https://claude.ai/code/' + encodeURIComponent(id);
@@ -432,6 +436,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const P = { ...DEFAULT_POLICY, ...S.ledger.policy }; const now = Date.now(); const out = [];
     const ageH = (iso) => iso ? Math.max(0, (now - Date.parse(iso)) / 3600000) : 0;
     const bonus = (hrs) => Math.min(15, 3 * Math.log2(hrs + 1));
+    const costBonus = (s) => Math.min(10, 3 * Math.log10(1 + (s.cost || 0))); // an expensive session waiting on one answer is worth unblocking first
     const add = (it) => {
       const st = S.ledger.inbox[inboxDocId(it.key)]; let state = 'open';
       if (st) {
@@ -444,10 +449,12 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     for (const s of live) {
       const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || '';
       if (b === 'BLOCKED' || s.needsAction) {
-        const approval = APPROVAL_RX.test((s.needsAction || '') + ' ' + (s.detail || ''));
+        const ask = s.needsAction || s.detail || '';
+        const kind = APPROVAL_RX.test(ask + ' ' + (s.detail || '')) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
         const old = hrs > 24 * 7;
-        add({ key: (approval ? 'approval:' : 'decision:') + s.id, kind: approval ? 'approval' : 'decision', s, prio: (approval ? 95 : 85) + bonus(hrs) - (old ? 40 : 0),
-          detail: s.needsAction || s.detail || '세션을 열어 무엇을 기다리는지 확인하세요.', note: old ? '7일 넘게 방치됐습니다. 답하거나 보관해 정리하세요.' : '', sig });
+        const notes = [old ? '7일 넘게 방치됐습니다. 답하거나 보관해 정리하세요.' : '', SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
+        add({ key: kind + ':' + s.id, kind, s, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) + costBonus(s) - (old ? 40 : 0),
+          detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
         continue;
       }
       if (b === 'FAILED') add({ key: 'failed:' + s.id, kind: 'failed', s, prio: 80, detail: s.detail || '세션을 열어 오류를 확인하세요.', sig });
@@ -671,7 +678,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           if (it.state === 'open') acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'snoozed') }, '내일 다시'), h('button', { class: 'btn', type: 'button', onclick: () => setInboxState(it, 'done') }, '처리함'));
           else acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'open') }, '다시 열기'));
         }
-        const meta = it.s ? [h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
+        const meta = it.s ? [h('span', { class: 'chip', text: isChild(it.s) ? '자식' : '사람' }), h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
           h('span', { class: 'faint', style: 'font-size:12px', text: ago(it.s.updated) + ' · ' + usd(it.s.cost) })]
           : (it.sessions || []).slice(0, 6).map((x) => h('a', { class: 'chip', href: sessionUrl(x.id), target: '_blank', rel: 'noopener', title: x.title, text: x.title.slice(0, 18) }));
         root.append(h('div', { class: 'alert ' + (it.prio >= 80 ? 'critical' : '') + (it.state !== 'open' ? ' muted' : '') },
