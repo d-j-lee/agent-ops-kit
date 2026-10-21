@@ -400,7 +400,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       effort: sc.effort_level || null, perm: sc.permission_mode || s.permission_mode || '',
       cost: em.usage && typeof em.usage.cost_usd === 'number' ? em.usage.cost_usd : null,
       ctxUsed: em.context_usage ? em.context_usage.used_tokens : null, ctxMax: em.context_usage ? em.context_usage.max_tokens : null,
-      needsAction: pts.needs_action || '', detail: pts.status_detail || '', recent: pts.recent_action || '',
+      needsAction: pts.needs_action || '', detail: pts.status_detail || '', recent: pts.recent_action || '', unread: !!s.unread,
       task: s.task_summary || em.task_summary || '', conn: s.connection_status || '', env: s.environment_id || '',
       repo: (() => { const src = (sc.sources || [])[0]; const u = src && src.git_repository && src.git_repository.url; return u ? String(u).replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') : ''; })(),
       served: em.last_served_model || '',
@@ -419,23 +419,28 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
   // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
   const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
-    review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
-  // status_detail wording that usually means a person still has to do something (keyword guess; refined by work cards later).
-  const FOLLOWUP_RX = /(merge|병합|머지|설치|install|남음|남았|needs? your|your click|left to|수동|직접 (확인|설치|실행)|점검 필요|승인)/i;
-  // A permission prompt the session is waiting on (platform wording seen in real data: "Approve or deny <tool>", "Waiting on permission: <tool>").
-  const APPROVAL_RX = /(approve or deny|waiting on permission|권한 승인|승인 대기)/i;
-  const MERGE_RX = /(merge|병합|머지)/i;
-  // The session asks the human to change settings or permission rules: badge only, never acted on from here (S4, S8).
-  const SETTINGS_RX = /(\/config|settings?\b|permission rule|auto mode|설정 (변경|바꾸|끄)|권한 규칙)/i;
+    unread: '안 읽은 결과', review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
+  // Wording that leaves work to the person: who + what remains. Tested on status_detail and recent_action; a keyword guess until work cards exist.
+  const FOLLOWUP_RX = /(사용자\s?(몫|확인|설치|결정|검증|승인)|사용자가 [^.;]{0,20}(해야|필요)|사용자에게 (남김|넘김|요청)|사람에게 (남김|넘김)|남음|남았|남아 ?있|남은 (일|결정|작업)|결정 \d+건|(확인|점검|검증) 필요|새 세션에서 (확인|점검)|직접 (확인|설치|실행|해)|수동으로 (해|실행|설치|적용)|left to \w+|needs? (your|user)|awaiting (your|user)|your (review|click|call|decision|approval|sign-?off)|you (need|have) to|please (run|review|merge|install|confirm|push)|verify in a new session|review requested from you|sign-?off|후속:)/i;
+  // Phrases that report finished or empty work, removed before the follow-up test ("병합 완료", "Nothing left to do").
+  const DONE_RX = /(merged|병합(을|를)?\s*(끝냈|완료|됨|했)|머지\s*(완료|됨|했)|nothing (left|remaining)|남은 (일|작업)(이|은)? 없|no (follow-?ups?|action) (needed|required))/gi;
+  const needsHuman = (t) => !!t && FOLLOWUP_RX.test(String(t).replace(DONE_RX, ' '));
+  // A tool-permission prompt (real data: "Approve or deny <tool>", session_status REQUIRES_ACTION). PR or design "승인 대기" is a decision, not this.
+  const APPROVAL_RX = /(approve or deny|waiting on permission|permission (required|request)|권한 (승인|요청)|허용 필요|allow this tool)/i;
+  const MERGE_RX = /((PR|pull request|#\d+).{0,40}(merge|병합|머지)|(merge|병합|머지).{0,20}(PR|pull request|#\d+|버튼|button|commit)|병합 버튼|merge button)/i;
+  // The session asks the human to change settings or permission rules: shown as a note, never acted on from here (S4, S8).
+  const SETTINGS_RX = /(\/config|\/permissions|allowlist|settings\.json|permission (rule|mode)|auto[ -]?mode|bypassPermissions|acceptEdits|권한 (모드|규칙)|auto 모드|설정(을|를)?\s*(변경|바꿔|바꾸|꺼|끄|켜))/i;
   const isChild = (s) => !!s.parent || s.origin === 'claude_code_mcp_seed';
-  // Drop phrases that report a finished merge before looking for follow-up wording ("병합 완료" is not a to-do).
-  const needsHuman = (t) => !!t && FOLLOWUP_RX.test(String(t).replace(/(병합|머지|merged?|merges)\s*(완료|됨|했|done|complete[d]?)/gi, ''));
   const sessionUrl = (id) => 'https://claude.ai/code/' + encodeURIComponent(id);
   const inboxDocId = (key) => key.replace(/[^A-Za-z0-9_\-.~:@+]/g, '~').slice(0, 200);
+  const hashIds = (arr) => { let x = 5381; for (const c of arr.map((s) => s.id).sort().join(',')) x = ((x * 33) ^ c.charCodeAt(0)) >>> 0; return x.toString(36) + ':' + arr.length; };
+  const DECISION_KINDS = ['approval', 'merge', 'decision'];
   function computeInbox() {
     const P = { ...DEFAULT_POLICY, ...S.ledger.policy }; const now = Date.now(); const out = [];
     const ageH = (iso) => iso ? Math.max(0, (now - Date.parse(iso)) / 3600000) : 0;
     const bonus = (hrs) => Math.min(15, 3 * Math.log2(hrs + 1));
+    // Old waits fade gradually (no cliff at 7 days): -2 per day after a week, at most -40.
+    const fade = (hrs) => hrs > 168 ? Math.min(40, (hrs / 24 - 7) * 2) : 0;
     const add = (it) => {
       const st = S.ledger.inbox[inboxDocId(it.key)]; let state = 'open';
       if (st) {
@@ -445,37 +450,50 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       out.push({ ...it, prio: Math.round(it.prio), state });
     };
     const live = S.sessions.filter((s) => !archived(s));
+    // A newer session on the same repo, created after this one last moved: the old wait was probably replaced (guess).
+    const superseded = (s) => !!s.repo && ageH(s.updated) > 72 && live.some((o) => o !== s && o.repo === s.repo && Date.parse(o.created) > Date.parse(s.updated));
     for (const s of live) {
       const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || '';
       if (b === 'BLOCKED' || s.needsAction) {
         const ask = s.needsAction || s.detail || '';
-        const kind = APPROVAL_RX.test(ask + ' ' + (s.detail || '')) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
-        const old = hrs > 24 * 7;
-        const notes = [old ? '7일 넘게 방치됐습니다. 답하거나 보관해 정리하세요.' : '', SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
-        add({ key: kind + ':' + s.id, kind, s, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - (old ? 40 : 0),
+        const kind = (s.status === 'SESSION_STATUS_REQUIRES_ACTION' || APPROVAL_RX.test(ask + ' ' + (s.detail || ''))) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
+        const sup = superseded(s);
+        const notes = [sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
+          SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
+        add({ key: kind + ':' + s.id, kind, s, superseded: sup, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - fade(hrs) - (sup ? 30 : 0),
           detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
         continue;
       }
       if (b === 'FAILED') add({ key: 'failed:' + s.id, kind: 'failed', s, prio: 80, detail: s.detail || '세션을 열어 오류를 확인하세요.', sig });
       if (b === 'WORKING' && mins(s.updated) > P.stale_minutes) add({ key: 'stall:' + s.id, kind: 'stall', s, prio: 70, detail: Math.floor(mins(s.updated)) + '분째 변화 없음. ' + (s.detail || s.task || ''), note: '긴 명령 실행 중에도 갱신되는지는 아직 미확인(T4)', sig });
       if (b === 'REVIEW_READY' && hrs > 72) add({ key: 'review_stale:' + s.id, kind: 'review_stale', s, prio: 50 + bonus(hrs) / 3, detail: s.detail || '검토를 기다립니다.', sig });
-      if (b === 'COMPLETED' && hrs <= 24 * 14 && needsHuman(s.detail)) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: 60, detail: s.detail, note: 'status_detail 키워드로 추정했습니다.', sig });
-      if ((s.ctxUsed || 0) >= 600000 && b !== 'COMPLETED') add({ key: 'context:' + s.id, kind: 'context', s, prio: 45, detail: '맥락 ' + compact(s.ctxUsed) + '. 인계 메모를 받아 새 세션으로 옮기는 것을 검토하세요.', sig: 'ctx' });
+      if (b === 'COMPLETED') {
+        const hit = needsHuman(s.detail) ? s.detail : needsHuman(s.recent) ? s.recent : '';
+        const unreadNote = s.unread ? ' 결과를 아직 열어 보지 않은 것으로 보입니다(unread).' : '';
+        if (hit) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: hrs <= 24 * 14 ? 60 : 40, detail: hit,
+          note: (hrs <= 24 * 14 ? '요약 문구로 추정했습니다.' : '14일 넘게 열려 있습니다(놓친 후속 추정).') + unreadNote, sig });
+        else if (s.unread && hrs <= 24 * 14) add({ key: 'unread:' + s.id, kind: 'unread', s, prio: 55, detail: s.detail || s.recent || '끝난 세션의 결과', note: 'unread 필드로 표시했습니다(의미는 추정).', sig });
+      }
+      if ((s.ctxUsed || 0) >= 600000 && b !== 'COMPLETED') add({ key: 'context:' + s.id, kind: 'context', s, prio: 45, detail: '맥락 ' + compact(s.ctxUsed) + '. 인계 메모를 받아 새 세션으로 옮기는 것을 검토하세요.', sig: 'ctx' + Math.floor(s.ctxUsed / 100000) });
     }
     const byRepo = {};
-    for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s))) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
+    for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s)) && ageH(s.updated) <= 48) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
     for (const [repo, arr] of Object.entries(byRepo)) if (arr.length >= 2) add({ key: 'same_repo:' + repo, kind: 'same_repo', s: null, prio: 35, sessions: arr,
-      detail: repo + '에서 ' + arr.length + '개 세션이 함께 진행 중입니다. 같은 브랜치·파일을 건드리는지 확인하세요.', sig: arr.map((x) => x.id).sort().join(',') });
-    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !needsHuman(s.detail));
-    if (cands.length) add({ key: 'hygiene:bundle', kind: 'hygiene', s: null, prio: 10, sessions: cands, detail: '끝난 지 7일이 넘었고 후속 표시가 없는 세션 ' + cands.length + '개. 확인 후 한꺼번에 보관할 수 있습니다.', sig: String(cands.length) });
+      detail: repo + '에서 ' + arr.length + '개 세션이 48시간 안에 함께 움직였습니다. 같은 브랜치·파일을 건드리는지 확인하세요.', sig: hashIds(arr) });
+    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !needsHuman(s.detail) && !needsHuman(s.recent));
+    if (cands.length) add({ key: 'hygiene:bundle', kind: 'hygiene', s: null, prio: 10, sessions: cands, sig: hashIds(cands),
+      detail: '끝난 지 7일이 넘었고, 후속 표시가 없고, 결과를 읽은 세션 ' + cands.length + '개.',
+      note: '보관하면 컨테이너가 반납되어 푸시·업로드하지 않은 파일은 사라집니다. 산출물을 확인한 뒤 보관하세요.' });
     out.sort((a, b) => b.prio - a.prio);
     return out;
   }
-  async function setInboxState(it, status) {
+  const DISMISS_LABEL = { noisy: '과민', already_handled: '이미 처리', not_relevant: '무관' };
+  async function setInboxState(it, status, reason) {
     const now = new Date();
     const ok = await ledgerSet('inbox_state/' + inboxDocId(it.key), { item_key: it.key, status, snooze_until: status === 'snoozed' ? new Date(now.getTime() + 86400000).toISOString() : null,
-      sig: it.sig, session_id: it.s ? it.s.id : null, kind: it.kind, updated_at: now.toISOString() }, status === 'open' ? '다시 열었습니다' : (status === 'snoozed' ? '내일까지 미뤘습니다' : '처리했습니다'));
-    if (ok) audit('inbox_' + status, it.s ? it.s.id : it.key, 'ok', it.kind);
+      sig: it.sig, session_id: it.s ? it.s.id : null, kind: it.kind, dismiss_reason: status === 'dismissed' ? (reason || null) : null, updated_at: now.toISOString() },
+      status === 'open' ? '다시 열었습니다' : status === 'snoozed' ? '내일까지 미뤘습니다' : status === 'dismissed' ? '무시했습니다(' + (DISMISS_LABEL[reason] || '') + ')' : '처리했습니다');
+    if (ok) audit('inbox_' + status, it.s ? it.s.id : it.key, 'ok', it.kind + (reason ? ':' + reason : ''));
   }
   function selectForArchive(list) {
     S.sel = new Set(list.map((s) => s.id)); S.scope = 'all'; S.q = ''; $('q').value = ''; S.showArchived = false; $('show-archived').checked = false;
@@ -632,7 +650,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     if (!S.canAct && S.mcpState === 'ok') n.append(h('div', { class: 'notice' }, h('p', { text: '읽기 전용 보기입니다. 조작 버튼은 편집 권한이 있는 사람에게만 켜집니다.' })));
   }
   async function allowRead() {
-    try { const r = await S.mcp.callTool(SERVER, 'list_sessions', { limit: 60 }); onSessions({ type: 'data', result: r }); }
+    try { const r = await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }); onSessions({ type: 'data', result: r }); }
     catch (e) { toast(errText(e), 'bad'); }
   }
   function renderTiles(alerts, inbox) {
@@ -642,7 +660,9 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const live = S.sessions.filter((s) => !archived(s));
     const working = live.filter((s) => B(s) === 'WORKING').length; const blocked = live.filter((s) => B(s) === 'BLOCKED').length;
     // Collaboration view: whose turn it is and how long the human side has kept AI work waiting. Cost stays a reference figure in the session table.
-    const waits = mine.filter((i) => ['approval', 'merge', 'decision'].includes(i.kind) && i.s && i.s.updated).map((i) => (Date.now() - Date.parse(i.s.updated)) / 3600000).sort((a, b) => a - b);
+    // Every open human turn counts, snoozed or not; waits that a newer session probably replaced are left out.
+    const waits = (inbox || []).filter((i) => DECISION_KINDS.includes(i.kind) && !i.superseded && i.state !== 'done' && i.state !== 'dismissed' && i.s && i.s.updated).map((i) => (Date.now() - Date.parse(i.s.updated)) / 3600000).sort((a, b) => a - b);
+    const median = (a) => a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
     const dur = (hrs) => hrs < 1 ? '1시간 미만' : hrs < 48 ? Math.round(hrs) + '시간' : Math.round(hrs / 24) + '일';
     const followups = mine.filter((i) => i.kind === 'followup').length;
     const open = alerts.filter((a) => !a.muted);
@@ -652,7 +672,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     t.append(
       tile('당신 차례', ready ? String(mine.length) : '—', '긴급 ' + urgent + '건 · 미룸·처리 ' + hidden + '건', urgent ? 'bad' : (mine.length ? 'warn' : '')),
       tile('AI 작업 중', ready ? String(working) : '—', '보관 제외 ' + live.length + '개 중 · 막힘 ' + blocked, ''),
-      tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(waits[Math.floor(waits.length / 2)]) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
+      tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(median(waits)) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
       tile('숨은 후속', ready ? String(followups) : '—', '완료 세션에 남은 사람 몫(추정)', ''),
       tile('켜진 예약 작업', S.triggersAt != null ? String(enabled) : '—', '목록 ' + S.triggers.length + '개 중', ''),
     );
@@ -675,16 +695,18 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           h('button', { class: 'btn ghost', type: 'button', onclick: () => openSession(it.s.id) }, '상세'));
         if (it.kind === 'hygiene') acts.append(h('button', { class: 'btn', type: 'button', disabled: !S.canAct || null, onclick: () => selectForArchive(it.sessions) }, '보관 후보 선택'));
         if (S.canWrite) {
-          if (it.state === 'open') acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'snoozed') }, '내일 다시'), h('button', { class: 'btn', type: 'button', onclick: () => setInboxState(it, 'done') }, '처리함'));
+          if (it.state === 'open') acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'snoozed') }, '내일 다시'), h('button', { class: 'btn', type: 'button', onclick: () => setInboxState(it, 'done') }, '처리함'),
+            h('select', { class: 'btn ghost', 'aria-label': '무시하고 이유 남기기', onchange: (e) => { const r = e.target.value; if (r) setInboxState(it, 'dismissed', r); } },
+              h('option', { value: '' }, '무시…'), ...Object.entries(DISMISS_LABEL).map(([v, l]) => h('option', { value: v }, l))));
           else acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'open') }, '다시 열기'));
         }
         const meta = it.s ? [h('span', { class: 'chip', text: isChild(it.s) ? '자식' : '사람' }), h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
-          h('span', { class: 'faint', style: 'font-size:12px', text: ago(it.s.updated) + ' · ' + usd(it.s.cost) })]
+          h('span', { class: 'faint', style: 'font-size:12px', text: ago(it.s.updated) })]
           : (it.sessions || []).slice(0, 6).map((x) => h('a', { class: 'chip', href: sessionUrl(x.id), target: '_blank', rel: 'noopener', title: x.title, text: x.title.slice(0, 18) }));
         root.append(h('div', { class: 'alert ' + (it.prio >= 80 ? 'critical' : '') + (it.state !== 'open' ? ' muted' : '') },
           h('div', { class: 'stripe', style: it.prio < 50 ? 'background: var(--info)' : null }),
           h('div', { class: 'body' },
-            h('div', { class: 't', text: INBOX_LABEL[it.kind] + (it.s ? ' · ' + it.s.title : '') + (it.state === 'snoozed' ? ' (미룸)' : it.state !== 'open' ? ' (처리함)' : '') }),
+            h('div', { class: 't', text: INBOX_LABEL[it.kind] + (it.s ? ' · ' + it.s.title : '') + (it.state === 'snoozed' ? ' (미룸)' : it.state === 'dismissed' ? ' (무시함)' : it.state !== 'open' ? ' (처리함)' : '') }),
             h('div', { class: 'd', text: it.detail }),
             it.note ? h('div', { class: 'd faint', text: it.note }) : null,
             h('div', { class: 's-meta' }, ...meta)),
@@ -963,7 +985,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     renderAll();
   }
   function startWatches() {
-    S.mcp.watchTool(SERVER, 'list_sessions', { limit: 60 }, onSessions, { refetchInterval: 60000 });
+    S.mcp.watchTool(SERVER, 'list_sessions', { limit: 100 }, onSessions, { refetchInterval: 60000 });
     S.mcp.watchTool(SERVER, 'list_triggers', { limit: 50 }, onTriggers, { refetchInterval: 120000 });
   }
   function startLedger() {
@@ -982,7 +1004,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   $('scope').addEventListener('click', (ev) => { const b = ev.target.closest('button[data-scope]'); if (!b) return; S.scope = b.dataset.scope; renderAll(); });
   $('q').addEventListener('input', (ev) => { S.q = ev.target.value; renderAll(); });
   $('show-archived').addEventListener('change', (ev) => { S.showArchived = ev.target.checked; renderAll(); });
-  $('refresh').addEventListener('click', async () => { if (!S.mcp) return; $('refresh').disabled = true; try { await S.mcp.invalidate(SERVER); } catch (_) { try { onSessions({ type: 'data', result: await S.mcp.callTool(SERVER, 'list_sessions', { limit: 60 }) }); } catch (e) { toast(errText(e), 'bad'); } } finally { $('refresh').disabled = false; } });
+  $('refresh').addEventListener('click', async () => { if (!S.mcp) return; $('refresh').disabled = true; try { await S.mcp.invalidate(SERVER); } catch (_) { try { onSessions({ type: 'data', result: await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }) }); } catch (e) { toast(errText(e), 'bad'); } } finally { $('refresh').disabled = false; } });
   $('nt-save').addEventListener('click', async () => {
     const id = $('nt-id').value.trim(); const cap = $('nt-cap').value === '' ? null : Number($('nt-cap').value); const title = $('nt-title').value.trim();
     if (!/^[A-Za-z0-9_.~:@+-]{1,64}$/.test(id)) { toast('tree_id는 영문·숫자·_-.~:@+ 64자 이내로 쓰세요.', 'bad'); return; }

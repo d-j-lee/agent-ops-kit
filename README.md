@@ -86,7 +86,7 @@ agent-ops-kit/
 | 버전 | v1.0.0 ([CHANGELOG](CHANGELOG.md)) |
 | 단계 | 1단계(기반 + 실현성 시험). **T1–T6 미실시** — 결과 전까지 ②B, ③ 야간, ⑤ 예약은 꺼 둔다 |
 | 결정 | D1(키트 위치 = 이 레포)만 확정. D2–D9는 [rollout.md §4](docs/rollout.md#4-결정-사항) |
-| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). MVP-1.1 인박스는 콘솔에 들어갔고, 나머지는 결정 D10–D18을 받은 뒤 진행한다 |
+| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). MVP-1.2 인박스는 콘솔에 들어갔고, 나머지는 결정 D10–D18을 받은 뒤 진행한다 |
 | 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md) |
 
 ## 공개 레포 주의

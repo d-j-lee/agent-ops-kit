@@ -659,7 +659,20 @@
         },
         "kind": {
           "type": "string",
-          "description": "Inbox kind: approval, decision, failed, stall, followup, review_stale, context, cost, same_repo, hygiene."
+          "description": "Inbox kind: approval, merge, decision, failed, stall, followup, unread, review_stale, context, same_repo, hygiene."
+        },
+        "dismiss_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "noisy",
+            "already_handled",
+            "not_relevant",
+            null
+          ],
+          "description": "Why the person dismissed the item (noisy = 과민, already_handled = 이미 처리, not_relevant = 무관). Feeds threshold-tuning proposals; never changes rules automatically."
         },
         "updated_at": {
           "$ref": "#/$defs/timestamp",
