@@ -609,6 +609,63 @@
           "description": "Refresh interval in seconds for pages that read the ledger (e.g. a dashboard). No plan default."
         }
       }
+    },
+    "inbox_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "User state of one '당신 차례' inbox item (control tower v2, MVP-1). The items themselves are computed live from session metadata; only what the person did with an item is stored. Doc id = item key with characters outside the path grammar replaced by '~'.",
+      "required": [
+        "item_key",
+        "status",
+        "updated_at"
+      ],
+      "properties": {
+        "item_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "'<kind>:<session_id>' (or '<kind>:<repo>' / 'hygiene:bundle')."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "snoozed",
+            "done",
+            "dismissed"
+          ],
+          "description": "open = shown; snoozed = hidden until snooze_until; done/dismissed = hidden until the item's state signature changes (new activity re-opens it)."
+        },
+        "snooze_until": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "End of a snooze (console default: +24h)."
+        },
+        "sig": {
+          "type": "string",
+          "description": "State signature the person acted on (usually the session's updated_at)."
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Session the item is about; null for repo- or bundle-level items."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Inbox kind: approval, decision, failed, stall, followup, review_stale, context, cost, same_repo, hygiene."
+        },
+        "updated_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the person changed the state."
+        }
+      }
     }
   }
 }
