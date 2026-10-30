@@ -1,0 +1,226 @@
+{
+ "tyen.acc": {
+  "text": "52.87%",
+  "claim": "C-res-tyen"
+ },
+ "kim.helm": {
+  "text": "평균 60%",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.chance": {
+  "text": "33%",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.models": {
+  "text": "모델 71개",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.all": {
+  "text": "350개가 넘는 모델",
+  "claim": "C-res-kim-all"
+ },
+ "swe.fullfail": {
+  "text": "7.8%",
+  "claim": "C-res-swe"
+ },
+ "swe.wrong": {
+  "text": "약 11%",
+  "claim": "C-res-swe"
+ },
+ "mutgen.cov": {
+  "text": "100%",
+  "claim": "C-res-mutgen"
+ },
+ "mutgen.mut": {
+  "text": "4%",
+  "claim": "C-res-mutgen"
+ },
+ "r1.counts": {
+  "text": "높음 4 · 중간 10 · 낮음 14",
+  "claim": "C-rounds-r1"
+ },
+ "r1.high": {
+  "text": "높음 4건",
+  "claim": "C-rounds-r1"
+ },
+ "r2.counts": {
+  "text": "높음·중간 중 수정 확인 9 · 부분 4 · 새 문제 중간 2 · 낮음 2 · 공허한 테스트 3",
+  "claim": "C-rounds-r2"
+ },
+ "r3.counts": {
+  "text": "높음 0 · 중간 3 · 낮음 5 · 문서 6",
+  "claim": "C-rounds-r3"
+ },
+ "fc.counts": {
+  "text": "높음 3 · 중간 7",
+  "claim": "C-rounds-fc"
+ },
+ "r4.counts": {
+  "text": "높음 0 · 중간 6",
+  "claim": "C-rounds-r4"
+ },
+ "rounds.tokens": {
+  "text": "약 20만~26만",
+  "claim": "C-rounds-cost"
+ },
+ "rounds.time": {
+  "text": "53분에서 약 3시간",
+  "claim": "C-rounds-cost"
+ },
+ "vacuous.total": {
+  "text": "4개",
+  "claim": "C-rounds-vacuous"
+ },
+ "trend.high": {
+  "text": "4 → 0 → 0",
+  "claim": "C-rounds-trend"
+ },
+ "trend.mid": {
+  "text": "10 → 2 → 3",
+  "claim": "C-rounds-trend"
+ },
+ "trend.partial": {
+  "text": "부분 수정 4건(높음 1·중간 3)",
+  "claim": "C-rounds-trend"
+ },
+ "timebox": {
+  "text": "약 3시간",
+  "claim": "C-rounds-timebox"
+ },
+ "hooktests.history": {
+  "text": "18 → 27 → 30",
+  "claim": "C-harness-hooktests"
+ },
+ "hooktests.n": {
+  "text": "훅 회귀 테스트 30개",
+  "claim": "C-harness-hooktests"
+ },
+ "gate.tests": {
+  "text": "테스트 15개와 doctest 2개",
+  "claim": "C-harness-gate"
+ },
+ "wa.edit.lang": {
+  "text": "190→101ms",
+  "claim": "C-wa-hooks"
+ },
+ "wa.edit.zk": {
+  "text": "192→110ms",
+  "claim": "C-wa-hooks"
+ },
+ "wa.prompt.lang": {
+  "text": "340→197ms",
+  "claim": "C-wa-hooks"
+ },
+ "wa.prompt.zk": {
+  "text": "636→393ms",
+  "claim": "C-wa-hooks"
+ },
+ "wa.range": {
+  "text": "-32~-50%",
+  "claim": "C-wa-range"
+ },
+ "wa.build": {
+  "text": "18.2~18.8초에서 14.1~14.4초",
+  "claim": "C-wa-build"
+ },
+ "wa.tests": {
+  "text": "277개",
+  "claim": "C-wa-tests"
+ },
+ "dc.edit": {
+  "text": "-42~-46%",
+  "claim": "C-dc-demo"
+ },
+ "dc.prompt": {
+  "text": "-38~-39%",
+  "claim": "C-dc-demo"
+ },
+ "trap.empty": {
+  "text": "306바이트 → 0바이트",
+  "claim": "C-trap-empty"
+ },
+ "sim.same": {
+  "text": "상위 200개",
+  "claim": "C-sim-same"
+ },
+ "sim.ulp": {
+  "text": "13,048개 중 1,159개",
+  "claim": "C-sim-ulp"
+ },
+ "sim.proc": {
+  "text": "LANG 약 220→55ms, ZK 약 330→135ms",
+  "claim": "C-sim-proc"
+ },
+ "sim.inproc": {
+  "text": "ZK 약 130→105ms",
+  "claim": "C-sim-inproc"
+ },
+ "sim.startup": {
+  "text": "150ms 안팎",
+  "claim": "C-sim-inproc"
+ },
+ "db.js": {
+  "text": "3.6~4.0초",
+  "claim": "C-db-js"
+ },
+ "db.js.light": {
+  "text": "19ms",
+  "claim": "C-db-js"
+ },
+ "db.wasm": {
+  "text": "3.6초→0.72초, 4.0초→0.50초",
+  "claim": "C-db-wasm"
+ },
+ "db.wasm.small": {
+  "text": "19→33ms",
+  "claim": "C-db-wasm"
+ },
+ "db.wasm.size": {
+  "text": "561KB",
+  "claim": "C-db-wasm"
+ },
+ "db.counts": {
+  "text": "9개 경우 모두",
+  "claim": "C-db-highlight"
+ },
+ "db.lines": {
+  "text": "6개 경우",
+  "claim": "C-db-highlight"
+ },
+ "db.highlight": {
+  "text": "9개 경우 중 3개",
+  "claim": "C-db-highlight"
+ },
+ "db.fuzz": {
+  "text": "줄 수 100%, 줄 목록 99%, 낱말 분할 86%",
+  "claim": "C-db-fuzz"
+ },
+ "db.caps": {
+  "text": "약 200ms·100ms",
+  "claim": "C-db-caps"
+ },
+ "tool.ruff": {
+  "text": "약 40ms",
+  "claim": "C-tool-ruff"
+ },
+ "tool.ruff.n": {
+  "text": "버그 계열 18건",
+  "claim": "C-tool-ruff"
+ },
+ "tool.oxlint": {
+  "text": "약 0.1초",
+  "claim": "C-tool-oxlint"
+ },
+ "tool.oxlint.n": {
+  "text": "34건",
+  "claim": "C-tool-oxlint"
+ },
+ "tool.uv": {
+  "text": "캐시 없이 13.5→6.0초, 캐시 있을 때 6.6→1.2초",
+  "claim": "C-tool-uv"
+ },
+ "self.muts": {
+  "text": "변이 7개",
+  "claim": "C-self-muts"
+ }
+}

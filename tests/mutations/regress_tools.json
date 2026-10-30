@@ -1,0 +1,9 @@
+[
+ {"file": "scripts/diffcheck.py", "old": "    if not args.allow_empty and (report[\"base\"][\"bytes\"] == 0 or report[\"cand\"][\"bytes\"] == 0):", "new": "    if False:", "label": "diffcheck: drop empty-output guard"},
+ {"file": "scripts/diffcheck.py", "old": "    if args.determinism:", "new": "    if False:", "label": "diffcheck: drop determinism check"},
+ {"file": "scripts/diffcheck.py", "old": "    real_argv = [a.replace(NONCE, nonce) for a in argv]", "new": "    real_argv = list(argv)", "label": "diffcheck: stop substituting {nonce}"},
+ {"file": "scripts/diffcheck.py", "old": "        if sides[name][\"run\"][\"exit\"] != 0 and not args.allow_fail:", "new": "        if False:", "label": "diffcheck: ignore non-zero exits"},
+ {"file": "scripts/vacuity_check.py", "old": "            if n != 1:", "new": "            if n < 0:", "label": "vacuity_check: drop exactly-once match rule"},
+ {"file": "scripts/vacuity_check.py", "old": "        if b[\"exit\"] != 0:", "new": "        if False:", "label": "vacuity_check: skip baseline-must-pass"},
+ {"file": "scripts/vacuity_check.py", "old": "            row.update(exit=r[\"exit\"], status=\"guarded\" if r[\"exit\"] != 0 else \"vacuous\",", "new": "            row.update(exit=r[\"exit\"], status=\"guarded\",", "label": "vacuity_check: never report vacuous"}
+]

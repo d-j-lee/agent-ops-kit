@@ -1,5 +1,5 @@
 # Runs the repo's own checks on every pull request and on main.
-#   checks:  schema/script unit tests and the public-repo hygiene scan (stdlib only)
+#   checks:  schema/script/site unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
 #   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback)
 name: CI
 
@@ -23,6 +23,9 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Public-repo hygiene scan
         run: python -I scripts/secret_scan.py --strict .
+      - name: Regression tools are not vacuous (feature ⑦ self-check)
+        # each mutation switches off one guard in diffcheck/vacuity_check; the tool tests must fail for every one
+        run: python -I scripts/vacuity_check.py --repo . --test "python -m unittest tests.test_regress_tools" --mutations tests/mutations/regress_tools.json
 
   console:
     # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).

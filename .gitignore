@@ -1,0 +1,3 @@
+# 읽기 허브 빌드 결과(scripts/build_site.py). 원본은 site/pages · site/assets · site/*.json
+site/dist/
+__pycache__/

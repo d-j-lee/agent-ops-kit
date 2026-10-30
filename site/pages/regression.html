@@ -1,0 +1,151 @@
+<!--page
+title: 회귀 고정
+nav: ⑦ 회귀
+order: 3
+description: 고친 뒤에도 전에 되던 것이 되는지를 기준과 반복으로 고정하는 AOK ⑦. 비교 스크립트가 스스로 속는 경우와 그것을 막는 두 도구.
+-->
+<div class="wrap">
+  <nav class="toc" aria-label="목차">
+    <p>목차</p>
+    <ol>
+      <li><a href="#why">왜 따로 두나</a></li>
+      <li><a href="#traps">스스로 속는 경우</a></li>
+      <li><a href="#tools">두 도구</a></li>
+      <li><a href="#steps">절차</a></li>
+      <li><a href="#self">이 키트의 자기 시험</a></li>
+      <li><a href="#basis">근거</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="prose" style="gap:18px">
+      <p class="eyebrow">AOK 안내서 · 기능 ⑦ · 제안 D19</p>
+      <h1>회귀 고정</h1>
+      <p class="lede">고친 뒤에도 전에 되던 것이 되는가. 판단이 필요 없는 질문이지만 쉬운 질문은 아닙니다. "출력이 같다"는 한 줄은 비교한 것이 비어 있어도, 비교 범위가 좁아도, 실행마다 출력이 달라도 나옵니다.</p>
+      <nav class="toc-mobile" aria-label="목차">
+        <ol>
+          <li><a href="#why">왜</a></li><li><a href="#traps">속는 경우</a></li><li><a href="#tools">도구</a></li><li><a href="#steps">절차</a></li><li><a href="#self">자기 시험</a></li><li><a href="#basis">근거</a></li>
+        </ol>
+      </nav>
+    </header>
+
+    <section id="why">
+      <h2>왜 따로 두나</h2>
+      <div class="prose">
+        <p>① 블라인드 재현 대조는 판단이 필요한 주장을 독립된 눈으로 봅니다. sha 비교나 테스트 통과 같은 결정적 비교는 "스크립트로 충분"하다며 범위 밖에 둡니다. 그런데 그 스크립트도 스스로 속습니다. 출발점 세션에서 아래의 일이 실제로 일어났고, 여러 건은 독립 검증자가 잡기 전까지 작성자가 알아채지 못했습니다 <span class="g g-rec">기록됨</span>.</p>
+        <p>그래서 ⑦은 결정적 비교에 런북과 도구를 둡니다. ④ 리뷰 루프의 reviewer가 "고쳤다"를 보면, ⑦은 "깨지지 않았다"를 봅니다. 둘은 서로를 대신하지 않습니다 <span class="g g-inf">추론</span>.</p>
+      </div>
+      <div class="table-scroll">
+        <table class="when">
+          <thead><tr><th scope="col">질문</th><th scope="col">기능</th><th scope="col">판정 방식</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">다른 눈으로 봐도 같은가</th><td>① L1 블라인드 + 판정자</td><td>독립 판단, 기계 대조</td></tr>
+            <tr><th scope="row">어떻게 하면 깨지는가</th><td>① L0, ④ reviewer</td><td>실험으로 재현한 것만 채택</td></tr>
+            <tr><th scope="row">깨끗한 곳에서 문서대로 되는가</th><td>③ 클린룸</td><td>글자 그대로 실행</td></tr>
+            <tr><th scope="row">고친 뒤에도 전에 되던 것이 되는가</th><td class="must">⑦ 회귀 고정</td><td>고정된 기준 + 자동 반복 + 공허함 방지</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="traps">
+      <h2>회귀검증이 스스로 속는 경우</h2>
+      <div class="anti">
+        <div><b>빈 출력끼리 비교</b><span>측정 스크립트가 같은 세션 ID를 재사용해, work-atlas 편집 훅이 두 번째 실행부터 아무것도 내지 않았는데도 "동일"을 찍었습니다. 같은 ID로 두 번 돌리면 출력이 {{fig:trap.empty}}가 됩니다 <span class="g g-ok">확인</span>. 비교 전에 출력이 비어 있지 않은지 단언하고, 상태를 기억하는 도구에는 실행마다 새 키를 줍니다.</span></div>
+        <div><b>비교한 범위보다 넓은 주장</b><span>docbench diff 이식을 줄 목록만 비교하고 "화면이 같다"고 썼습니다. 낱말 강조까지 같은 것은 {{fig:db.highlight}}였습니다. 무작위 입력 4,000쌍에서는 {{fig:db.fuzz}}가 같았습니다 <span class="g g-ok">확인</span>. 무엇을 비교했는지(투영) 보고에 적고, 손으로 고른 사례에 무작위 입력을 더합니다.</span></div>
+        <div><b>비결정성을 고정하지 않음</b><span>{{claim:C-trap-asof}} <span class="g g-ok">확인</span> 기준 시각(<code>--as-of</code>)을 주면 같아집니다. 시각, 난수 시드, 세션 상태를 고정해야 "바이트 동일"을 비교할 수 있습니다.</span></div>
+        <div><b>의미가 미묘하게 다른 대체 구현</b><span>표준 <code>json</code>을 orjson으로 바꾸자 현재 데이터는 같았지만 NaN, 아주 큰 수, 깊은 중첩 같은 입력에서 동작이 달라졌습니다. 그 판도 기존 테스트 {{fig:wa.tests}}를 모두 통과했습니다 <span class="g g-rec">기록됨</span>. 테스트가 다루지 않는 입력이었기 때문입니다. 경계 입력표를 만들어 원본과 대조합니다.</span></div>
+        <div><b>수치 이식의 경계</b><span>Rust로 옮긴 질의가 반올림 경계에서 Python과 달랐습니다. 실수 파싱이 1 ULP 어긋나 경계 값 {{fig:sim.ulp}}에서 결과가 갈렸고, 고친 뒤 0개가 됐습니다 <span class="g g-ok">확인</span>. 반올림 방식과 실수 파싱까지 맞추고, 일부러 만든 경계 값으로 비교합니다.</span></div>
+        <div><b>측정 잡음</b><span>원본과 패치를 몰아서 재면 실행마다 비율이 {{fig:wa.range}}로 흔들렸습니다 <span class="g g-ok">확인</span>. 번갈아 여러 번 돌려 중앙값을 내고, 한 번의 측정이 아니라 측정 간 범위를 보고합니다.</span></div>
+        <div><b>공허한 테스트</b><span>수정마다 만든 회귀 테스트 중 {{fig:vacuous.total}}가 보호 장치를 지워도 통과했습니다 <span class="g g-rec">기록됨</span>. 보호하려는 코드를 바꾼 변형에서 테스트가 실패하는지 봅니다.</span></div>
+        <div><b>실패를 "결과 없음"으로 읽음</b><span>잘못된 경로를 주자 비교 스크립트가 "찾은 것 없음"으로 보고했습니다 <span class="g g-rec">기록됨</span>. 도구 실패는 실패로 멈추게 합니다.</span></div>
+      </div>
+    </section>
+
+    <section id="tools">
+      <h2>두 도구</h2>
+      <div class="prose"><p>둘 다 표준 라이브러리만 쓰고 <code>python3 -I</code>로 돕니다. 위의 함정을 그대로 시험 사례로 만들었습니다.</p></div>
+      <div class="split">
+        <div class="box">
+          <h3><code>scripts/diffcheck.py</code> — 전후 비교</h3>
+          <ul>
+            <li>같은 입력을 기준·후보 명령에 넣어 출력을 비교한다</li>
+            <li>빈 출력, 0이 아닌 종료 코드, 실행마다 다른 출력(<code>--determinism</code>)은 실패</li>
+            <li><code>--normalize</code>는 무엇을 몇 번 바꿨는지 보고에 남긴다</li>
+            <li>명령 인자와 입력 파일의 <code>{nonce}</code>는 실행마다 새 토큰</li>
+            <li><code>--timing N</code>은 기준과 후보를 번갈아 돌린다</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3><code>scripts/vacuity_check.py</code> — 공허한 테스트 검사</h3>
+          <ul>
+            <li>레포를 임시 디렉터리에 복사한다. 원본은 건드리지 않는다</li>
+            <li>바꾸지 않은 사본에서 테스트가 통과해야 한다(기준)</li>
+            <li>변이마다 새 사본에 적용해 테스트가 실패해야 한다(<code>guarded</code>)</li>
+            <li>변이는 정확히 한 곳에 맞아야 한다. 오타로 아무것도 안 바꾸고 통과하는 일을 막는다</li>
+          </ul>
+        </div>
+      </div>
+      <figure>
+<pre class="term"><span class="dim">$ diffcheck.py --base "&lt;원본 훅&gt;" --cand "&lt;패치 훅&gt;" --stdin edit.json --determinism --timing 11
+  # edit.json 의 session_id 는 "dc-{nonce}" — 실행마다 새 세션</span>
+verdict: identical
+base: exit 0 · 306 bytes
+cand: exit 0 · 306 bytes
+timing (interleaved, n=11): base median 142.9 ms [137.9–168.2] · cand median 82.3 ms [75.5–92.6] · -42.4%
+
+<span class="dim">$ # 같은 비교를 세션 ID 고정으로 두 번 (예전 측정 스크립트가 빠졌던 함정)</span>
+<span class="err">verdict: empty</span>
+base: exit 0 · 306 bytes
+cand: exit 0 · 0 bytes
+<span class="err">verdict: empty</span>
+base: exit 0 · 0 bytes
+cand: exit 0 · 0 bytes</pre>
+        <figcaption>work-atlas ZooKeeper 인스턴스에서 실제로 돌린 출력입니다(2026-10-31). 새 세션으로 비교하면 출력이 같고 편집 훅이 {{fig:dc.edit}}, 프롬프트 훅이 {{fig:dc.prompt}}였습니다. 세션 ID를 고정하면 두 번 모두 <code>empty</code>로 실패합니다. 예전 스크립트는 두 번째 실행에서 "identical"을 찍었습니다.</figcaption>
+      </figure>
+    </section>
+
+    <section id="steps">
+      <h2>절차</h2>
+      <ol class="flow">
+        <li><span class="rn">1</span><div><h3>기준을 고정한다</h3><p>시각·시드·세션 상태를 옵션으로 고정하고 기준 커밋 sha를 적는다. 무엇을 비교하는지(투영)를 한 줄로 정한다.</p></div><span class="who">작성자</span></li>
+        <li><span class="rn">2</span><div><h3>실패 테스트 먼저</h3><p>버그 수정이면 재현 테스트의 실패 출력을 보존하고, 고친 뒤 통과를 본다(FAIL_TO_PASS).</p></div><span class="who">작성자</span></li>
+        <li><span class="rn">3</span><div><h3>전체 테스트</h3><p>고친 파일의 테스트만이 아니라 전부(PASS_TO_PASS). 선택 의존성이 있으면 있을 때와 없을 때 둘 다.</p></div><span class="who">작성자 · CI</span></li>
+        <li><span class="rn">4</span><div><h3>공허함 검사</h3><p>새 테스트와 보호 장치마다 <code>vacuity_check</code>. <code>vacuous</code>가 나오면 테스트를 고친다.</p></div><span class="who">작성자 · CI</span></li>
+        <li><span class="rn">5</span><div><h3>전후 비교</h3><p><code>diffcheck</code>로 같은 입력의 출력을 비교한다. 고른 사례에 무작위 입력을 더한다. 성능은 <code>--timing</code>으로 번갈아 잰다.</p></div><span class="who">작성자</span></li>
+        <li><span class="rn">6</span><div><h3>기록</h3><p>PR 코멘트에 두 도구의 요약을 남긴다. 주장은 claim 형식으로, [확인]의 근거는 위 명령 그대로.</p></div><span class="who">작성자 → reviewer</span></li>
+      </ol>
+      <p class="note">규범: {{doc:docs/patterns/regression.md}} · 실행 순서와 보고 형식: {{doc:.claude/skills/aok-regress/SKILL.md}}</p>
+    </section>
+
+    <section id="self">
+      <h2>이 키트의 자기 시험</h2>
+      <div class="prose">
+        <p>⑦의 도구 시험이 공허하지 않은지도 ⑦로 봅니다. 빈 출력 검사를 끄거나, 결정성 검사를 끄거나, <code>{nonce}</code> 치환을 멈추거나, "정확히 한 곳" 규칙을 지우는 식으로 보호 장치 하나씩을 끈 {{fig:self.muts}}를 넣으면 시험이 모두 실패합니다 <span class="g g-ok">확인</span>. CI가 같은 검사를 PR마다 돌립니다.</p>
+      </div>
+      <figure>
+<pre class="term"><span class="dim">$ python3 -I scripts/vacuity_check.py --repo . --test "python3 -m unittest tests.test_regress_tools" \
+    --mutations tests/mutations/regress_tools.json</span>
+verdict: guarded
+baseline: exit 0 (pass)
+ guarded: diffcheck: drop empty-output guard
+ guarded: diffcheck: drop determinism check
+ guarded: diffcheck: stop substituting {nonce}
+ guarded: diffcheck: ignore non-zero exits
+ guarded: vacuity_check: drop exactly-once match rule
+ guarded: vacuity_check: skip baseline-must-pass
+ guarded: vacuity_check: never report vacuous</pre>
+      </figure>
+    </section>
+
+    <section id="basis">
+      <h2>근거</h2>
+      <div class="research">
+        <div class="rsrch"><span class="k">테스트 통과가 정답은 아니다 <span class="g g-doc">문서</span></span><p>테스트를 통과한 AI 패치의 {{fig:swe.fullfail}}가 수정 파일만이 아닌 전체 개발자 테스트에서 실패했습니다. PASS_TO_PASS를 전체로 돌려야 하는 이유입니다.</p></div>
+        <div class="rsrch"><span class="k">커버리지가 검출력은 아니다 <span class="g g-doc">문서</span></span><p>줄·분기 커버리지 {{fig:mutgen.cov}}인 테스트의 변이 점수가 {{fig:mutgen.mut}}였던 사례가 있습니다. 공허함 검사가 커버리지를 대신합니다.</p></div>
+        <div class="rsrch"><span class="k">수정은 회귀를 만든다 <span class="g g-rec">기록됨</span></span><p>출발점 세션의 2라운드와 3라운드 모두 직전 수정이 만든 회귀를 찾았습니다. {{doc:reports/2026-10-30-verification-rounds.md}}</p></div>
+      </div>
+      <footer class="pagefoot">2026-10-31 작성. ⑦은 제안(D19) 단계이며 PR 병합으로 채택된다. 사례 이력: {{doc:reports/2026-10-30-hotspots.md}}</footer>
+    </section>
+  </main>
+</div>

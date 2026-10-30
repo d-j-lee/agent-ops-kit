@@ -1,0 +1,100 @@
+<!--page
+title: 공개 레포 적용 사례
+nav: 사례
+order: 4
+description: work-atlas 훅 지연, docbench 문서 비교, Rust 도구 도입을 실측으로 고른 적용안과, 그 과정에서 회귀검증이 스스로 속은 경우.
+-->
+<div class="wrap">
+  <nav class="toc" aria-label="목차">
+    <p>목차</p>
+    <ol>
+      <li><a href="#summary">결론</a></li>
+      <li><a href="#work-atlas">work-atlas 훅</a></li>
+      <li><a href="#docbench">docbench 비교</a></li>
+      <li><a href="#tools">Rust 도구</a></li>
+      <li><a href="#excluded">뺀 후보</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="prose" style="gap:18px">
+      <p class="eyebrow">AOK 안내서 · 적용 사례 · 2026-10-29~31</p>
+      <h1>공개 레포 적용 사례</h1>
+      <p class="lede">AI 작업 루프에서 실제로 느린 곳을 공개 레포 두 곳(work-atlas, docbench)에서 재고, 언어를 바꾸기 전에 할 수 있는 수정부터 적용했습니다. 측정 환경은 2 vCPU 클라우드 샌드박스라 절대값보다 전후 비율을 보세요.</p>
+      <nav class="toc-mobile" aria-label="목차">
+        <ol>
+          <li><a href="#summary">결론</a></li><li><a href="#work-atlas">work-atlas</a></li><li><a href="#docbench">docbench</a></li><li><a href="#tools">도구</a></li><li><a href="#excluded">뺀 후보</a></li>
+        </ol>
+      </nav>
+    </header>
+
+    <section id="summary">
+      <h2>결론</h2>
+      <div class="prose">
+        <p><strong>Rust 코드를 쓰는 것이 첫 단계인 후보는 없었습니다</strong> <span class="g g-der">도출</span>. 원인을 재 보면 반복 파싱, 매번 다시 짓는 색인, 화면 스레드에서 도는 계산처럼 언어와 무관한 문제가 먼저 나옵니다. 첫 단계에서 쓴 Rust는 orjson, ruff, oxlint, uv처럼 이미 만들어진 도구였습니다. Rust 코드는 그것을 고친 뒤에도 남는 비용에 씁니다.</p>
+        <p>모든 전후 비교는 ⑦ 회귀 고정의 방식으로 했습니다. 그 과정에서 비교 자체가 속은 경우가 ⑦의 출발점이 됐습니다(<a href="regression.html">회귀 고정</a>). 이력과 재현 자료: {{doc:reports/2026-10-30-hotspots.md}}</p>
+      </div>
+    </section>
+
+    <section id="work-atlas">
+      <h2>work-atlas — Claude Code 훅 지연</h2>
+      <div class="log">
+        <div class="log-item">
+          <span class="tag">원인</span>
+          <div><p>훅은 편집·프롬프트마다 새 Python 프로세스로 돕니다. 질의 계산 자체는 수 ms이고 시간은 매 호출의 준비 작업에 갑니다. 역할 설정이 비어 있어도 코드북 YAML을 순수 Python으로 파싱하고, 훅이 쓰지 않는 <code>jsonschema</code>를 import하고, 텍스트 색인을 질의마다 두 번 다시 짓습니다 <span class="g g-ok">확인</span>.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">1단계 · Python 그대로</span>
+          <div><p>3개 파일 30줄 패치(색인 한 번만 짓기, 지연 import, YAML C 로더, Rust로 구현된 orjson)로 편집 훅 {{fig:wa.edit.lang}}(LANG)·{{fig:wa.edit.zk}}(ZK), 프롬프트 훅 {{fig:wa.prompt.lang}}(LANG)·{{fig:wa.prompt.zk}}(ZK)가 됐습니다. 같은 측정을 다시 하면 비율이 흔들려 편집 훅은 {{fig:wa.range}} 범위였습니다. ZK 전체 빌드도 {{fig:wa.build}}로 줄었습니다.</p>
+          <p>회귀 고정: 훅 출력 4종 동일, 같은 기준 시각으로 지은 모델 파일 바이트 동일, 테스트 {{fig:wa.tests}} 통과(orjson 유무 모두). orjson이 거부하는 입력은 표준 <code>json</code>으로 다시 읽게 해 경계 입력의 결과·오류가 원본과 같습니다. 남는 차이(64비트를 넘는 정수를 float로 읽음)는 제안서에 적었습니다. work-atlas 규칙(엔진 변경은 사람 합의)에 따라 <a href="https://github.com/d-j-lee/work-atlas/pull/1" target="_blank" rel="noopener">PR #1</a>로 올렸습니다.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">2단계 · Rust</span>
+          <div><p>유사도 질의를 Rust로 옮긴 프로토타입은 같은 색인 파일에서 Python과 {{fig:sim.same}} 결과가 같았고, 질의 1회를 프로세스 단위로 {{fig:sim.proc}}에 처리했습니다. 다만 이 차이의 대부분({{fig:sim.startup}})은 Python 기동과 import입니다. 같은 프로세스 안의 색인 읽기와 질의만 비교하면 {{fig:sim.inproc}}라서, PyO3로 훅에 붙이면 이득이 작습니다 <span class="g g-der">도출</span>. 규모와 무관하게 빠르려면 build 때 질의용 색인을 저장하는 형식 변경이 먼저입니다 <span class="g g-inf">추론</span>.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">판단</span>
+          <div><p>1단계는 지금 적용할 가치가 있습니다. Rust는 데이터가 ZK의 수 배를 넘어 프롬프트 훅이 1초에 다가갈 때, 독립 실행 파일로 꺼낼 카드입니다 <span class="g g-inf">추론</span>.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="docbench">
+      <h2>docbench — 문서 비교가 화면을 멈춘다</h2>
+      <div class="log">
+        <div class="log-item">
+          <span class="tag">원인</span>
+          <div><p>4,334줄 문서에서 가벼운 수정은 {{fig:db.js.light}}지만, 크게 다시 쓴 판은 {{fig:db.js}}가 걸렸고 이 계산이 화면 스레드에서 돕니다. 시간은 줄 단위 Myers diff와, 바뀐 줄마다 도는 낱말 diff에 나뉩니다. jsdiff의 낱말 토크나이저는 한글을 단어 문자로 보지 않아 <strong>한글을 글자 하나씩 토큰으로 쪼갭니다</strong> <span class="g g-ok">확인</span>. 그래서 한글 문서에서 특히 무겁습니다.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">1단계 · JavaScript 그대로</span>
+          <div><p>diff를 Web Worker로 옮기면 계산이 길어도 화면은 멈추지 않습니다 <span class="g g-inf">추론</span>. jsdiff의 <code>timeout(200)</code>·<code>maxEditLength(1000)</code> 옵션은 각각 {{fig:db.caps}} 만에 포기하고 <code>undefined</code>를 돌려주므로 "변경이 많아 전체 비교로 보기" 같은 대체 화면이 함께 필요합니다.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">2단계 · Rust → WASM</span>
+          <div><p>같은 의미(같은 토크나이저, 휴리스틱 없는 Myers)로 옮겨 V8에서 JSON 왕복까지 포함해 재면 {{fig:db.wasm}}입니다. 더한·지운 줄 수는 {{fig:db.counts}} jsdiff와 같았고, 줄 목록은 {{fig:db.lines}}에서 같았지만, 낱말 강조까지 같은 것은 {{fig:db.highlight}}였습니다. 나머지는 크기가 같은 다른 최소 diff라 강조 위치가 다를 수 있습니다. 무작위 입력 4,000쌍에서는 {{fig:db.fuzz}}가 같았습니다. 작은 수정에서는 복사 비용 때문에 오히려 느리고({{fig:db.wasm.small}}), wasm 파일은 최적화 전 {{fig:db.wasm.size}}입니다.</p></div>
+        </div>
+        <div class="log-item">
+          <span class="tag">판단</span>
+          <div><p>Worker를 먼저 적용합니다. 화면 멈춤은 그것만으로 사라집니다. WASM은 큰 한글 문서 비교가 실제로 자주 일어날 때 일정 크기 이상에만 쓰는 조건부 경로입니다 <span class="g g-inf">추론</span>.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tools">
+      <h2>Rust 코드 0줄로 Rust 도구 들이기</h2>
+      <div class="prose">
+        <p>ruff는 work-atlas 16,738줄을 {{fig:tool.ruff}}, oxlint는 docbench 약 2만 1천 줄을 {{fig:tool.oxlint}}에 검사합니다. 두 레포 모두 CI에 린트 단계가 없습니다. 발견은 ruff {{fig:tool.ruff.n}}, oxlint {{fig:tool.oxlint.n}}이었고, 확인한 범위에서는 위험 패턴과 죽은 코드였을 뿐 확인된 버그는 없었습니다. 설치 도구 uv는 work-atlas 가상환경 설치를 {{fig:tool.uv}}로 줄였습니다.</p>
+        <p>가치는 속도보다, AI가 쓴 코드에 항상 걸리는 빠른 게이트라는 데 있습니다 <span class="g g-inf">추론</span>. 도입 설정: {{doc:reports/2026-10-30-hotspots/tooling/README.md}}</p>
+      </div>
+    </section>
+
+    <section id="excluded">
+      <h2>후보에서 뺀 것</h2>
+      <div class="prose">
+        <p>work-atlas 전체 빌드(LANG 6초, ZK 약 18초, 주 1회 무인), 평가(시점 1개 6.1초), Claude Code 세션 기록 수집(219MB를 2.2초)은 지금 규모에서 병목이 아닙니다 <span class="g g-ok">확인</span>.</p>
+      </div>
+      <footer class="pagefoot">2026-10-29~31 측정. 재현 자료와 측정 스크립트: {{doc:reports/2026-10-30-hotspots/README.md}}</footer>
+    </section>
+  </main>
+</div>

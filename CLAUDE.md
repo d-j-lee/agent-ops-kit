@@ -34,4 +34,4 @@
 - 커밋 전 `python3 -I scripts/secret_scan.py --strict <경로>`를 돌린다(`--strict`는 ID·이메일·Artifact URL 경고도 실패로 처리한다).
 
 ## 문서
-`README.md` · `docs/architecture.md` · `docs/protocol-aok1.md` · `docs/patterns/{brd,watchdog,cleanroom,loop,curator,budget}.md` · `docs/rollout.md` · `docs/dashboard.md`
+`README.md` · `docs/architecture.md` · `docs/protocol-aok1.md` · `docs/patterns/{brd,watchdog,cleanroom,loop,curator,budget,regression}.md` · `docs/rollout.md` · `docs/dashboard.md`
