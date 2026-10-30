@@ -1,0 +1,45 @@
+# Runs the repo's own checks on every pull request and on main.
+#   checks:  schema/script unit tests and the public-repo hygiene scan (stdlib only)
+#   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback)
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Public-repo hygiene scan
+        run: python -I scripts/secret_scan.py --strict .
+
+  console:
+    # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.56.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Console inbox tests
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+        run: python -m unittest tests.test_console_inbox -v

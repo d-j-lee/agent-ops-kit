@@ -98,6 +98,13 @@ class ConsoleInboxCases(unittest.TestCase):
         for sid in slim["fetched"]:
             self.assertEqual((full_best.get(sid) or {}).get("kind"), (slim_best.get(sid) or {}).get("kind"), sid)
 
+    def test_snapshot_fallback_without_connector(self):
+        snap = _run("snapshot", self.env)
+        self.assertEqual(snap["errors"], [])
+        self.assertTrue(any("스냅숏" in t for t in snap["notices"]), snap["notices"])
+        full_best, snap_best = _main_kinds(self.full), _main_kinds(snap)
+        self.assertEqual({k: v["kind"] for k, v in full_best.items()}, {k: v["kind"] for k, v in snap_best.items()})
+
 
 if __name__ == "__main__":
     unittest.main()

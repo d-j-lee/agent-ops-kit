@@ -1,7 +1,8 @@
 // Replays synthetic sessions through dashboard/console.html in headless Chromium and prints the inbox as JSON.
-// Usage: node run_inbox_cases.cjs <cases.json> [full|slim]
+// Usage: node run_inbox_cases.cjs <cases.json> [full|slim|snapshot]
 //   full: list_sessions returns full records (classification test).
 //   slim: list_sessions returns the slim record (2026-10 format) and get_session returns the full one (enrichment test).
+//   snapshot: no connector in this view; the ledger holds a snapshot of the full records (fallback test).
 // Needs the `playwright` package (NODE_PATH) and a Chromium build; tests/test_console_inbox.py skips when either is missing.
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const { chromium } = require('playwright');
@@ -38,20 +39,29 @@ function slim(rec) {
   const p = await browser.newPage(); const errors = [];
   await p.clock.setFixedTime(new Date(NOW));
   p.on('pageerror', (e) => errors.push(e.message));
-  await p.addInitScript(({ list, byId }) => {
+  const snap = mode === 'snapshot' ? { at: NOW, records: fulls, triggers: [] } : null;
+  await p.addInitScript(({ list, byId, snap }) => {
     window.__fetched = [];
+    const empty = { docs: [], exists: false, data: () => ({}) };
+    const coll = () => ({ onSnapshot: (cb) => { setTimeout(() => cb(empty), 5); return () => {}; }, orderBy() { return this; }, limit() { return this; } });
+    const db = { collection: coll, doc: (path) => ({ onSnapshot: (cb) => { setTimeout(() => cb(path === 'data/users/u_test/snapshot' && snap ? { exists: true, data: () => snap } : empty), 5); return () => {}; }, set: async () => {} }) };
     const mcp = {
       watchTool: (srv, tool, input, handler) => { setTimeout(() => handler({ type: 'data', result: { payload: tool === 'list_sessions' ? list : { data: [] } } }), 20); return () => {}; },
-      callTool: async (srv, tool, input) => { if (tool === 'get_session') { window.__fetched.push(input.session_id); return { payload: { ccr: byId[input.session_id] } }; } return { payload: {} }; },
+      callTool: async (srv, tool, input) => {
+        if (tool === 'get_session') { window.__fetched.push(input.session_id); return { payload: { ccr: byId[input.session_id] } }; }
+        if (tool === 'list_sessions') return { payload: list };
+        return { payload: {} };
+      },
       invalidate: async () => {},
     };
-    const user = { canEdit: async () => true, can: async () => true };
-    window.claude = { use: async (n) => (n === 'mcp' ? mcp : n === 'user' ? user : null) };
-  }, { list, byId });
+    const user = { canEdit: async () => true, can: async () => true, id: async () => 'u_test' };
+    window.claude = { use: async (n) => (n === 'mcp' ? (snap ? null : mcp) : n === 'user' ? user : n === 'db' ? db : null) };
+  }, { list, byId, snap });
   await p.goto('file://' + tmp);
-  await p.waitForFunction(() => Array.isArray(window.__inbox), null, { timeout: 10000 });
+  await p.waitForFunction(() => Array.isArray(window.__inbox) && window.__inbox.length > 0, null, { timeout: 10000 });
   if (mode === 'slim') await p.waitForTimeout(1500);
   const inbox = await p.evaluate(() => window.__inbox); const fetched = await p.evaluate(() => window.__fetched);
+  const notices = await p.$$eval('#notices .notice p', (els) => els.map((e) => e.textContent));
   await browser.close();
-  console.log(JSON.stringify({ mode, ids, inbox, fetched, errors }));
+  console.log(JSON.stringify({ mode, ids, inbox, fetched, notices, errors }));
 })().catch((e) => { console.error(String(e && e.stack || e)); process.exit(2); });

@@ -102,8 +102,8 @@ td.empty { padding: 12px 10px; }
 
 /* Attention */
 .alerts { display: flex; flex-direction: column; gap: 8px; }
-.alert { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 0 12px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
-.alert .stripe { background: var(--warn); }
+.alert { display: grid; grid-template-columns: 4px minmax(0, 1fr) minmax(min-content, 42%); gap: 0 12px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.alert .stripe { background: var(--warn); grid-row: span 2; }
 .alert.critical .stripe { background: var(--bad); }
 .alert.muted { opacity: .55; }
 .alert .body { padding: 8px 0; min-width: 0; }
@@ -141,7 +141,7 @@ tr.row:hover td { background: var(--panel-2); }
 tr.row.open td { background: var(--accent-soft); }
 .s-title { font-weight: 500; overflow-wrap: anywhere; }
 .s-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; align-items: center; }
-.s-sum { color: var(--muted); font-size: 12.5px; max-width: 34ch; overflow-wrap: anywhere; }
+.s-sum { color: var(--muted); font-size: 12.5px; max-width: 34ch; min-width: 14ch; overflow-wrap: break-word; }
 .r { text-align: right; }
 .bar { position: relative; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); min-width: 64px; }
 .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px; }
@@ -185,11 +185,27 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .toast div.bad { background: var(--bad); color: #fff; }
 .foot { margin-top: 24px; font-size: 12px; color: var(--faint); }
 @media (prefers-reduced-motion: no-preference) { .tile, .card { transition: border-color .2s; } }
+/* Phones: the inbox should be on the first screen. Two-column compact tiles, a band that scrolls away, one-line jump links. */
+@media (max-width: 640px) {
+  .band { position: static; }
+  .jump { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .jump a { flex: none; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .tile { padding: 8px 10px; }
+  .tile .v { font-size: 20px; }
+  .tile .s { font-size: 11px; }
+}
+/* Narrow frames (phones, side panels): actions go under the text instead of squeezing it; the session table keeps only select, session and state. */
+@media (max-width: 760px) {
+  #s-table th:nth-child(n+4), #s-table td:nth-child(n+4):not([colspan]) { display: none; }
+  .alert { grid-template-columns: 4px minmax(0, 1fr); }
+  .alert .acts { grid-column: 2; justify-content: flex-start; padding: 0 10px 8px 0; }
+}
 </style>
 
 <div class="band" id="band">
   <div class="band-in">
-    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · v1.0</span></div>
+    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · 콘솔 v11</span></div>
     <div class="verdict" id="verdict"><span class="dot"></span><span>상태를 불러오는 중</span></div>
     <span class="spacer"></span>
     <nav class="jump" aria-label="섹션으로 이동">
@@ -279,6 +295,14 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     </details>
   </section>
 
+  <section class="card" id="diag" style="margin-top:16px">
+    <details id="diag-d"><summary>연결 진단</summary>
+      <p class="note" style="margin:8px 0">이 보기에서 각 기능이 쓸 수 있는지, 커넥터 호출이 어떤 결과를 냈는지 보여 줍니다. 편집 권한이 있으면 열 때마다 한 번 원장 <code>diag/</code>에 남겨, 다른 세션이 원인을 읽을 수 있게 합니다.</p>
+      <div class="acts" style="margin-bottom:8px"><button class="btn" type="button" id="diag-save">지금 원장에 저장</button></div>
+      <pre id="diag-out" style="white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:320px;overflow:auto;margin:0"></pre>
+    </details>
+  </section>
+
   <p class="foot">세션·예약 작업은 Claude Code Remote 커넥터를 보는 사람의 권한으로 실시간 조회합니다. 트리·검증·감사 기록과 운영 기준은 이 페이지의 저장소(원장)에 있습니다. 조작은 두 번 눌러야 실행되며 모두 감사 기록에 남습니다.</p>
 </div>
 <div class="toast" id="toast" aria-live="polite"></div>
@@ -286,6 +310,13 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 <script>
 (() => {
   const SERVER = 'Claude Code Remote';
+  const CONSOLE_VERSION = 'v11';
+  const MCP_PERM = 'mcp:' + SERVER; // scoped permission name: consent is per connector (mcp.d.ts)
+  const UA_KIND = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : /Electron|ClaudeDesktop|Claude\/[0-9]/i.test(navigator.userAgent) ? 'app' : 'browser';
+  // Authorization denials: connector-derived data is withdrawn and the ledger snapshot is not shown in its place (mcp.d.ts failure design).
+  const AUTHZ = ['needs_reauth', 'server_not_connected', 'blocked_by_policy', 'approval_required', 'not_in_manifest', 'selection_required', 'consent_required'];
+  const NO_MCP = ['not_granted', 'capability_disabled', 'capability_removed'];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const DEFAULT_POLICY = { tree_default_cap_usd: 50, child_cap_usd: 15, soft_ratio: 0.7, stale_minutes: 30,
     hub_rotate_context_tokens: 250000, hub_rotate_cost_usd: 25, loop_cost_jump_usd: 3, refresh_seconds: 60 };
   const POLICY_FIELDS = [
@@ -305,6 +336,8 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     mcp: null, db: null, user: null, canAct: false, canWrite: false, mcpState: 'loading',
     sessions: [], sessionsAt: null, sessionsErr: null, sessionsMore: false,
     rawSessions: [], detail: {}, enrich: { busy: false, stopped: false, err: null, last: 0 },
+    perm: null, permState: null, asked: false, watching: false, liveOk: false, fromSnapshot: false, snap: null, snapSavedAt: 0, snapSig: '', myId: null, firstReading: false, ledgerUnsubs: [], ledgerRetryAt: 0,
+    diag: { boot_at: new Date().toISOString(), caps: {}, events: [], calls: {} },
     triggers: [], triggersAt: null, triggersErr: null,
     ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
     showHidden: false,
@@ -377,8 +410,11 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   // Re-render is deferred while a pointer is down (so a click's target is not swapped between mousedown and click)
   // and while the viewer is typing in that section.
   let pointerDown = false;
-  document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
-  const release = () => { pointerDown = false; setTimeout(() => { if (S.deferred.size && !pointerDown) renderAll(); }, 60); };
+  let pointerTimer = 0;
+  const release = () => { pointerDown = false; clearTimeout(pointerTimer); setTimeout(() => { if (S.deferred.size && !pointerDown) renderAll(); }, 60); };
+  // A pointerup can be lost (released outside the frame, swallowed by a native <select> popup): never hold repaints longer than 1.5 s.
+  document.addEventListener('pointerdown', () => { pointerDown = true; clearTimeout(pointerTimer); pointerTimer = setTimeout(release, 1500); }, true);
+  window.addEventListener('blur', release); document.addEventListener('visibilitychange', release);
   document.addEventListener('pointerup', release, true);
   document.addEventListener('pointercancel', release, true);
   const isTyping = (root) => { const a = document.activeElement; return a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== 'checkbox'; };
@@ -599,6 +635,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     }).catch((e) => toast('감사 기록을 남기지 못했습니다(' + ((e && e.code) || '오류') + ')', 'bad'));
   }
   async function act(key, label, tool, input, target) {
+    if (S.fromSnapshot || !S.liveOk) { toast('실시간 연결이 없는 보기에서는 조작할 수 없습니다.', 'bad'); return null; }
     if (!S.mcp || S.busy[key]) return null; S.busy[key] = true; renderAll();
     try {
       const r = await S.mcp.callTool(SERVER, tool, input, { cache: false });
@@ -631,7 +668,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const safe = (name, fn) => { try { fn(); } catch (e) { console.error('render ' + name, e); } };
     let alerts = []; safe('alerts-compute', () => { alerts = computeAlerts(); });
     let inbox = []; safe('inbox-compute', () => { inbox = computeInbox(); }); S.inboxNow = inbox;
-    safe('band', () => renderBand(alerts, inbox)); safe('notices', renderNotices); safe('tiles', () => renderTiles(alerts, inbox));
+    safe('band', () => renderBand(alerts, inbox)); safe('notices', renderNotices); safe('diag', renderDiag); safe('tiles', () => renderTiles(alerts, inbox));
     safe('inbox', () => renderInbox(inbox)); safe('alerts', () => renderAlerts(alerts));
     safe('sessions', () => renderSessions(alerts)); safe('trees', renderTrees); safe('triggers', renderTriggers); safe('verifs', renderVerifs); safe('audit', renderAudit); safe('policy', renderPolicy);
   }
@@ -644,22 +681,40 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     else if (urgent || crit) { cls = 'bad'; txt = '당신 차례 ' + mine.length + '건 · 긴급 ' + urgent + (open.length ? ' · 운영 경보 ' + open.length : ''); }
     else if (mine.length || open.length) { cls = 'warn'; txt = '당신 차례 ' + mine.length + '건' + (open.length ? ' · 운영 경보 ' + open.length : ''); }
     v.append(h('span', { class: 'dot ' + cls }), h('span', { text: txt }));
-    $('fresh').textContent = S.sessionsAt ? '세션 기준 ' + new Date(S.sessionsAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' }) + ' · 1분마다 갱신' : '—';
+    $('fresh').textContent = S.sessionsAt ? (S.fromSnapshot ? '스냅숏 ' + kst(new Date(S.sessionsAt).toISOString()) + ' · 읽기 전용' : '세션 기준 ' + new Date(S.sessionsAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' }) + ' · 1분마다 갱신') : '—';
   }
+  // Each failure code has its own fix (mcp.d.ts failure design); collapsing them into one banner hides the fix.
   function renderNotices() {
     const n = $('notices'); n.replaceChildren();
-    if (S.mcpState === 'absent') n.append(h('div', { class: 'notice warn' }, h('p', { text: '이 보기에서는 커넥터 기능을 쓸 수 없어 세션과 예약 작업을 보여 주지 못합니다. claude.ai에서 이 페이지를 열면 실시간으로 보입니다. 원장 데이터는 아래에 그대로 보입니다.' })));
-    const e = S.sessionsErr;
-    if (e && LOUD.includes(e.code)) {
-      const kids = [h('p', { text: errText(e) })];
-      if (e.code === 'approval_required' || e.code === 'consent_required') kids.push(h('button', { class: 'btn primary', type: 'button', onclick: allowRead }, '세션 정보 읽기 허용'));
-      n.append(h('div', { class: 'notice warn' }, ...kids));
-    } else if (e) n.append(h('div', { class: 'notice' }, h('p', { text: '세션 목록 갱신 실패. 마지막으로 받은 내용을 보여 줍니다. ' + errText(e) })));
-    if (!S.canAct && S.mcpState === 'ok') n.append(h('div', { class: 'notice' }, h('p', { text: '읽기 전용 보기입니다. 조작 버튼은 편집 권한이 있는 사람에게만 켜집니다.' })));
+    const btn = (label, fn, primary) => h('button', { class: 'btn' + (primary ? ' primary' : ''), type: 'button', onclick: fn }, label);
+    const note = (cls, text, ...btns) => n.append(h('div', { class: 'notice ' + cls }, h('p', { text }), btns.length ? h('div', { class: 'acts', style: 'margin-top:6px' }, ...btns) : null));
+    const snapLine = () => S.fromSnapshot && S.snap ? ' 지금은 이 계정의 ' + kst(S.snap.at) + ' 스냅숏을 읽기 전용으로 보여 줍니다.' : (S.snap || !S.db ? '' : ' 저장된 스냅숏이 없습니다. 편집 권한으로 PC·브라우저에서 한 번 연결되면 저장됩니다.');
+    const allow = () => btn('연결 허용', connectByGesture, true);
+    const retry = () => btn('다시 시도', connectByGesture, true);
+    const manage = () => btn('권한 설정 열기', openPermissions, true);
+    const e = S.sessionsErr; const code = e && e.code;
+    if (S.mcpState === 'absent') note('warn', '이 보기에서는 커넥터 기능을 쓸 수 없습니다(예: 모바일 앱, 미리보기, 공유 링크).' + snapLine());
+    else if (S.mcpState === 'user_changed') note('warn', '로그인한 계정이 바뀌었습니다. 페이지가 다시 로드될 때까지 기다리세요.');
+    else if (S.mcpState === 'asking') note('', 'Claude Code Remote 연결 허용을 기다리는 중입니다. 허용 창이 보이지 않으면 아래 버튼을 누르세요.', allow());
+    else if (S.mcpState === 'needs_consent') note('warn', '세션 정보를 읽으려면 Claude Code Remote 사용 허용이 필요합니다. 버튼을 누르면 claude.ai가 한 번 묻습니다.', allow());
+    else if (S.mcpState === 'perm_denied') note('warn', '이 페이지에서 Claude Code Remote 사용을 거부한 상태입니다. 권한 설정에서 켜면 연결됩니다.', manage());
+    else if (code === 'approval_required' || code === 'consent_required') note('warn', '세션 정보를 읽으려면 Claude Code Remote 사용 허용이 필요합니다. 버튼을 누르면 claude.ai가 한 번 묻습니다.', allow());
+    else if (code === 'not_in_manifest') note('warn', '이 페이지에서 Claude Code Remote가 꺼져 있거나 일부 도구가 허용되지 않았습니다.', manage(), retry());
+    else if (code === 'needs_reauth') note('warn', 'Claude Code Remote 연결이 만료됐습니다. claude.ai 설정 → 커넥터에서 다시 연결한 뒤 다시 시도하세요.', retry());
+    else if (code === 'server_not_connected') note('warn', '이 계정에서 Claude Code Remote 커넥터를 찾지 못했습니다. claude.ai 설정 → 커넥터에서 추가하세요.', retry());
+    else if (code === 'selection_required') note('warn', '같은 이름의 커넥터가 여러 개입니다. claude.ai가 띄우는 선택 창에서 하나를 고른 뒤 다시 시도하세요.', retry());
+    else if (code === 'blocked_by_policy') note('warn', '조직 정책이 이 커넥터 사용을 막고 있습니다.');
+    else if (['not_granted', 'capability_disabled', 'capability_removed'].includes(code)) note('warn', '이 보기는 커넥터 기능을 실행하지 못합니다(' + code + ').' + snapLine());
+    else if (e) note('', '세션 목록을 갱신하지 못했습니다(' + (code || '오류') + '). ' + (S.liveOk ? '마지막으로 받은 내용을 보여 줍니다.' : (S.fromSnapshot ? '' : '아직 받은 내용이 없습니다.')) + snapLine(), retry());
+    if (S.watchBroken) note('', '실시간 갱신을 시작하지 못했습니다. 새로고침 버튼으로 직접 갱신하세요.');
+    if (S.ledgerErr) note('warn', '이 보기에서는 원장을 읽을 수 없습니다(' + S.ledgerErr + '). 편집 권한이 있는 계정으로 여세요.');
+    if (!S.canAct && S.liveOk) note('', '읽기 전용 보기입니다. 조작 버튼은 편집 권한이 있는 사람에게만 켜집니다.');
   }
-  async function allowRead() {
-    try { const r = await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }); onSessions({ type: 'data', result: r }); }
-    catch (e) { toast(errText(e), 'bad'); }
+  async function openPermissions() {
+    const perm = S.perm || await window.claude.use('permissions').catch(() => null);
+    if (!perm) { toast('이 보기에는 권한 패널이 없습니다. 페이지의 권한 메뉴에서 켜세요.', 'bad'); return; }
+    try { await perm.manage(); } catch (_) { toast('권한 패널을 열지 못했습니다. 페이지의 권한 메뉴에서 켜세요.', 'bad'); return; }
+    connectByGesture();
   }
   function renderTiles(alerts, inbox) {
     const mine = (inbox || []).filter((i) => i.state === 'open'); const urgent = mine.filter((i) => i.prio >= 80).length;
@@ -691,7 +746,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     paint('inbox-tools', (root) => {
       root.replaceChildren();
       const hidden = inbox.filter((i) => i.state !== 'open').length;
-      const slim = S.rawSessions.filter((x) => !x.external_metadata).length; const filled = Object.keys(S.detail).length;
+      const slim = S.rawSessions.filter((x) => !x.external_metadata).length; const filled = Object.values(S.detail).filter((d) => d.rec).length;
       if (S.enrich.err) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세를 불러오지 못해 레포·맥락 기반 신호가 꺼져 있습니다: ' + S.enrich.err }));
       else if (slim && S.enrich.busy) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세 보강 중…' }));
       else if (slim) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '상세 보강 ' + filled + '개(최근·대기 세션 최대 ' + ENRICH_MAX + '개)' }));
@@ -712,7 +767,10 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
               h('option', { value: '' }, '무시…'), ...Object.entries(DISMISS_LABEL).map(([v, l]) => h('option', { value: v }, l))));
           else acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'open') }, '다시 열기'));
         }
-        const meta = it.s ? [h('span', { class: 'chip', text: isChild(it.s) ? '자식' : '사람' }), h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
+        // Latest independent verification of this session's claims (v2 ladder), from the ledger.
+        const ver = it.s ? (S.ledger.verifs || []).filter((v) => v.session_id === it.s.id).sort((x, y) => String(y.at).localeCompare(String(x.at)))[0] : null;
+        const verChip = ver ? h('span', { class: 'chip', title: (ver.note || '') + (ver.ref ? ' · 근거: ' + ver.ref : ''), text: ver.level + ' ' + ({ match: '일치', refuted: '반박', unverifiable: '검증불가' }[ver.verdict] || '기록') + ' · ' + kst(ver.at) }) : null;
+        const meta = it.s ? [verChip, h('span', { class: 'chip', text: isChild(it.s) ? '자식' : '사람' }), h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
           h('span', { class: 'faint', style: 'font-size:12px', text: ago(it.s.updated) })]
           : (it.sessions || []).slice(0, 6).map((x) => h('a', { class: 'chip', href: sessionUrl(x.id), target: '_blank', rel: 'noopener', title: x.title, text: x.title.slice(0, 18) }));
         root.append(h('div', { class: 'alert ' + (it.prio >= 80 ? 'critical' : '') + (it.state !== 'open' ? ' muted' : '') },
@@ -859,9 +917,13 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const cap = h('input', { type: 'number', id: 'rc-' + s.id, min: '0', step: '1', 'aria-label': '세션 상한 달러', style: 'width:90px' });
     cap.value = reg && typeof reg.cap_usd === 'number' ? String(reg.cap_usd) : String(P.child_cap_usd);
     const save = h('button', { class: 'btn primary', type: 'button', disabled: !S.canWrite || null, onclick: async () => {
+      if (S.fromSnapshot) { toast('스냅숏 보기에서는 원장 등록을 바꿀 수 없습니다.', 'bad'); return; }
       if (!tsel.value) { toast('트리를 고르세요. 모든 위임은 트리에 속합니다.', 'bad'); return; }
       const c = cap.value === '' ? null : Number(cap.value);
-      const doc = { session_id: s.id, tree_id: tsel.value || null, role: rsel.value, model: s.model || null, cap_usd: c, spent_usd: s.cost, status: lifecycle(s),
+      const doc = { session_id: s.id, tree_id: tsel.value || null, role: rsel.value, model: s.model || (reg && reg.model) || null, cap_usd: c,
+        // Keep what this view does not know: no cost without enrichment, and a hub-set archive state over a derived 'done'.
+        spent_usd: s.cost != null ? s.cost : (reg && reg.spent_usd != null ? reg.spent_usd : null),
+        status: reg && ['archive-candidate', 'archived'].includes(reg.status) && lifecycle(s) === 'done' ? reg.status : lifecycle(s),
         created_at: (reg && reg.created_at) || s.created || new Date().toISOString(), ended_at: (reg && reg.ended_at) || null, verdict: (reg && reg.verdict) || null };
       if (await ledgerSet('sessions/' + s.id, doc, '원장에 등록했습니다')) { clearDrafts('r'); audit('ledger_register', s.id, 'ok', doc.role + ' @ ' + doc.tree_id); }
     } }, reg ? '갱신' : '등록');
@@ -984,68 +1046,197 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   // signals stay off; the inbox tools say so.
   const ENRICH_MAX = 30, ENRICH_CONCURRENCY = 3;
   function rebuildSessions() {
-    S.sessions = S.rawSessions.map((x) => { const d = S.detail[x.id]; return normSession(d && d.updated === x.updated_at ? { ...x, ...d.rec } : x); });
+    S.sessions = S.rawSessions.map((x) => { const d = S.detail[x.id]; return normSession(d && d.rec && d.updated === x.updated_at ? { ...x, ...d.rec } : x); });
   }
   async function enrichSessions() {
-    if (!S.mcp || S.enrich.busy || S.enrich.stopped) return;
+    if (!S.mcp || !S.liveOk || S.enrich.busy || S.enrich.stopped || Date.now() < (S.enrich.pauseUntil || 0)) return;
     const now = Date.now();
     const want = S.rawSessions.filter((x) => !x.external_metadata && x.session_status !== 'SESSION_STATUS_ARCHIVED'
         && (/(BLOCKED|WORKING|REVIEW_READY|FAILED)$/.test(x.status_bucket || '') || (x.post_turn_summary && x.post_turn_summary.needs_action) || x.unread || now - Date.parse(x.updated_at) < 14 * 86400000))
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, ENRICH_MAX)
       .filter((x) => !(S.detail[x.id] && S.detail[x.id].updated === x.updated_at));
     if (!want.length) return;
-    S.enrich.busy = true; let changed = 0; const queue = want.slice();
+    S.enrich.busy = true; let changed = 0; let halt = false; const queue = want.slice();
     const worker = async () => {
-      while (queue.length && !S.enrich.stopped) {
+      while (queue.length && !halt && !S.enrich.stopped) {
         const x = queue.shift();
         try {
           const p = parsePayload(await S.mcp.callTool(SERVER, 'get_session', { session_id: x.id }, { cache: false })); const rec = (p && p.ccr) || p;
-          if (rec && rec.id === x.id) { S.detail[x.id] = { updated: x.updated_at, rec }; changed++; }
-        } catch (e) { S.enrich.err = errText(e); if (!(e && e.retryable)) S.enrich.stopped = true; }
+          // An unusable answer is cached too, so an unexpected shape cannot turn every refresh into another round of calls.
+          const usable = !!(rec && rec.id === x.id); S.detail[x.id] = { updated: x.updated_at, rec: usable ? rec : null };
+          if (usable) { changed++; S.enrich.err = null; }
+          dlog('call', { tool: 'get_session', ok: usable, code: usable ? undefined : 'unexpected_shape' });
+        } catch (e) {
+          S.enrich.err = errText(e); dlog('call', { tool: 'get_session', ok: false, code: e && e.code });
+          // Retryable: stop this round and come back later (never loop). Anything else: stop until the viewer reconnects.
+          if (e && e.retryable) { halt = true; S.enrich.pauseUntil = Date.now() + ((e && e.retryAfterMs) || 30000 + Math.random() * 30000); }
+          else S.enrich.stopped = true;
+        }
       }
     };
     try { await Promise.all(Array.from({ length: ENRICH_CONCURRENCY }, worker)); }
     finally { S.enrich.busy = false; S.enrich.last = Date.now(); if (changed || S.enrich.err) { rebuildSessions(); renderAll(); } }
   }
+  // ---------- diagnostics: what this view could use and what the connector answered ----------
+  function dlog(kind, info) {
+    const ev = { at: new Date().toISOString(), kind, ...info }; S.diag.events.push(ev); if (S.diag.events.length > 60) S.diag.events.shift();
+    if (kind === 'call') { const c = S.diag.calls[info.tool] = S.diag.calls[info.tool] || { ok: 0, fail: 0, last_code: null }; if (info.ok) c.ok++; else { c.fail++; c.last_code = info.code || null; } }
+  }
+  function diagDoc() {
+    return { version: CONSOLE_VERSION, at: new Date().toISOString(), boot_at: S.diag.boot_at, ua_kind: UA_KIND, ua: navigator.userAgent.slice(0, 200),
+      caps: S.diag.caps, perm: S.permState, mcp_state: S.mcpState, live: S.liveOk, from_snapshot: S.fromSnapshot,
+      sessions: S.sessions.length, enriched: Object.values(S.detail).filter((d) => d.rec).length, enrich_err: S.enrich.err, calls: S.diag.calls, events: S.diag.events.slice(-40) };
+  }
+  function renderDiag() { const o = $('diag-out'); if (o && $('diag-d').open) o.textContent = JSON.stringify(diagDoc(), null, 2); }
+  async function saveDiag(manual) {
+    if (!S.db || !S.canWrite) { if (manual) toast('원장에 쓸 권한이 없습니다.', 'bad'); return; }
+    try { await S.db.doc('diag/' + new Date().toISOString().slice(0, 10) + '.' + UA_KIND).set(diagDoc()); if (manual) toast('진단을 원장에 저장했습니다'); }
+    catch (e) { if (manual) toast('진단 저장 실패(' + ((e && e.code) || '오류') + ')', 'bad'); }
+  }
+  // ---------- snapshot: the last live view, kept in the ledger for views without the connector (mobile app, previews) ----------
+  const SNAP_EVERY_MS = 10 * 60000; const SNAP_MAX = 60;
+  function compactRec(x) {
+    const d = S.detail[x.id]; const r = d && d.rec && d.updated === x.updated_at ? { ...x, ...d.rec } : x;
+    const em = r.external_metadata || {}; const pts = em.post_turn_summary || r.post_turn_summary || {}; const cut = (s) => (s ? String(s).slice(0, 300) : '');
+    return { id: r.id, title: cut(r.title), session_status: r.session_status || '', status_bucket: r.status_bucket || '', created_at: r.created_at, updated_at: r.updated_at,
+      origin: r.origin || '', parent_session_id: r.parent_session_id || null, unread: !!r.unread, tags: (r.tags || []).filter((x) => !String(x).startsWith('config:')),
+      post_turn_summary: { needs_action: cut(pts.needs_action), status_detail: cut(pts.status_detail), recent_action: cut(pts.recent_action), status_category: pts.status_category || '' },
+      session_context: { sources: ((r.session_context || {}).sources || []).slice(0, 1) },
+      external_metadata: { context_usage: em.context_usage || null, usage: em.usage && typeof em.usage.cost_usd === 'number' ? { cost_usd: em.usage.cost_usd } : null } };
+  }
+  async function maybeSaveSnapshot() {
+    if (!S.db || !S.canWrite || !S.myId || !S.liveOk || S.fromSnapshot || S.enrich.busy || !S.rawSessions.length) return;
+    const recs = S.rawSessions.slice().sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, SNAP_MAX).map(compactRec);
+    const sig = recs.map((r) => r.id + '@' + r.updated_at + ':' + (r.session_context.sources.length ? 1 : 0)).join(',');
+    const stored = S.snapSig || (S.snap && S.snap.sig) || '';
+    if (sig === stored || (S.snapSavedAt && Date.now() - S.snapSavedAt < SNAP_EVERY_MS)) return;
+    const doc = { at: new Date().toISOString(), saved_by: UA_KIND, version: CONSOLE_VERSION, sig, records: recs,
+      triggers: S.triggers.slice(0, 50).map((x) => ({ id: x.id, name: x.name || '', enabled: !!x.enabled, cron_expression: x.cron_expression || null, run_once_at: x.run_once_at || null, next_run_at: x.next_run_at || null })) };
+    const bytes = (o) => new TextEncoder().encode(JSON.stringify(o)).length; // the store's limit is in UTF-8 bytes, not string length
+    while (bytes(doc) > 240000 && doc.records.length > 10) doc.records.pop();
+    S.snapSavedAt = Date.now(); S.snapSig = sig;
+    try { await S.db.doc(snapPath()).set(doc); dlog('snapshot_save', { ok: true, n: doc.records.length, bytes: bytes(doc) }); }
+    catch (e) {
+      dlog('snapshot_save', { ok: false, code: e && e.code });
+      if (e && e.code === 'invalid_argument' && doc.records.length > 10) {
+        doc.records = doc.records.slice(0, Math.floor(doc.records.length / 2));
+        try { await S.db.doc(snapPath()).set(doc); dlog('snapshot_save', { ok: true, n: doc.records.length, retry: true }); } catch (e2) { dlog('snapshot_save', { ok: false, code: e2 && e2.code, retry: true }); }
+      }
+    }
+  }
+  // Shown only when this view cannot run the connector at all, or before live data while the connector is failing transiently.
+  // Never in place of data an authorization denial withdrew (approval, policy, page permission).
+  function applySnapshot() {
+    if (S.liveOk || !S.snap || !Array.isArray(S.snap.records)) return;
+    if (!['absent', 'error'].includes(S.mcpState)) return;
+    S.rawSessions = S.snap.records; S.detail = {}; rebuildSessions(); S.sessionsAt = Date.parse(S.snap.at) || null; S.fromSnapshot = true;
+    if (!S.triggers.length && Array.isArray(S.snap.triggers)) { S.triggers = S.snap.triggers; S.triggersAt = S.sessionsAt; }
+  }
+  function withdrawSnapshot() {
+    if (!S.fromSnapshot) return;
+    S.fromSnapshot = false; S.rawSessions = []; S.sessions = []; S.sessionsAt = null; S.triggers = []; S.triggersAt = null;
+  }
+  // ---------- connection: consent first, one call, then watches (a watch never asks for consent; a call does) ----------
+  async function firstRead(opts) {
+    if (S.firstReading) return false; S.firstReading = true;
+    try {
+      const r = await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }); dlog('call', { tool: 'list_sessions', ok: true, via: 'call', gesture: !!opts.gesture });
+      onSessions({ type: 'data', result: r }); return true;
+    } catch (e) {
+      dlog('call', { tool: 'list_sessions', ok: false, via: 'call', gesture: !!opts.gesture, code: e && e.code, retryable: !!(e && e.retryable), msg: String((e && e.message) || '').slice(0, 160) });
+      // One unattended retry, reads only, and only once consent is settled: a retry may otherwise show the consent dialog again.
+      if (e && e.retryable && opts.allowRetry) { await sleep(Math.min(60000, (e && e.retryAfterMs) || 800 + Math.random() * 1200)); S.firstReading = false; return firstRead({ ...opts, allowRetry: false }); }
+      onSessions({ type: 'error', error: e }); return false;
+    } finally { S.firstReading = false; }
+  }
+  // Startup: read the page permission, ask at most once, make one call if consent is settled or cannot be read, then watch.
+  // Watches start in every case: they replay, refresh and recover by themselves, and deliver as soon as consent is given.
+  async function boot() {
+    const perm = S.perm || await window.claude.use('permissions').catch(() => null); S.perm = perm;
+    let st = perm ? await perm.state(MCP_PERM).catch(() => 'unavailable') : 'unknown';
+    dlog('perm', { state: st });
+    if (st === 'prompt' && perm) {
+      S.asked = true; S.mcpState = 'asking'; renderAll();
+      const r = await perm.request([MCP_PERM]).catch(() => ({})); st = r[MCP_PERM] || st; dlog('perm_request', { state: st });
+    }
+    S.permState = st;
+    if (st === 'denied') S.mcpState = 'perm_denied';
+    else if (st === 'prompt') S.mcpState = 'needs_consent'; // the dialog was dismissed or not shown: wait for a click, do not ask again
+    else { S.mcpState = 'loading'; await firstRead({ allowRetry: st === 'granted' }); }
+    startWatches(); renderAll();
+  }
+  // The button: one call (which asks if needed), independent of a pending permission request.
+  async function connectByGesture() {
+    if (!S.mcp) return;
+    S.enrich.stopped = false; S.enrich.err = null; S.enrich.pauseUntil = 0;
+    if (['needs_consent', 'asking', 'perm_denied', 'denied', 'error'].includes(S.mcpState)) S.mcpState = 'loading';
+    renderAll();
+    const ok = await firstRead({ gesture: true, allowRetry: false });
+    if (!ok && S.perm) { const st = await S.perm.state(MCP_PERM).catch(() => null); if (st === 'denied') { S.permState = st; S.mcpState = 'perm_denied'; } }
+    startWatches(); renderAll();
+  }
   function onSessions(ev) {
     if (ev.type === 'data') {
-      try { const p = parsePayload(ev.result); const arr = (p.ccr && p.ccr.data) || p.data || [];
-        S.rawSessions = arr.filter((x) => x && x.id); rebuildSessions(); S.sessionsMore = !!((p.ccr && p.ccr.has_more) || p.has_more);
-        S.sessionsAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.sessionsErr = null; S.mcpState = 'ok';
-      } catch (e) { S.sessionsErr = { code: 'parse', message: String((e && e.message) || e) }; }
+      try {
+        const p = parsePayload(ev.result); const arr = (p && p.ccr && p.ccr.data) || (p && p.data);
+        if (!Array.isArray(arr)) throw Object.assign(new Error('list_sessions returned an unexpected shape'), { code: 'unexpected_shape' });
+        S.rawSessions = arr.filter((x) => x && x.id); S.fromSnapshot = false; rebuildSessions(); S.sessionsMore = !!((p.ccr && p.ccr.has_more) || p.has_more);
+        S.sessionsAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.sessionsErr = null; S.mcpState = 'ok'; S.liveOk = true;
+      } catch (e) { S.sessionsErr = { code: e.code || 'parse', message: String((e && e.message) || e) }; dlog('parse', { tool: 'list_sessions', code: S.sessionsErr.code }); }
     } else {
-      S.sessionsErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.rawSessions = []; S.sessions = []; S.sessionsAt = null; S.mcpState = 'denied'; }
+      const code = ev.error && ev.error.code; S.sessionsErr = ev.error; dlog('watch', { tool: 'list_sessions', ok: false, code });
+      if (code === 'user_changed') { S.stopped = true; S.rawSessions = []; S.sessions = []; S.liveOk = false; S.mcpState = 'user_changed'; }
+      else if (AUTHZ.includes(code)) { withdrawSnapshot(); S.rawSessions = []; S.sessions = []; S.sessionsAt = null; S.liveOk = false; S.mcpState = S.mcpState === 'perm_denied' ? 'perm_denied' : 'denied'; }
+      else if (NO_MCP.includes(code)) { S.rawSessions = []; S.sessions = []; S.liveOk = false; S.mcpState = 'absent'; applySnapshot(); }
+      else if (code === 'bad_request' && !S.liveOk) { S.watchBroken = true; S.mcpState = 'error'; applySnapshot(); }
+      else if (!S.liveOk) { S.mcpState = 'error'; applySnapshot(); } // transient before any live data: keep the snapshot, if any
+      // transient after live data: keep the last good list
     }
-    renderAll(); enrichSessions();
+    if (!S.stopped) { renderAll(); enrichSessions().then(maybeSaveSnapshot); }
   }
   function onTriggers(ev) {
     if (ev.type === 'data') {
       try { const p = parsePayload(ev.result); S.triggers = (p.data || (p.ccr && p.ccr.data) || []).filter((x) => x && x.id); S.triggersAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.triggersErr = null; }
       catch (e) { S.triggersErr = { code: 'parse', message: String((e && e.message) || e) }; }
-    } else { S.triggersErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.triggers = []; S.triggersAt = null; } }
+    } else { S.triggersErr = ev.error; dlog('watch', { tool: 'list_triggers', ok: false, code: ev.error && ev.error.code }); if (ev.error && LOUD.includes(ev.error.code)) { S.triggers = []; S.triggersAt = null; } }
     renderAll();
   }
   function startWatches() {
+    if (S.watching || !S.mcp || S.stopped) return; S.watching = true;
     S.mcp.watchTool(SERVER, 'list_sessions', { limit: 100 }, onSessions, { refetchInterval: 60000 });
     S.mcp.watchTool(SERVER, 'list_triggers', { limit: 50 }, onTriggers, { refetchInterval: 120000 });
   }
+  // The snapshot is per viewer (data/users/<id>/, private to that viewer): editors never see or overwrite each other's lists.
+  const snapPath = () => 'data/users/' + S.myId + '/snapshot';
+  function watchSnapshot() {
+    if (S.snapUnsub || !S.db || !S.myId) return;
+    S.snapUnsub = S.db.doc(snapPath()).onSnapshot((d) => { S.snap = d.exists ? d.data() : null; applySnapshot(); renderAll(); }, (e) => dlog('snapshot_read', { ok: false, code: e && e.code }));
+  }
   function startLedger() {
-    const db = S.db; const fail = (e) => { if (e && e.code !== 'unavailable') toast('원장 구독 오류(' + e.code + ')', 'bad'); };
-    db.collection('trees').onSnapshot((q) => { S.ledger.trees = q.docs.map((d) => ({ tree_id: d.id, ...d.data() })); renderAll(); }, fail);
-    db.collection('sessions').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = { session_id: d.id, ...d.data() }; S.ledger.reg = m; renderAll(); }, fail);
-    db.collection('alerts').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.alerts = m; renderAll(); }, fail);
-    db.collection('inbox_state').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.inbox = m; renderAll(); }, fail);
-    db.collection('verifications').orderBy('at', 'desc').limit(50).onSnapshot((q) => { S.ledger.verifs = q.docs.map((d) => ({ run_id: d.id, ...d.data() })); renderAll(); }, fail);
-    db.collection('audit').orderBy('day', 'desc').limit(8).onSnapshot((q) => { S.ledger.audit = q.docs.map((d) => d.data()); renderAll(); }, fail);
-    db.collection('triggers').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.trig = m; renderAll(); }, fail);
-    db.doc('config/policy').onSnapshot((d) => { S.ledger.policy = d.exists ? { ...DEFAULT_POLICY, ...d.data() } : { ...DEFAULT_POLICY }; S.ledger.loaded = true; renderAll(); }, fail);
+    const db = S.db; S.ledgerUnsubs.forEach((u) => { try { u(); } catch (_) { /* already closed */ } }); S.ledgerUnsubs = [];
+    const keep = (u) => { if (typeof u === 'function') S.ledgerUnsubs.push(u); };
+    // A subscription that ends 'unavailable' recovers only by subscribing again; 'revoked' means this view lost read access (db.d.ts).
+    const fail = (e) => { const code = e && e.code; dlog('ledger', { ok: false, code });
+      if (code === 'revoked' || code === 'permission_denied') { S.ledger = { ...S.ledger, trees: [], reg: {}, alerts: {}, inbox: {}, verifs: [], audit: [], trig: {} }; S.ledgerErr = code; renderAll(); return; }
+      if (code === 'unavailable' && Date.now() > S.ledgerRetryAt) { S.ledgerRetryAt = Date.now() + 60000; setTimeout(startLedger, 2000 + Math.random() * 3000); return; }
+      if (code && code !== 'unavailable') toast('원장 구독 오류(' + code + ')', 'bad'); };
+    keep(db.collection('trees').onSnapshot((q) => { S.ledger.trees = q.docs.map((d) => ({ tree_id: d.id, ...d.data() })); renderAll(); }, fail));
+    keep(db.collection('sessions').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = { session_id: d.id, ...d.data() }; S.ledger.reg = m; renderAll(); }, fail));
+    keep(db.collection('alerts').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.alerts = m; renderAll(); }, fail));
+    keep(db.collection('inbox_state').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.inbox = m; renderAll(); }, fail));
+    keep(db.collection('verifications').orderBy('at', 'desc').limit(50).onSnapshot((q) => { S.ledger.verifs = q.docs.map((d) => ({ run_id: d.id, ...d.data() })); renderAll(); }, fail));
+    keep(db.collection('audit').orderBy('day', 'desc').limit(8).onSnapshot((q) => { S.ledger.audit = q.docs.map((d) => d.data()); renderAll(); }, fail));
+    keep(db.collection('triggers').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.trig = m; renderAll(); }, fail));
+    keep(db.doc('config/policy').onSnapshot((d) => { S.ledger.policy = d.exists ? { ...DEFAULT_POLICY, ...d.data() } : { ...DEFAULT_POLICY }; S.ledger.loaded = true; renderAll(); }, fail));
   }
 
   // ---------- wiring ----------
   $('scope').addEventListener('click', (ev) => { const b = ev.target.closest('button[data-scope]'); if (!b) return; S.scope = b.dataset.scope; renderAll(); });
   $('q').addEventListener('input', (ev) => { S.q = ev.target.value; renderAll(); });
   $('show-archived').addEventListener('change', (ev) => { S.showArchived = ev.target.checked; renderAll(); });
-  $('refresh').addEventListener('click', async () => { if (!S.mcp) return; $('refresh').disabled = true; try { await S.mcp.invalidate(SERVER); } catch (_) { try { onSessions({ type: 'data', result: await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }) }); } catch (e) { toast(errText(e), 'bad'); } } finally { $('refresh').disabled = false; } });
+  $('diag-save').addEventListener('click', () => saveDiag(true));
+  $('diag-d').addEventListener('toggle', renderDiag);
+  $('refresh').addEventListener('click', async () => { if (!S.mcp) return; if (!S.liveOk) { connectByGesture(); return; } $('refresh').disabled = true; try { await S.mcp.invalidate(SERVER); } catch (_) { try { onSessions({ type: 'data', result: await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }) }); } catch (e) { toast(errText(e), 'bad'); } } finally { $('refresh').disabled = false; } });
   $('nt-save').addEventListener('click', async () => {
     const id = $('nt-id').value.trim(); const cap = $('nt-cap').value === '' ? null : Number($('nt-cap').value); const title = $('nt-title').value.trim();
     if (!/^[A-Za-z0-9_.~:@+-]{1,64}$/.test(id)) { toast('tree_id는 영문·숫자·_-.~:@+ 64자 이내로 쓰세요.', 'bad'); return; }
@@ -1058,9 +1249,20 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
   renderAll();
   const C = window.claude;
-  if (!C || typeof C.use !== 'function') { S.mcpState = 'absent'; renderAll(); return; }
-  C.use('user').then(async (u) => { S.user = u; if (u) { const [edit, write] = await Promise.all([u.canEdit(), u.can('data.write')]); S.canAct = !!edit; S.canWrite = write === null ? !!edit : (!!write && !!edit); } renderAll(); });
-  C.use('db').then((db) => { S.db = db; if (db) startLedger(); renderAll(); });
-  C.use('mcp').then((m) => { S.mcp = m; if (!m) { S.mcpState = 'absent'; renderAll(); return; } startWatches(); });
+  if (!C || typeof C.use !== 'function') { S.mcpState = 'absent'; S.diag.caps.claude = false; renderAll(); return; }
+  C.use('user').then(async (u) => {
+    S.user = u; S.diag.caps.user = !!u;
+    if (u) {
+      const edit = await Promise.resolve(typeof u.canEdit === 'function' ? u.canEdit() : (typeof u.isOwner === 'function' ? u.isOwner() : false)).catch(() => false);
+      const write = typeof u.can === 'function' ? await Promise.resolve(u.can('data.write')).catch(() => null) : null;
+      S.canAct = !!edit; S.canWrite = write === null ? !!edit : (!!write && !!edit);
+      if (typeof u.id === 'function') S.myId = await Promise.resolve(u.id()).catch(() => null);
+      if (S.db && S.myId) watchSnapshot();
+    }
+    renderAll();
+  });
+  C.use('db').then((db) => { S.db = db; S.diag.caps.db = !!db; if (db) { startLedger(); if (S.myId) watchSnapshot(); setTimeout(() => saveDiag(false), 20000); } renderAll(); });
+  C.use('permissions').then((p) => { S.perm = S.perm || p; S.diag.caps.permissions = !!p; });
+  C.use('mcp').then((m) => { S.mcp = m; S.diag.caps.mcp = !!m; if (!m) { S.mcpState = 'absent'; applySnapshot(); renderAll(); return; } boot(); });
 })();
 </script>

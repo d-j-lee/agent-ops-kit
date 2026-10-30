@@ -54,6 +54,17 @@ register_repo_root(owner="d-j-lee", repo="agent-ops-kit", directory="<clone 경�
 | `/aok-loop` | 왕복이 3회 이상 예상되는 PR |
 | `/aok-garden` | 주 1회, 또는 끝난 세션이 20개 쌓였을 때 |
 
+## 이어받기 (어느 세션이든)
+
+정해진 메인 세션은 없다. 새 세션이든 기존 세션이든, 지금 사람과 대화하는 세션이 허브·매니저 역할을 이어받는다. 상태는 세션 맥락이 아니라 레포와 원장에 둔다. 그래서 어느 세션이 맡아도 같은 곳에서 시작한다.
+
+1. 이 레포를 세션에 붙인다. `CLAUDE.md`가 규칙으로 로드된다.
+2. 사용자에게 관제실 URL을 받는다(레포에는 적지 않는다). `ArtifactData`로 원장 `handoff/current`를 읽는다. 현재 상태, 사람이 할 일, 다음 단계, 주의 사항이 있다.
+3. 콘솔이 실제 런타임에서 어떻게 동작했는지는 원장 `diag/`에서, 마지막 세션 화면은 `snapshot/sessions`에서 본다.
+4. 일을 마치거나 맥락이 250k에 가까워지면 `handoff/current`를 읽은 `version`으로 고정해 갱신하고, 감사 기록 `audit/<날짜>.hub`에 남긴다.
+
+환경 기반(시간대·로캘·Setup script·`env-check`)은 사용자의 별도 비공개 레포에서 관리한다. AOK는 그 환경을 전제로 하지만 없어도 동작한다. 환경 설정은 사용자만 바꿀 수 있다. 세션이 할 수 있는 일은 붙여 넣을 내용을 건네고, 다음 세션에서 적용 여부를 확인하는 것까지다.
+
 ## 레포 지도
 
 ```
@@ -75,7 +86,8 @@ agent-ops-kit/
 ├─ aok/budget.yaml                 # 예산 기본값(D3)
 ├─ dashboard/console.html          # 관제실 소스
 ├─ knowledge/                      # 카드·씨앗 형식과 템플릿만
-├─ tests/
+├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/)
+├─ .github/workflows/ci.yml        # PR·main에서 시험과 공개 레포 스캔
 └─ reports/                        # 이력: 실측, 검증 기록
 ```
 
