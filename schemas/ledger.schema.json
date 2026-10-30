@@ -352,12 +352,14 @@
         },
         "level": {
           "type": "string",
-          "pattern": "^L[0-2](\\+L[0-2])*$",
-          "description": "Verification level(s): L0 review, L1 blind, L2 reproduction; combined runs as `L1+L0` or `L1+L0+L2`.",
+          "pattern": "^(L[0-2]|V[0-5])(\\+(L[0-2]|V[0-5]))*$",
+          "description": "Verification level(s). v1 BRD: L0 review, L1 blind, L2 reproduction (combined as `L1+L0`). v2 ladder for claims of any session: V0 consistency, V1 external source (PR, checks, sha), V2 blind extraction, V3 re-run, V4 blind re-review, V5 human.",
           "examples": [
             "L1",
             "L1+L0",
-            "L1+L0+L2"
+            "L1+L0+L2",
+            "V1",
+            "V1+V3"
           ]
         },
         "claims": {
@@ -446,6 +448,33 @@
         "note": {
           "type": "string",
           "description": "One-line outcome summary (human-facing, Korean)."
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Session whose claim was verified (v2 ladder). null for documents or designs."
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "match",
+            "refuted",
+            "unverifiable",
+            null
+          ],
+          "description": "v2 ladder outcome: match (일치), refuted (반박), unverifiable (검증불가 — never counted as a pass)."
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Re-runnable evidence for the verdict: the command or URL and when it ran."
         }
       }
     },
@@ -677,6 +706,198 @@
         "updated_at": {
           "$ref": "#/$defs/timestamp",
           "description": "When the person changed the state."
+        }
+      }
+    },
+    "snapshot_sessions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Doc 'data/users/<viewer id>/snapshot' (per viewer, private to that viewer): the last live console view, trimmed, for views that cannot run the connector (mobile app, previews) or that fail transiently before any live data. Never shown in place of data an authorization denial withdrew. Written by the console (live view, editors only, only when changed, at most every 10 minutes) or by a hub/manager session at 'data/users/me/snapshot'. At most 240 KB in UTF-8.",
+      "required": [
+        "at",
+        "records"
+      ],
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the snapshot was taken."
+        },
+        "saved_by": {
+          "type": "string",
+          "description": "Writer: app, browser, mobile (console) or hub/manager."
+        },
+        "version": {
+          "type": "string",
+          "description": "Console version that wrote it (e.g. v11)."
+        },
+        "records": {
+          "type": "array",
+          "description": "At most 60 session records in the get_session shape, trimmed (strings at most 300 chars, no config tags, only cost_usd and context_usage from external_metadata).",
+          "items": {
+            "type": "object",
+            "description": "One trimmed session record."
+          }
+        },
+        "triggers": {
+          "type": "array",
+          "description": "At most 50 scheduled tasks: id, name, enabled, cron_expression, run_once_at, next_run_at.",
+          "items": {
+            "type": "object",
+            "description": "One scheduled task."
+          }
+        },
+        "sig": {
+          "type": "string",
+          "description": "Signature of the records (ids, updated_at, enrichment); unchanged lists are not rewritten."
+        }
+      }
+    },
+    "diag": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Doc 'diag/<YYYY-MM-DD>.<app|browser|mobile>': what one console view could use and what the connector answered. Written once per page load (20 s after load) or on the diagnostics button, editors only.",
+      "required": [
+        "version",
+        "at",
+        "ua_kind"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Console version."
+        },
+        "at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this diagnostic was written."
+        },
+        "boot_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the page loaded."
+        },
+        "ua_kind": {
+          "type": "string",
+          "enum": [
+            "app",
+            "browser",
+            "mobile"
+          ],
+          "description": "Viewer kind guessed from the user agent."
+        },
+        "ua": {
+          "type": "string",
+          "description": "User agent, truncated to 200 characters."
+        },
+        "caps": {
+          "type": "object",
+          "description": "Which capabilities resolved non-null: claude, mcp, db, user, permissions."
+        },
+        "perm": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "State of the scoped permission mcp:Claude Code Remote (granted, prompt, denied, unavailable, unknown)."
+        },
+        "mcp_state": {
+          "type": "string",
+          "description": "Console connection state (loading, asking, ok, denied, perm_denied, absent)."
+        },
+        "live": {
+          "type": "boolean",
+          "description": "Whether live connector data arrived."
+        },
+        "from_snapshot": {
+          "type": "boolean",
+          "description": "Whether the view shows the ledger snapshot."
+        },
+        "sessions": {
+          "type": "integer",
+          "description": "Sessions shown."
+        },
+        "enriched": {
+          "type": "integer",
+          "description": "Sessions enriched with get_session."
+        },
+        "enrich_err": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Last enrichment error text."
+        },
+        "calls": {
+          "type": "object",
+          "description": "Per tool: ok and fail counts and the last error code."
+        },
+        "events": {
+          "type": "array",
+          "description": "Last 40 events (use, perm, call, watch, snapshot_save), each with at and kind.",
+          "items": {
+            "type": "object",
+            "description": "One event."
+          }
+        }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Doc 'handoff/current': where the work stands, so any session can pick up the hub/manager role (there is no fixed main session). Rewrite it pinned to the version you read, before ending or rotating.",
+      "required": [
+        "updated_at",
+        "by",
+        "summary",
+        "open_items",
+        "next_steps"
+      ],
+      "properties": {
+        "updated_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this handoff was written."
+        },
+        "by": {
+          "type": "string",
+          "description": "Which session wrote it (title or session_<id>)."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Where things stand, a few sentences (Korean)."
+        },
+        "state": {
+          "type": "object",
+          "description": "Pointers: main sha, open PRs, console version, related repos."
+        },
+        "open_items": {
+          "type": "array",
+          "description": "Things not done yet, each {what, owner: user|any_session, priority: high|mid|low, ref}.",
+          "items": {
+            "type": "object",
+            "description": "One open item."
+          }
+        },
+        "decisions_pending": {
+          "type": "array",
+          "description": "Decisions only the user can make, each {id, question, default}.",
+          "items": {
+            "type": "object",
+            "description": "One pending decision."
+          }
+        },
+        "next_steps": {
+          "type": "array",
+          "description": "Recommended next steps for the next session, in order.",
+          "items": {
+            "type": "string",
+            "description": "One step."
+          }
+        },
+        "cautions": {
+          "type": "array",
+          "description": "Facts that are easy to get wrong (platform changes, safety limits).",
+          "items": {
+            "type": "string",
+            "description": "One caution."
+          }
         }
       }
     }
