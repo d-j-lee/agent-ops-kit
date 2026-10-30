@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/tree.schema.json",
+  "title": "AOK budget tree",
+  "description": "Budget tree document (plan §3⑥). Every delegation belongs to one tree, and the hub's own cost counts toward the tree cap. Admission check before create_session: spent + child cap <= cap_usd, depth <= max_depth, running children < max_concurrent. Defaults come from aok/budget.yaml (decision D3, [추론] values). Running totals (spent_usd, status) are kept in the ledger `trees` collection (ledger.schema.json#/$defs/trees).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tree_id",
+    "hub_session",
+    "cap_usd",
+    "soft",
+    "max_depth",
+    "max_concurrent",
+    "on_overrun",
+    "hub_rotate",
+    "children"
+  ],
+  "properties": {
+    "tree_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tree identifier; also used as the `tree:<tree_id>` session tag."
+    },
+    "hub_session": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session id of the hub that owns the tree. Replaced on hub rotation.",
+      "examples": ["session_<id>"]
+    },
+    "cap_usd": {
+      "type": "number",
+      "minimum": 0,
+      "default": 50,
+      "description": "Tree cap in USD (list price), including the hub's own cost."
+    },
+    "soft": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "default": 0.7,
+      "description": "Soft threshold as a fraction of cap_usd; crossing it raises a warning alert (feature ②)."
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "description": "Maximum delegation depth below the hub (1 = children only, no grandchildren)."
+    },
+    "max_concurrent": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3,
+      "description": "Maximum number of children running at the same time."
+    },
+    "on_overrun": {
+      "type": "string",
+      "enum": ["notify", "interrupt"],
+      "default": "notify",
+      "description": "Action when the cap is reached: notify = alert the user only (default, quality first); interrupt = the hub may call interrupt_session."
+    },
+    "hub_rotate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_tokens", "hub_cost_usd"],
+      "description": "Hub rotation thresholds: on reaching either, the hub writes HANDOFF and moves to a new hub session.",
+      "properties": {
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 250000,
+          "description": "Hub context size (tokens) that triggers rotation."
+        },
+        "hub_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "default": 25,
+          "description": "Hub cumulative cost (USD) that triggers rotation."
+        }
+      }
+    },
+    "children": {
+      "type": "array",
+      "description": "Children delegated within this tree.",
+      "items": {
+        "$ref": "#/$defs/child"
+      }
+    }
+  },
+  "$defs": {
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "role", "cap_usd"],
+      "description": "One delegated child session.",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Child session id.",
+          "examples": ["session_<id>"]
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Child role (matches the `role:<r>` tag).",
+          "examples": ["dev", "reviewer", "cleanroom", "repro-l2", "watchdog", "curator"]
+        },
+        "model": {
+          "type": ["string", "null"],
+          "description": "Model the child runs on; null or absent means inherited from the caller. Changing a model needs an explicit user request (D8)."
+        },
+        "cap_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Child cap in USD (default ceiling 15, per-role caps in aok/budget.yaml)."
+        },
+        "spent_usd": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Child spend in USD as last read from get_session."
+        },
+        "read_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "When spent_usd was last read (RFC 3339)."
+        }
+      }
+    }
+  }
+}

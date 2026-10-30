@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/seed.schema.json",
+  "title": "AOK idea seed",
+  "description": "Seed: a useful idea not yet put to work (feature ⑤, plan §3⑤). Seeds live in knowledge/seeds.yaml under the top-level `seeds` list (see #/$defs/seeds_file); the curator re-examines the top 3 each round. The root schema validates a single seed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "idea", "origin", "value_hypothesis", "cheapest_experiment", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Seed identifier, unique within seeds.yaml.",
+      "examples": ["seed-0001"]
+    },
+    "idea": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The idea in one or two sentences."
+    },
+    "origin": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the idea came from (a plan section, a report, a card id). In this public repo use generic references only, no session ids."
+    },
+    "value_hypothesis": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why it might be worth it, as a falsifiable hypothesis."
+    },
+    "cheapest_experiment": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The cheapest experiment that would confirm or refute the hypothesis."
+    },
+    "est_cost_usd": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Estimated cost of the cheapest experiment in USD ([추론] unless measured)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["dormant", "proposed", "trial", "adopted", "dropped"],
+      "description": "Lifecycle state."
+    },
+    "revisit_by": {
+      "type": ["string", "null"],
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date (YYYY-MM-DD) by which the seed should be re-examined."
+    }
+  },
+  "$defs": {
+    "seeds_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seeds"],
+      "description": "Shape of knowledge/seeds.yaml.",
+      "properties": {
+        "seeds": {
+          "type": "array",
+          "description": "All seeds.",
+          "items": {
+            "$ref": "#"
+          }
+        }
+      }
+    }
+  }
+}

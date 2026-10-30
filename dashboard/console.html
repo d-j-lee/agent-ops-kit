@@ -1,0 +1,1066 @@
+<title>AOK 관제실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: a sticky status band says what needs attention now; summary tiles; then an operations grid
+   (attention + sessions on the left, trees/budget + scheduled tasks on the right); records (verification, audit, policy) below. */
+:root {
+  --bg: #F2F4F7; --panel: #FFFFFF; --panel-2: #F7F8FA; --ink: #131B25; --muted: #566273; --faint: #8590A0;
+  --line: #DBE0E7; --line-strong: #C5CCD6;
+  --accent: #2A55C0; --accent-ink: #FFFFFF; --accent-soft: #E7ECFA;
+  --ok: #1D7A52; --ok-soft: #E2F2EA; --warn: #93600F; --warn-soft: #FAEFD9; --bad: #B3372A; --bad-soft: #FAE6E2;
+  --info: #2D6390; --info-soft: #E3EDF6;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 8px; --gap: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E131A; --panel: #151C25; --panel-2: #1A2230; --ink: #E4E9EF; --muted: #9BA7B5; --faint: #6E7A89;
+    --line: #263142; --line-strong: #344155;
+    --accent: #88A7F5; --accent-ink: #0E131A; --accent-soft: #1C2944;
+    --ok: #55C392; --ok-soft: #12302A; --warn: #E3B35C; --warn-soft: #33291A; --bad: #F1826B; --bad-soft: #3A1F1B;
+    --info: #80B2DE; --info-soft: #16283A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E131A; --panel: #151C25; --panel-2: #1A2230; --ink: #E4E9EF; --muted: #9BA7B5; --faint: #6E7A89;
+  --line: #263142; --line-strong: #344155;
+  --accent: #88A7F5; --accent-ink: #0E131A; --accent-soft: #1C2944;
+  --ok: #55C392; --ok-soft: #12302A; --warn: #E3B35C; --warn-soft: #33291A; --bad: #F1826B; --bad-soft: #3A1F1B;
+  --info: #80B2DE; --info-soft: #16283A;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
+.wrap { max-width: 1440px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 48px; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+
+/* Status band */
+.band { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--panel); border-bottom: 1px solid var(--line); }
+.band-in { max-width: 1440px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.brand .ver { font-family: var(--font-mono); font-size: 11px; color: var(--faint); letter-spacing: 0.04em; }
+.verdict { display: flex; align-items: center; gap: 8px; font-weight: 500; min-width: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+.band .spacer { flex: 1 1 auto; }
+.fresh { font-size: 12px; color: var(--muted); }
+.jump { display: flex; gap: 4px; flex-wrap: wrap; }
+.jump a { font-size: 12px; text-decoration: none; color: var(--muted); padding: 3px 8px; border-radius: 6px; }
+.jump a:hover { background: var(--panel-2); color: var(--ink); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); background: var(--panel); border-radius: 6px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--panel-2); }
+a.btn { text-decoration: none; }
+a.chip { text-decoration: none; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
+.btn.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--panel-2); color: var(--ink); }
+
+/* Notices */
+.notice { margin-top: 16px; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.notice.warn { border-color: var(--warn); background: var(--warn-soft); }
+.notice.bad { border-color: var(--bad); background: var(--bad-soft); }
+.notice p { margin: 0; flex: 1 1 260px; min-width: 0; }
+
+/* Tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; margin-top: 16px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 26px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile .s { font-size: 12px; color: var(--faint); }
+.tile.bad .v { color: var(--bad); } .tile.warn .v { color: var(--warn); }
+
+/* Grid + cards */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); margin-top: var(--gap); }
+@media (min-width: 1100px) { .grid { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; min-width: 0; }
+.card-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.card-h h2 { font-size: 15px; font-weight: 600; }
+.card-h .note { font-size: 12px; color: var(--muted); flex: 1 1 200px; min-width: 0; }
+.card-h .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+td.empty { padding: 12px 10px; }
+
+/* Attention */
+.alerts { display: flex; flex-direction: column; gap: 8px; }
+.alert { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 0 12px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.alert .stripe { background: var(--warn); }
+.alert.critical .stripe { background: var(--bad); }
+.alert.muted { opacity: .55; }
+.alert .body { padding: 8px 0; min-width: 0; }
+.alert .t { font-weight: 500; }
+.alert .d { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.alert .acts { display: flex; gap: 6px; align-items: center; padding: 8px 10px 8px 0; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Pills, chips */
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.pill.working { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill.blocked, .pill.failed { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.pill.review { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.pill.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.pill.archived { background: transparent; color: var(--faint); }
+.chip { font-family: var(--font-mono); font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.aok { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+
+/* Filters */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 4px 10px; font-size: 12.5px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.search { flex: 1 1 180px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 10px; background: var(--panel); }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+
+/* Tables */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; background: var(--panel-2); padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: var(--panel-2); }
+tr.row.open td { background: var(--accent-soft); }
+.s-title { font-weight: 500; overflow-wrap: anywhere; }
+.s-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; align-items: center; }
+.s-sum { color: var(--muted); font-size: 12.5px; max-width: 34ch; overflow-wrap: anywhere; }
+.r { text-align: right; }
+.bar { position: relative; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); min-width: 64px; }
+.bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px; }
+.bar.warn > i { background: var(--warn); } .bar.bad > i { background: var(--bad); }
+.bar > b { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--ink); opacity: .5; }
+
+/* Detail */
+td.detail { background: var(--panel-2); padding: 12px; }
+.dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; font-size: 12.5px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; }
+.box h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.row-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+textarea, input[type="text"], input[type="number"], select { border: 1px solid var(--line-strong); border-radius: 6px; padding: 5px 8px; background: var(--panel); min-width: 0; }
+textarea { width: 100%; min-height: 84px; resize: vertical; box-sizing: border-box; }
+.form { display: flex; flex-direction: column; gap: 8px; }
+.form .line { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; max-height: 280px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 0; }
+
+/* Trees */
+.tree { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.tree + .tree { margin-top: 8px; }
+.tree .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tree .top .name { font-weight: 500; }
+.tree .fig { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.costbars { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.costbar { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 8px; align-items: center; font-size: 12.5px; }
+.costbar .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.costbar .track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--panel-2); position: relative; overflow: hidden; }
+.costbar .track i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.kpi .k { font-size: 12px; color: var(--muted); } .kpi .v { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; display: flex; flex-direction: column; gap: 6px; max-width: min(420px, calc(100vw - 32px)); }
+.toast div { background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.18); overflow-wrap: anywhere; }
+.toast div.bad { background: var(--bad); color: #fff; }
+.foot { margin-top: 24px; font-size: 12px; color: var(--faint); }
+@media (prefers-reduced-motion: no-preference) { .tile, .card { transition: border-color .2s; } }
+</style>
+
+<div class="band" id="band">
+  <div class="band-in">
+    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · v1.0</span></div>
+    <div class="verdict" id="verdict"><span class="dot"></span><span>상태를 불러오는 중</span></div>
+    <span class="spacer"></span>
+    <nav class="jump" aria-label="섹션으로 이동">
+      <a href="#inbox">당신 차례</a><a href="#attention">운영 경보</a><a href="#sessions">세션</a><a href="#trees">트리·예산</a><a href="#triggers">예약 작업</a><a href="#verify">검증</a><a href="#audit">감사 기록</a>
+    </nav>
+    <span class="fresh num" id="fresh">—</span>
+    <button class="btn" id="refresh" type="button" title="세션과 예약 작업을 지금 다시 불러옵니다">새로고침</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="notices"></div>
+  <section class="tiles" id="tiles" aria-label="요약"></section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card" id="inbox">
+        <div class="card-h"><h2>당신 차례</h2><span class="note" id="inbox-note">모든 세션에서 사람이 결정하거나 처리할 일. 우선순위 순. 세션을 열어 직접 답하는 것이 기본입니다.</span><div class="tools" id="inbox-tools"></div></div>
+        <div class="alerts" id="inbox-list"></div>
+      </section>
+
+      <section class="card" id="attention">
+        <div class="card-h"><h2>운영 경보</h2><span class="note">AOK 트리·예산·예약 작업과 허브가 기록한 신호. 같은 신호는 한 번만 표시하고, 확인 처리하면 상태가 바뀔 때까지 흐리게 둡니다.</span></div>
+        <div class="alerts" id="alerts"></div>
+      </section>
+
+      <section class="card" id="sessions">
+        <div class="card-h"><h2>세션</h2><span class="note" id="sessions-note">최근 세션. 행을 누르면 상세와 조작이 열립니다.</span>
+          <div class="tools" id="bulk"></div>
+        </div>
+        <div class="filters">
+          <div class="seg" role="group" aria-label="범위" id="scope">
+            <button type="button" data-scope="all" aria-pressed="true">전체</button>
+            <button type="button" data-scope="aok" aria-pressed="false">AOK 관리</button>
+            <button type="button" data-scope="attention" aria-pressed="false">주의 필요</button>
+          </div>
+          <input class="search" id="q" type="text" placeholder="제목, ID, 태그로 찾기" aria-label="세션 검색">
+          <label class="check"><input type="checkbox" id="show-archived"> 보관 포함</label>
+        </div>
+        <div class="tbl-wrap"><table id="s-table">
+          <thead><tr><th style="width:28px"><span class="faint">선택</span></th><th>세션</th><th>상태</th><th class="r">비용</th><th>맥락</th><th>마지막 변화</th><th>요약</th></tr></thead>
+          <tbody id="s-body"></tbody>
+        </table></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card" id="trees">
+        <div class="card-h"><h2>트리·예산</h2><span class="note">위임 묶음마다 상한. 허브 비용 포함. 70%에서 경고합니다.</span></div>
+        <div id="tree-list"></div>
+        <details style="margin-top:10px" id="tree-new-d"><summary>새 트리 만들기</summary>
+          <div class="form" style="margin-top:8px">
+            <div class="line"><input type="text" id="nt-id" placeholder="tree_id (예: sa0-20261021)" aria-label="트리 ID" style="flex:1 1 180px"><input type="number" id="nt-cap" min="0" step="1" value="50" aria-label="상한 달러" style="width:90px"> <span class="muted">USD</span></div>
+            <div class="line"><input type="text" id="nt-title" placeholder="이름 (예: 매치메이킹 리뷰 루프)" aria-label="트리 이름" style="flex:1 1 220px"><button class="btn primary" type="button" id="nt-save">만들기</button></div>
+          </div>
+        </details>
+        <div style="margin-top:14px">
+          <div class="card-h" style="margin-bottom:6px"><h2 style="font-size:13px">누적 비용 상위 세션</h2><span class="note">세션별 누적 비용. 목록에 보이는 세션 기준.</span></div>
+          <div class="costbars" id="costbars"></div>
+        </div>
+      </section>
+
+      <section class="card" id="triggers">
+        <div class="card-h"><h2>예약 작업</h2><span class="note">켜짐·꺼짐을 바로 바꿉니다. 이미 발화한 일회성 작업은 숨깁니다.</span></div>
+        <div id="trigger-list"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" id="verify" style="margin-top:16px">
+    <div class="card-h"><h2>검증 기록</h2><span class="note">블라인드 재현 대조(L1·L2)와 적대적 검토(L0)의 결과. 결론을 바꾼 지적이 쌓이는지 봅니다.</span></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>시각</th><th>수준</th><th>대상</th><th class="r">지적</th><th class="r">확정 오류</th><th class="r">검증 불가</th><th class="r">사용량</th><th>메모</th></tr></thead>
+      <tbody id="v-body"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="audit" style="margin-top:16px">
+    <div class="card-h"><h2>감사 기록</h2><span class="note">이 콘솔과 허브가 한 조작. 최근 순.</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>시각</th><th>주체</th><th>조작</th><th>대상</th><th>결과</th><th>메모</th></tr></thead>
+      <tbody id="a-body"></tbody>
+    </table></div>
+    <details style="margin-top:14px" id="policy-d"><summary>운영 기준 (감지·예산 임계값)</summary>
+      <div class="form" style="margin-top:10px" id="policy-form"></div>
+    </details>
+  </section>
+
+  <p class="foot">세션·예약 작업은 Claude Code Remote 커넥터를 보는 사람의 권한으로 실시간 조회합니다. 트리·검증·감사 기록과 운영 기준은 이 페이지의 저장소(원장)에 있습니다. 조작은 두 번 눌러야 실행되며 모두 감사 기록에 남습니다.</p>
+</div>
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<script>
+(() => {
+  const SERVER = 'Claude Code Remote';
+  const DEFAULT_POLICY = { tree_default_cap_usd: 50, child_cap_usd: 15, soft_ratio: 0.7, stale_minutes: 30,
+    hub_rotate_context_tokens: 250000, hub_rotate_cost_usd: 25, loop_cost_jump_usd: 3, refresh_seconds: 60 };
+  const POLICY_FIELDS = [
+    ['stale_minutes', '정지 의심 기준', '분', 1],
+    ['soft_ratio', '예산 경고 비율', '0–1', 0.05],
+    ['tree_default_cap_usd', '새 트리 기본 상한', 'USD', 1],
+    ['child_cap_usd', '자식 세션 기본 상한', 'USD', 1],
+    ['hub_rotate_context_tokens', '허브 교대 기준 맥락', '토큰', 10000],
+    ['hub_rotate_cost_usd', '허브 교대 기준 비용', 'USD', 1],
+  ];
+  const ROLES = ['hub', 'dev', 'reviewer', 'verifier_l2', 'cleanroom', 'curator', 'watchdog', 'probe', 'specialist'];
+  const KIND_LABEL = { blocked: '막힘', failed: '실패', needs_action: '조치 필요', stale: '정지 의심', loop_suspect: '루프 의심', cap_soft: '상한 경고', cap_over: '상한 초과',
+    reply_overdue: '회신 기한 초과', orphan_child: '원장에 없는 자식', orphan_trigger: '고아 예약 작업 의심', trigger_failed: '예약 작업 실패', hub_rotate: '허브 교대 권장' };
+  const LOUD = ['needs_reauth', 'server_not_connected', 'blocked_by_policy', 'approval_required', 'not_in_manifest', 'selection_required', 'not_granted', 'capability_disabled', 'capability_removed', 'consent_required'];
+
+  const S = {
+    mcp: null, db: null, user: null, canAct: false, canWrite: false, mcpState: 'loading',
+    sessions: [], sessionsAt: null, sessionsErr: null, sessionsMore: false,
+    rawSessions: [], detail: {}, enrich: { busy: false, stopped: false, err: null, last: 0 },
+    triggers: [], triggersAt: null, triggersErr: null,
+    ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
+    showHidden: false,
+    scope: 'all', q: '', showArchived: false, open: null, sel: new Set(),
+    confirm: null, busy: {}, drafts: {}, results: {}, deferred: new Set(),
+  };
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k === 'style') el.setAttribute('style', v);
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) { if (kid == null || kid === false) continue; el.append(kid instanceof Node ? kid : document.createTextNode(String(kid))); }
+    // Every form control with an id keeps what the viewer typed across re-renders (drafts survive live refreshes).
+    if ((tag === 'input' || tag === 'textarea' || tag === 'select') && attrs && attrs.id && attrs.type !== 'checkbox') {
+      const key = 'el:' + attrs.id;
+      el.addEventListener(tag === 'select' ? 'change' : 'input', () => { S.drafts[key] = el.value; });
+      if (key in S.drafts) queueMicrotask(() => { el.value = S.drafts[key]; });
+    }
+    return el;
+  }
+  const clearDrafts = (prefix) => { for (const k of Object.keys(S.drafts)) if (k.startsWith('el:' + prefix)) delete S.drafts[k]; };
+  const short = (id) => id ? (id.length > 14 ? id.slice(0, 8) + '…' + id.slice(-5) : id) : '';
+  const usd = (n) => typeof n !== 'number' || !Number.isFinite(n) ? '—' : '$' + (n >= 100 ? n.toFixed(0) : n.toFixed(2));
+  const costUsd = (c) => typeof c === 'number' ? c : (c && typeof c.usd === 'number' ? c.usd : null);
+  const runTokens = (x) => typeof x.tokens === 'number' ? x.tokens : (x.cost && typeof x.cost.tokens === 'number' ? x.cost.tokens : null);
+  const compact = (n) => n == null ? '—' : Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  const mins = (iso) => iso ? (Date.now() - Date.parse(iso)) / 60000 : Infinity;
+  function ago(iso) {
+    if (!iso) return '—'; const m = mins(iso);
+    if (m < 1) return '방금'; if (m < 60) return Math.floor(m) + '분 전';
+    if (m < 60 * 24) return Math.floor(m / 60) + '시간 전'; return Math.floor(m / 1440) + '일 전';
+  }
+  const kst = (iso) => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  function toast(msg, kind) {
+    const el = h('div', { class: kind === 'bad' ? 'bad' : '', text: msg }); $('toast').append(el);
+    setTimeout(() => el.remove(), kind === 'bad' ? 9000 : 4500);
+  }
+  function parsePayload(res) {
+    const p = res ? res.payload : undefined;
+    if (p && typeof p === 'object') return p;
+    const t = typeof p === 'string' ? p : ((res && res.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    let i = t.indexOf('{"ccr"'); if (i < 0) i = t.indexOf('{"data"'); if (i < 0) i = t.indexOf('{');
+    const j = t.lastIndexOf('}');
+    if (i < 0 || j < i) throw new Error('응답 형식을 해석하지 못했습니다');
+    return JSON.parse(t.slice(i, j + 1));
+  }
+  function errText(e) {
+    const c = e && e.code;
+    switch (c) {
+      case 'needs_reauth': return 'Claude Code Remote 연결이 만료됐습니다. claude.ai 설정 → 커넥터에서 다시 연결하세요.';
+      case 'server_not_connected': return '이 보기에서는 Claude Code Remote 커넥터를 쓸 수 없습니다.';
+      case 'approval_required': return '세션 정보를 읽으려면 허용이 필요합니다.';
+      case 'not_in_manifest': return '이 페이지에서 Claude Code Remote 사용이 꺼져 있습니다. 페이지 권한 메뉴에서 켤 수 있습니다.';
+      case 'blocked_by_policy': return '조직 정책이 이 도구를 막고 있습니다.';
+      case 'selection_required': return '같은 이름의 커넥터가 여럿입니다. 표시되는 선택 창에서 하나를 고르세요.';
+      case 'server_unavailable': case 'upstream_error': return '서버가 응답하지 않았습니다. 조작이었다면 실행됐는지 불확실하니 새로고침해 상태를 확인하세요.';
+      case 'tool_error': return '도구가 실패를 알렸습니다: ' + String((e.message || '')).slice(0, 240);
+      case 'cancelled': return '취소됐습니다.';
+      default: return (e && e.message) ? String(e.message).slice(0, 240) : '알 수 없는 오류';
+    }
+  }
+  // Re-render is deferred while a pointer is down (so a click's target is not swapped between mousedown and click)
+  // and while the viewer is typing in that section.
+  let pointerDown = false;
+  document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
+  const release = () => { pointerDown = false; setTimeout(() => { if (S.deferred.size && !pointerDown) renderAll(); }, 60); };
+  document.addEventListener('pointerup', release, true);
+  document.addEventListener('pointercancel', release, true);
+  const isTyping = (root) => { const a = document.activeElement; return a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== 'checkbox'; };
+  function paint(rootId, fn) {
+    const root = $(rootId); if (!root) return;
+    if (pointerDown || isTyping(root)) { S.deferred.add(rootId); return; }
+    S.deferred.delete(rootId); fn(root);
+  }
+  document.addEventListener('focusout', () => setTimeout(() => { if (S.deferred.size && !pointerDown) renderAll(); }, 250));
+
+  // ---------- normalize ----------
+  function normSession(s) {
+    const em = s.external_metadata || {}; const sc = s.session_context || {};
+    const pts = em.post_turn_summary || s.post_turn_summary || {};
+    const tags = Array.isArray(s.tags) ? s.tags : [];
+    return {
+      id: s.id, title: s.title || '(제목 없음)', status: s.session_status || '', bucket: s.status_bucket || '',
+      created: s.created_at, updated: s.updated_at, tags, userTags: tags.filter((t) => !t.startsWith('config:')),
+      parent: s.parent_session_id || null, origin: s.origin || '', model: sc.model || s.configured_model || '',
+      effort: sc.effort_level || null, perm: sc.permission_mode || s.permission_mode || '',
+      cost: em.usage && typeof em.usage.cost_usd === 'number' ? em.usage.cost_usd : null,
+      ctxUsed: em.context_usage ? em.context_usage.used_tokens : null, ctxMax: em.context_usage ? em.context_usage.max_tokens : null,
+      needsAction: pts.needs_action || '', detail: pts.status_detail || '', recent: pts.recent_action || '', unread: !!s.unread, category: pts.status_category || '',
+      task: s.task_summary || em.task_summary || '', conn: s.connection_status || '', env: s.environment_id || '',
+      repo: (() => { const src = (sc.sources || [])[0]; const u = src && src.git_repository && src.git_repository.url; return u ? String(u).replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') : ''; })(),
+      served: em.last_served_model || '',
+    };
+  }
+  const B = (s) => (s.bucket || '').toUpperCase().replace('SESSION_STATUS_BUCKET_', '');
+  const archived = (s) => (s.status || '').toUpperCase() === 'SESSION_STATUS_ARCHIVED';
+  function statusPill(s) {
+    if (archived(s)) return h('span', { class: 'pill archived', text: '보관됨' });
+    const b = B(s);
+    const map = { WORKING: ['working', '작업 중'], BLOCKED: ['blocked', '막힘'], REVIEW_READY: ['review', '검토 대기'], COMPLETED: ['done', '완료'], FAILED: ['failed', '실패'] };
+    const [cls, txt] = map[b] || ['', b ? b.toLowerCase() : '알 수 없음'];
+    return h('span', { class: 'pill ' + cls, text: txt });
+  }
+  const isAok = (s) => !!S.ledger.reg[s.id] || s.tags.includes('aok:v1');
+
+  // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
+  const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
+    unread: '안 읽은 결과', volatile: '미저장 산출물(추정)', review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
+  // Wording that leaves work to the person: who + what remains. Tested on status_detail and recent_action; a keyword guess until work cards exist.
+  const FOLLOWUP_RX = /(사용자\s?(몫|확인|설치|결정|검증|승인)|사용자가 [^.;]{0,20}(해야|필요)|사용자에게 (남김|넘김|요청)|사람에게 (남김|넘김)|남음|남았|남아 ?있|남은 (일|결정|작업)|결정 \d+건|(확인|점검|검증) 필요|새 세션에서 (확인|점검)|직접 (확인|설치|실행|해)|수동으로 (해|실행|설치|적용)|left to \w+|needs? (your|user)|awaiting (your|user)|your (review|click|call|decision|approval|sign-?off)|you (need|have) to|please (run|review|merge|install|confirm|push)|verify in a new session|review requested from you|sign-?off|후속:)/i;
+  // Phrases that report finished or empty work, removed before the follow-up test ("병합 완료", "Nothing left to do").
+  const DONE_RX = /(merged|병합(을|를)?\s*(끝냈|완료|됨|했)|머지\s*(완료|됨|했)|nothing\s+(else\s+|more\s+)?(left|remaining)|nothing (else|more) to do|남은 (일|작업)(이|은)? 없|no (follow-?ups?|action) (needed|required)|(사용자\s?)?(확인|설치|검증|점검|승인)\s?(완료|됨|했|끝냈))/gi;
+  const needsHuman = (t) => !!t && FOLLOWUP_RX.test(String(t).replace(DONE_RX, ' '));
+  // A tool-permission prompt (real data: "Approve or deny <tool>", session_status REQUIRES_ACTION). PR or design "승인 대기" is a decision, not this.
+  const APPROVAL_RX = /(approve or deny|waiting (on|for) permission|permission (required|request|to (run|use|write|edit|execute))|권한(을|이)?\s?(승인|요청|허용)|허용 필요|allow this tool)/i;
+  const MERGE_RX = /((PR|pull request|#\d+|커밋|commit|\b[0-9a-f]{7,40}\b).{0,40}(merge|병합|머지)|(merge|병합|머지).{0,20}(PR|pull request|#\d+|버튼|button|commit|커밋)|브랜치에\s?(병합|머지)|병합 버튼|merge button)/i;
+  // The session asks the human to change settings or permission rules: shown as a note, never acted on from here (S4, S8).
+  const SETTINGS_RX = /(\/config|\/permissions|allowlist|settings\.json|permission (rule|mode)|auto[ -]?mode|bypassPermissions|acceptEdits|권한 (모드|규칙)|auto 모드|설정(을|를)?\s*(변경|바꿔|바꾸|꺼|끄|켜))/i;
+  // Work that so far exists only inside the session's container (lost when the container is reclaimed or the session archived).
+  const VOLATILE_RX = /(휘발|컨테이너(에|\s?안에)만|로컬 커밋|local commits?|not (yet )?pushed|unpushed|푸시(하지 않|\s?안\s?(함|됨|했))|only in (the )?container)/i;
+  // Negated or finished forms are removed first ("no unpushed commits", "pushed to origin").
+  const VOLATILE_NEG = /(no|zero|0)\s+(unpushed|local(-only)?)\s+(commits?|changes)|nothing (left )?to push|미푸시(된)?\s?(커밋|변경)(이|은)?\s?없|푸시(까지)?\s?(완료|했|됨)|pushed to (origin|remote|github)|in sync with (origin|remote)/gi;
+  const isVolatile = (s) => VOLATILE_RX.test([s.needsAction, s.detail, s.recent].join(' ').replace(VOLATILE_NEG, ' '));
+  const VOLATILE_NOTE = '산출물이 아직 컨테이너에만 있는 것으로 보입니다. 컨테이너가 회수되거나 세션을 보관하면 사라집니다. 저장 위치(레포·Drive)를 먼저 정하세요.';
+  const isChild = (s) => !!s.parent || s.origin === 'claude_code_mcp_seed';
+  const sessionUrl = (id) => 'https://claude.ai/code/' + encodeURIComponent(id);
+  const inboxDocId = (key) => key.replace(/[^A-Za-z0-9_\-.~:@+]/g, '~').slice(0, 200);
+  const hashIds = (arr) => { let x = 5381; for (const c of arr.map((s) => s.id).sort().join(',')) x = ((x * 33) ^ c.charCodeAt(0)) >>> 0; return x.toString(36) + ':' + arr.length; };
+  const DECISION_KINDS = ['approval', 'merge', 'decision'];
+  function computeInbox() {
+    const P = { ...DEFAULT_POLICY, ...S.ledger.policy }; const now = Date.now(); const out = [];
+    const ageH = (iso) => iso ? Math.max(0, (now - Date.parse(iso)) / 3600000) : 0;
+    const bonus = (hrs) => Math.min(15, 3 * Math.log2(hrs + 1));
+    // Old waits fade gradually (no cliff at 7 days): -2 per day after a week, at most -40.
+    const fade = (hrs) => hrs > 168 ? Math.min(40, (hrs / 24 - 7) * 2) : 0;
+    const add = (it) => {
+      const st = S.ledger.inbox[inboxDocId(it.key)]; let state = 'open';
+      if (st) {
+        if (st.status === 'snoozed' && st.snooze_until && Date.parse(st.snooze_until) > now) state = 'snoozed';
+        else if ((st.status === 'done' || st.status === 'dismissed') && st.sig === it.sig) state = st.status; // new activity re-opens it
+      }
+      out.push({ ...it, prio: Math.round(it.prio), state });
+    };
+    const live = S.sessions.filter((s) => !archived(s));
+    // A newer session on the same repo, created after this one last moved: the old wait was probably replaced (guess).
+    const superseded = (s) => !!s.repo && ageH(s.updated) > 72 && live.some((o) => o !== s && o.repo === s.repo && Date.parse(o.created) > Date.parse(s.updated));
+    for (const s of live) {
+      const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || '';
+      if (b === 'BLOCKED' || s.needsAction || s.category === 'need_input') {
+        const ask = s.needsAction || s.detail || '';
+        const kind = (s.status === 'SESSION_STATUS_REQUIRES_ACTION' || APPROVAL_RX.test(ask + ' ' + (s.detail || ''))) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
+        const sup = superseded(s); const vol = isVolatile(s);
+        const notes = [vol ? VOLATILE_NOTE : '', sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
+          SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
+        add({ key: kind + ':' + s.id, kind, s, superseded: sup, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - fade(hrs) - (sup ? 30 : 0) + (vol ? 10 : 0),
+          detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
+        continue;
+      }
+      if (b === 'FAILED') add({ key: 'failed:' + s.id, kind: 'failed', s, prio: 80, detail: s.detail || '세션을 열어 오류를 확인하세요.', sig });
+      if (b === 'WORKING' && mins(s.updated) > P.stale_minutes) add({ key: 'stall:' + s.id, kind: 'stall', s, prio: 70, detail: Math.floor(mins(s.updated)) + '분째 변화 없음. ' + (s.detail || s.task || ''), note: '긴 명령 실행 중에도 갱신되는지는 아직 미확인(T4)', sig });
+      if (b === 'REVIEW_READY' && hrs > 72) add({ key: 'review_stale:' + s.id, kind: 'review_stale', s, prio: 50 + bonus(hrs) / 3, detail: s.detail || '검토를 기다립니다.', sig });
+      if (b === 'COMPLETED') {
+        const hit = needsHuman(s.detail) ? s.detail : needsHuman(s.recent) ? s.recent : '';
+        const unreadNote = s.unread ? ' 결과를 아직 열어 보지 않은 것으로 보입니다(unread).' : '';
+        if (isVolatile(s) && hrs <= 24 * 30) add({ key: 'volatile:' + s.id, kind: 'volatile', s, prio: 75, detail: s.recent || s.detail, note: VOLATILE_NOTE, sig });
+        else if (hit) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: hrs <= 24 * 14 ? 60 : 40, detail: hit,
+          note: (hrs <= 24 * 14 ? '요약 문구로 추정했습니다.' : '14일 넘게 열려 있습니다(놓친 후속 추정).') + unreadNote, sig });
+        else if (s.unread && hrs <= 24 * 14) add({ key: 'unread:' + s.id, kind: 'unread', s, prio: 55, detail: s.detail || s.recent || '끝난 세션의 결과', note: 'unread 필드로 표시했습니다(의미는 추정).', sig });
+      }
+      if ((s.ctxUsed || 0) >= 600000 && b !== 'COMPLETED') add({ key: 'context:' + s.id, kind: 'context', s, prio: 45, detail: '맥락 ' + compact(s.ctxUsed) + '. 인계 메모를 받아 새 세션으로 옮기는 것을 검토하세요.', sig: 'ctx' + Math.floor(s.ctxUsed / 100000) });
+    }
+    const byRepo = {};
+    for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s)) && ageH(s.updated) <= 48) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
+    for (const [repo, arr] of Object.entries(byRepo)) if (arr.length >= 2) add({ key: 'same_repo:' + repo, kind: 'same_repo', s: null, prio: 35, sessions: arr,
+      detail: repo + '에서 ' + arr.length + '개 세션이 48시간 안에 함께 움직였습니다. 같은 브랜치·파일을 건드리는지 확인하세요.', sig: hashIds(arr) });
+    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !isVolatile(s) && !needsHuman(s.detail) && !needsHuman(s.recent));
+    if (cands.length) add({ key: 'hygiene:bundle', kind: 'hygiene', s: null, prio: 10, sessions: cands, sig: hashIds(cands),
+      detail: '끝난 지 7일이 넘었고, 후속 표시가 없고, 결과를 읽은 세션 ' + cands.length + '개.',
+      note: '보관하면 컨테이너가 반납되어 푸시·업로드하지 않은 파일은 사라집니다. 산출물을 확인한 뒤 보관하세요.' });
+    out.sort((a, b) => b.prio - a.prio);
+    return out;
+  }
+  const DISMISS_LABEL = { noisy: '과민', already_handled: '이미 처리', not_relevant: '무관' };
+  async function setInboxState(it, status, reason) {
+    const now = new Date();
+    const ok = await ledgerSet('inbox_state/' + inboxDocId(it.key), { item_key: it.key, status, snooze_until: status === 'snoozed' ? new Date(now.getTime() + 86400000).toISOString() : null,
+      sig: it.sig, session_id: it.s ? it.s.id : null, kind: it.kind, dismiss_reason: status === 'dismissed' ? (reason || null) : null, updated_at: now.toISOString() },
+      status === 'open' ? '다시 열었습니다' : status === 'snoozed' ? '내일까지 미뤘습니다' : status === 'dismissed' ? '무시했습니다(' + (DISMISS_LABEL[reason] || '') + ')' : '처리했습니다');
+    if (ok) audit('inbox_' + status, it.s ? it.s.id : it.key, 'ok', it.kind + (reason ? ':' + reason : ''));
+  }
+  function selectForArchive(list) {
+    S.sel = new Set(list.map((s) => s.id)); S.scope = 'all'; S.q = ''; $('q').value = ''; S.showArchived = false; $('show-archived').checked = false;
+    renderAll(); $('sessions').scrollIntoView({ block: 'start' });
+    toast(list.length + '개를 선택했습니다. 세션 표 위의 선택 보관을 두 번 눌러 보관합니다.');
+  }
+  // Ledger lifecycle (plan §2.3): spawned → working → idle → done → archive-candidate → archived, blocked from any step.
+  function lifecycle(s) {
+    if (archived(s)) return 'archived';
+    const b = B(s);
+    if (b === 'BLOCKED') return 'blocked';
+    if (b === 'WORKING') return s.status === 'SESSION_STATUS_PENDING' ? 'spawned' : 'working';
+    if (b === 'COMPLETED' || b === 'FAILED') return 'done';
+    return 'idle';
+  }
+
+  // ---------- alerts ----------
+  function computeAlerts() {
+    const P = { ...DEFAULT_POLICY, ...S.ledger.policy }; const out = [];
+    const push = (target, kind, sev, title, detail, sig, ref) => {
+      const key = target + ':' + kind; const ack = S.ledger.alerts[key];
+      out.push({ key, target, kind, sev, title, detail, ref, sig: sig || '', muted: !!(ack && ack.acked && !ack.resolved_at && ack.acked_for === (sig || '')) });
+    };
+    for (const s of S.sessions) {
+      if (archived(s)) continue;
+      const reg = S.ledger.reg[s.id]; const b = B(s);
+      if (b === 'BLOCKED') push(s.id, 'blocked', 'critical', '막힘: 입력이나 승인 대기', s.detail || s.recent || '세션을 열어 무엇을 기다리는지 확인하세요.', s.updated, s);
+      if (b === 'FAILED') push(s.id, 'failed', 'critical', '마지막 턴 실패', s.detail || '세션을 열어 오류를 확인하세요.', s.updated, s);
+      if (s.needsAction) push(s.id, 'needs_action', 'warn', '조치 필요', s.needsAction, s.updated, s);
+      if (b === 'WORKING' && mins(s.updated) > P.stale_minutes) push(s.id, 'stale', 'warn', Math.floor(mins(s.updated)) + '분째 변화 없음', '정지 의심. 긴 명령 실행 중에도 갱신되는지는 아직 확인되지 않았습니다(T4).', s.updated, s);
+      if (reg && typeof reg.cap_usd === 'number' && s.cost != null) {
+        if (s.cost >= reg.cap_usd) push(s.id, 'cap_over', 'critical', '세션 상한 초과', usd(s.cost) + ' / 상한 ' + usd(reg.cap_usd), String(reg.cap_usd), s);
+        else if (s.cost >= reg.cap_usd * P.soft_ratio) push(s.id, 'cap_soft', 'warn', '세션 상한 ' + Math.round(P.soft_ratio * 100) + '% 도달', usd(s.cost) + ' / 상한 ' + usd(reg.cap_usd), String(reg.cap_usd), s);
+      }
+      if (reg && reg.role === 'hub' && (((s.ctxUsed || 0) >= P.hub_rotate_context_tokens) || ((s.cost || 0) >= P.hub_rotate_cost_usd))) {
+        push(s.id, 'hub_rotate', 'warn', '허브 교대 권장', '맥락 ' + compact(s.ctxUsed) + ' · 비용 ' + usd(s.cost) + '. 인계 메모를 쓰고 새 허브로 옮기세요.', 'rotate', s);
+      }
+    }
+    for (const t of S.ledger.trees) {
+      if (t.status === 'closed') continue; const sp = treeSpend(t);
+      if (typeof t.cap_usd === 'number' && sp.total != null) {
+        if (sp.total >= t.cap_usd) push('tree:' + t.tree_id, 'cap_over', 'critical', '트리 상한 초과: ' + (t.title || t.tree_id), usd(sp.total) + ' / ' + usd(t.cap_usd), String(t.cap_usd));
+        else if (sp.total >= t.cap_usd * P.soft_ratio) push('tree:' + t.tree_id, 'cap_soft', 'warn', '트리 상한 ' + Math.round(P.soft_ratio * 100) + '% 도달: ' + (t.title || t.tree_id), usd(sp.total) + ' / ' + usd(t.cap_usd), String(t.cap_usd));
+      }
+    }
+    const activeAok = S.sessions.filter((s) => isAok(s) && !archived(s) && (['WORKING', 'BLOCKED'].includes(B(s))
+      || !['done', 'archived', 'archive-candidate'].includes((S.ledger.reg[s.id] || {}).status || 'done'))).length;
+    for (const tr of S.triggers) {
+      if (tr.enabled && tr.cron_expression && /^aok-watch/.test(tr.name || '') && activeAok === 0) push('trig:' + tr.id, 'orphan_trigger', 'warn', '고아 예약 작업 의심: ' + tr.name, '활성 AOK 자식이 없는데 감시가 켜져 있습니다. 끄는 것을 검토하세요.', 'orphan');
+      if (tr.last_run && /FAILED/.test(tr.last_run.status || '')) push('trig:' + tr.id, 'trigger_failed', 'warn', '예약 작업 실패: ' + (tr.name || tr.id), '마지막 실행이 실패했습니다.', tr.last_run.fired_at || '');
+    }
+    // Alerts the hub's aok-watch wrote to the ledger (signals the console cannot compute itself, e.g. loop_suspect, reply_overdue, orphan_child).
+    const seen = new Set(out.map((a) => a.key));
+    for (const [key, al] of Object.entries(S.ledger.alerts)) {
+      if (seen.has(key) || !al || al.acked || al.resolved_at) continue;
+      const ref = al.session_id ? S.sessions.find((x) => x.id === al.session_id) || null : null;
+      out.push({ key, target: al.session_id || key.slice(0, key.lastIndexOf(':')), kind: al.kind, sev: ['cap_over', 'blocked', 'failed'].includes(al.kind) ? 'critical' : 'warn',
+        title: (KIND_LABEL[al.kind] || al.kind) + ' · 허브 기록', detail: al.evidence || '', ref, sig: '', muted: false });
+    }
+    out.sort((a, b) => (a.muted - b.muted) || ((b.sev === 'critical') - (a.sev === 'critical')));
+    return out;
+  }
+  function treeSpend(t) {
+    const members = Object.values(S.ledger.reg).filter((r) => r.tree_id === t.tree_id);
+    let total = 0, missing = 0, fromLedger = 0;
+    for (const r of members) {
+      const s = S.sessions.find((x) => x.id === r.session_id);
+      if (s && s.cost != null) total += s.cost;
+      else if (typeof r.spent_usd === 'number') { total += r.spent_usd; fromLedger++; } // older than the live list: last recorded value
+      else missing++;
+    }
+    return { total: members.length ? total : null, members, missing, fromLedger };
+  }
+
+  // ---------- actions ----------
+  function armed(key) { return S.confirm && S.confirm.key === key && Date.now() < S.confirm.until; }
+  function confirmBtn(key, label, run, opts) {
+    const o = opts || {}; const isArmed = armed(key); const busy = !!S.busy[key];
+    return h('button', { class: 'btn ' + (isArmed ? 'armed' : (o.danger ? 'danger' : '')), type: 'button', disabled: busy || !S.canAct || null,
+      title: isArmed ? '한 번 더 누르면 실행합니다' : (o.title || null),
+      onclick: (ev) => { ev.stopPropagation(); if (!armed(key)) { S.confirm = { key, until: Date.now() + 5000, at: Date.now() }; renderAll(); setTimeout(() => { if (S.confirm && S.confirm.key === key && Date.now() >= S.confirm.until) { S.confirm = null; renderAll(); } }, 5100); return; }
+        if (Date.now() - S.confirm.at < 400) return; // a double-click must not arm and fire in one gesture
+        S.confirm = null; run(); } },
+      busy ? '처리 중…' : (isArmed ? '확인: ' + label : label));
+  }
+  let auditChain = Promise.resolve();
+  function audit(action, target, result, detail) {
+    if (!S.db || !S.canWrite) return;
+    auditChain = auditChain.then(async () => {
+      // One document per day per actor (`<day>.console`), so the console never overwrites entries the hub appended.
+      const day = new Date().toISOString().slice(0, 10); const ref = S.db.doc('audit/' + day + '.console');
+      const snap = await ref.get(); const prev = snap.exists ? (snap.data().entries || []) : [];
+      const entries = prev.concat([{ at: new Date().toISOString(), actor: 'console', action, target, result, detail: detail || '' }]).slice(-500);
+      await ref.set({ day, actor: 'console', entries });
+    }).catch((e) => toast('감사 기록을 남기지 못했습니다(' + ((e && e.code) || '오류') + ')', 'bad'));
+  }
+  async function act(key, label, tool, input, target) {
+    if (!S.mcp || S.busy[key]) return null; S.busy[key] = true; renderAll();
+    try {
+      const r = await S.mcp.callTool(SERVER, tool, input, { cache: false });
+      toast(label + ' 완료'); audit(tool, target, 'ok', label);
+      try { await S.mcp.invalidate(SERVER); } catch (_) { /* nothing cached */ }
+      return r;
+    } catch (e) {
+      const msg = errText(e); toast(label + ' 실패. ' + msg, 'bad'); audit(tool, target, 'error:' + ((e && e.code) || 'unknown'), msg);
+      return null;
+    } finally { delete S.busy[key]; renderAll(); }
+  }
+  async function ledgerSet(path, data, okMsg) {
+    if (!S.db || !S.canWrite) { toast('원장에 쓸 권한이 없습니다.', 'bad'); return false; }
+    try { await S.db.doc(path).set(data); if (okMsg) toast(okMsg); return true; }
+    catch (e) { toast('원장 저장 실패(' + ((e && e.code) || '오류') + ')', 'bad'); return false; }
+  }
+  async function ackAlert(a) {
+    // Acknowledging never rewrites when the episode started or what was observed; a resolved doc starts a new episode.
+    const prev = S.ledger.alerts[a.key] || {}; const now = new Date().toISOString();
+    const fresh = !prev.since || !!prev.resolved_at;
+    const ok = await ledgerSet('alerts/' + a.key, { alert_id: a.key, session_id: a.target.startsWith('tree:') || a.target.startsWith('trig:') ? null : a.target,
+      kind: a.kind, since: fresh ? now : prev.since, evidence: fresh ? a.detail : (prev.evidence != null ? prev.evidence : a.detail), dedupe_key: a.key,
+      acked: true, acked_at: now, acked_for: a.sig, resolved_at: null }, '확인 처리했습니다');
+    if (ok) audit('ack_alert', a.target, 'ok', a.kind);
+  }
+
+  // ---------- render ----------
+  function renderAll() {
+    // Each section renders on its own: one section's bad data must not stop the others.
+    const safe = (name, fn) => { try { fn(); } catch (e) { console.error('render ' + name, e); } };
+    let alerts = []; safe('alerts-compute', () => { alerts = computeAlerts(); });
+    let inbox = []; safe('inbox-compute', () => { inbox = computeInbox(); }); S.inboxNow = inbox;
+    safe('band', () => renderBand(alerts, inbox)); safe('notices', renderNotices); safe('tiles', () => renderTiles(alerts, inbox));
+    safe('inbox', () => renderInbox(inbox)); safe('alerts', () => renderAlerts(alerts));
+    safe('sessions', () => renderSessions(alerts)); safe('trees', renderTrees); safe('triggers', renderTriggers); safe('verifs', renderVerifs); safe('audit', renderAudit); safe('policy', renderPolicy);
+  }
+  function renderBand(alerts, inbox) {
+    const open = alerts.filter((a) => !a.muted && !SESSION_KINDS.has(a.kind)); const crit = open.filter((a) => a.sev === 'critical').length;
+    const mine = (inbox || []).filter((i) => i.state === 'open'); const urgent = mine.filter((i) => i.prio >= 80).length;
+    const v = $('verdict'); v.replaceChildren();
+    let cls = 'ok', txt = '이상 없음';
+    if (S.mcpState !== 'ok' && !S.sessions.length) { cls = ''; txt = S.mcpState === 'loading' ? '상태를 불러오는 중' : '세션 정보를 읽지 못함'; }
+    else if (urgent || crit) { cls = 'bad'; txt = '당신 차례 ' + mine.length + '건 · 긴급 ' + urgent + (open.length ? ' · 운영 경보 ' + open.length : ''); }
+    else if (mine.length || open.length) { cls = 'warn'; txt = '당신 차례 ' + mine.length + '건' + (open.length ? ' · 운영 경보 ' + open.length : ''); }
+    v.append(h('span', { class: 'dot ' + cls }), h('span', { text: txt }));
+    $('fresh').textContent = S.sessionsAt ? '세션 기준 ' + new Date(S.sessionsAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' }) + ' · 1분마다 갱신' : '—';
+  }
+  function renderNotices() {
+    const n = $('notices'); n.replaceChildren();
+    if (S.mcpState === 'absent') n.append(h('div', { class: 'notice warn' }, h('p', { text: '이 보기에서는 커넥터 기능을 쓸 수 없어 세션과 예약 작업을 보여 주지 못합니다. claude.ai에서 이 페이지를 열면 실시간으로 보입니다. 원장 데이터는 아래에 그대로 보입니다.' })));
+    const e = S.sessionsErr;
+    if (e && LOUD.includes(e.code)) {
+      const kids = [h('p', { text: errText(e) })];
+      if (e.code === 'approval_required' || e.code === 'consent_required') kids.push(h('button', { class: 'btn primary', type: 'button', onclick: allowRead }, '세션 정보 읽기 허용'));
+      n.append(h('div', { class: 'notice warn' }, ...kids));
+    } else if (e) n.append(h('div', { class: 'notice' }, h('p', { text: '세션 목록 갱신 실패. 마지막으로 받은 내용을 보여 줍니다. ' + errText(e) })));
+    if (!S.canAct && S.mcpState === 'ok') n.append(h('div', { class: 'notice' }, h('p', { text: '읽기 전용 보기입니다. 조작 버튼은 편집 권한이 있는 사람에게만 켜집니다.' })));
+  }
+  async function allowRead() {
+    try { const r = await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }); onSessions({ type: 'data', result: r }); }
+    catch (e) { toast(errText(e), 'bad'); }
+  }
+  function renderTiles(alerts, inbox) {
+    const mine = (inbox || []).filter((i) => i.state === 'open'); const urgent = mine.filter((i) => i.prio >= 80).length;
+    const hidden = (inbox || []).length - mine.length;
+    const t = $('tiles'); t.replaceChildren();
+    const live = S.sessions.filter((s) => !archived(s));
+    const working = live.filter((s) => B(s) === 'WORKING').length; const blocked = live.filter((s) => B(s) === 'BLOCKED').length;
+    // Collaboration view: whose turn it is and how long the human side has kept AI work waiting. Cost stays a reference figure in the session table.
+    // Every open human turn counts, snoozed or not; waits that a newer session probably replaced are left out.
+    const waits = (inbox || []).filter((i) => DECISION_KINDS.includes(i.kind) && !i.superseded && i.state !== 'done' && i.state !== 'dismissed' && i.s && i.s.updated).map((i) => (Date.now() - Date.parse(i.s.updated)) / 3600000).sort((a, b) => a - b);
+    const median = (a) => a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+    const dur = (hrs) => hrs < 1 ? '1시간 미만' : hrs < 48 ? Math.round(hrs) + '시간' : Math.round(hrs / 24) + '일';
+    const followups = mine.filter((i) => i.kind === 'followup').length;
+    const open = alerts.filter((a) => !a.muted);
+    const enabled = S.triggers.filter((x) => x.enabled).length;
+    const tile = (k, v, s, cls) => h('div', { class: 'tile ' + (cls || '') }, h('span', { class: 'k', text: k }), h('span', { class: 'v', text: v }), h('span', { class: 's', text: s }));
+    const ready = S.sessionsAt != null;
+    t.append(
+      tile('당신 차례', ready ? String(mine.length) : '—', '긴급 ' + urgent + '건 · 미룸·처리 ' + hidden + '건', urgent ? 'bad' : (mine.length ? 'warn' : '')),
+      tile('AI 작업 중', ready ? String(working) : '—', '보관 제외 ' + live.length + '개 중 · 막힘 ' + blocked, ''),
+      tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(median(waits)) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
+      tile('숨은 후속', ready ? String(followups) : '—', '완료 세션에 남은 사람 몫(추정)', ''),
+      tile('켜진 예약 작업', S.triggersAt != null ? String(enabled) : '—', '목록 ' + S.triggers.length + '개 중', ''),
+    );
+  }
+  // Session-level signals live in the inbox; the operational list keeps AOK tree/budget/trigger/hub signals.
+  const SESSION_KINDS = new Set(['blocked', 'failed', 'needs_action', 'stale']);
+  function renderInbox(inbox) {
+    paint('inbox-tools', (root) => {
+      root.replaceChildren();
+      const hidden = inbox.filter((i) => i.state !== 'open').length;
+      const slim = S.rawSessions.filter((x) => !x.external_metadata).length; const filled = Object.keys(S.detail).length;
+      if (S.enrich.err) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세를 불러오지 못해 레포·맥락 기반 신호가 꺼져 있습니다: ' + S.enrich.err }));
+      else if (slim && S.enrich.busy) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세 보강 중…' }));
+      else if (slim) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '상세 보강 ' + filled + '개(최근·대기 세션 최대 ' + ENRICH_MAX + '개)' }));
+      if (hidden) root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => { S.showHidden = !S.showHidden; renderAll(); } }, S.showHidden ? '미룬·처리한 항목 숨기기' : '미룬·처리한 항목 ' + hidden + '개 보기'));
+    });
+    paint('inbox-list', (root) => {
+      root.replaceChildren();
+      const items = inbox.filter((i) => S.showHidden || i.state === 'open');
+      if (!items.length) { root.append(h('div', { class: 'empty', text: S.sessionsAt ? '지금 당신 차례인 일이 없습니다.' : (S.mcpState === 'loading' ? '세션을 불러오는 중…' : '세션 정보를 읽으면 여기에 할 일이 모입니다.') })); return; }
+      for (const it of items.slice(0, 40)) {
+        const acts = h('div', { class: 'acts' });
+        if (it.s) acts.append(h('a', { class: 'btn primary', href: sessionUrl(it.s.id), target: '_blank', rel: 'noopener', title: '세션을 새 탭에서 열어 직접 답합니다' }, '세션 열기'),
+          h('button', { class: 'btn ghost', type: 'button', onclick: () => openSession(it.s.id) }, '상세'));
+        if (it.kind === 'hygiene') acts.append(h('button', { class: 'btn', type: 'button', disabled: !S.canAct || null, onclick: () => selectForArchive(it.sessions) }, '보관 후보 선택'));
+        if (S.canWrite) {
+          if (it.state === 'open') acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'snoozed') }, '내일 다시'), h('button', { class: 'btn', type: 'button', onclick: () => setInboxState(it, 'done') }, '처리함'),
+            h('select', { class: 'btn ghost', 'aria-label': '무시하고 이유 남기기', onchange: (e) => { const r = e.target.value; if (r) setInboxState(it, 'dismissed', r); } },
+              h('option', { value: '' }, '무시…'), ...Object.entries(DISMISS_LABEL).map(([v, l]) => h('option', { value: v }, l))));
+          else acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => setInboxState(it, 'open') }, '다시 열기'));
+        }
+        const meta = it.s ? [h('span', { class: 'chip', text: isChild(it.s) ? '자식' : '사람' }), h('span', { class: 'chip', text: short(it.s.id) }), it.s.repo ? h('span', { class: 'chip', text: it.s.repo }) : null,
+          h('span', { class: 'faint', style: 'font-size:12px', text: ago(it.s.updated) })]
+          : (it.sessions || []).slice(0, 6).map((x) => h('a', { class: 'chip', href: sessionUrl(x.id), target: '_blank', rel: 'noopener', title: x.title, text: x.title.slice(0, 18) }));
+        root.append(h('div', { class: 'alert ' + (it.prio >= 80 ? 'critical' : '') + (it.state !== 'open' ? ' muted' : '') },
+          h('div', { class: 'stripe', style: it.prio < 50 ? 'background: var(--info)' : null }),
+          h('div', { class: 'body' },
+            h('div', { class: 't', text: INBOX_LABEL[it.kind] + (it.s ? ' · ' + it.s.title : '') + (it.state === 'snoozed' ? ' (미룸)' : it.state === 'dismissed' ? ' (무시함)' : it.state !== 'open' ? ' (처리함)' : '') }),
+            h('div', { class: 'd', text: it.detail }),
+            it.note ? h('div', { class: 'd faint', text: it.note }) : null,
+            h('div', { class: 's-meta' }, ...meta)),
+          acts));
+      }
+    });
+  }
+  function renderAlerts(alerts) {
+    alerts = alerts.filter((a) => !SESSION_KINDS.has(a.kind));
+    paint('alerts', (root) => {
+      root.replaceChildren();
+      if (!alerts.length) { root.append(h('div', { class: 'empty', text: S.sessionsAt ? '운영 경보가 없습니다.' : '세션을 불러오면 여기에 신호가 표시됩니다.' })); return; }
+      for (const a of alerts) {
+        const acts = h('div', { class: 'acts' });
+        if (a.ref) acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => openSession(a.ref.id) }, '열기'));
+        if (a.ref && ['blocked', 'stale', 'cap_over', 'loop_suspect'].includes(a.kind) && !archived(a.ref)) acts.append(confirmBtn('int:' + a.ref.id, '중단', () => act('int:' + a.ref.id, '중단', 'interrupt_session', { session_id: a.ref.id }, a.ref.id), { danger: true }));
+        if (!a.muted && S.canWrite) acts.append(h('button', { class: 'btn', type: 'button', onclick: () => ackAlert(a) }, '확인 처리'));
+        root.append(h('div', { class: 'alert ' + (a.sev === 'critical' ? 'critical' : '') + (a.muted ? ' muted' : '') },
+          h('div', { class: 'stripe' }),
+          h('div', { class: 'body' }, h('div', { class: 't', text: a.title + (a.ref ? ' · ' + a.ref.title : '') }), h('div', { class: 'd', text: a.detail })),
+          acts));
+      }
+    });
+  }
+  function visibleSessions(alerts) {
+    const q = S.q.trim().toLowerCase(); const att = new Set(alerts.filter((a) => !a.muted && a.ref).map((a) => a.ref.id));
+    for (const it of (S.inboxNow || [])) if (it.state === 'open' && it.s) att.add(it.s.id);
+    return S.sessions.filter((s) => {
+      if (!S.showArchived && archived(s)) return false;
+      if (S.scope === 'aok' && !isAok(s)) return false;
+      if (S.scope === 'attention' && !att.has(s.id)) return false;
+      if (q && !(s.title.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)))) return false;
+      return true;
+    }).sort((a, b) => Date.parse(b.updated || 0) - Date.parse(a.updated || 0));
+  }
+  function renderSessions(alerts) {
+    // scope buttons
+    for (const b of $('scope').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.scope === S.scope));
+    paint('bulk', (root) => {
+      root.replaceChildren();
+      const ids = [...S.sel].filter((id) => S.sessions.some((s) => s.id === id && !archived(s)));
+      if (ids.length) {
+        root.append(h('span', { class: 'muted', style: 'font-size:12px;align-self:center', text: ids.length + '개 선택' }),
+          confirmBtn('bulk-archive', '선택 보관', bulkArchive, { danger: true }),
+          h('button', { class: 'btn ghost', type: 'button', onclick: () => { S.sel.clear(); renderAll(); } }, '선택 해제'));
+      }
+    });
+    paint('s-body', (body) => {
+      body.replaceChildren();
+      const rows = visibleSessions(alerts);
+      $('sessions-note').textContent = S.sessionsAt ? `최근 ${S.sessions.length}개 중 ${rows.length}개 표시${S.sessionsMore ? ' · 더 오래된 세션은 생략' : ''}. 행을 누르면 상세와 조작이 열립니다.` : '최근 세션. 행을 누르면 상세와 조작이 열립니다.';
+      if (!rows.length) { body.append(h('tr', null, h('td', { colspan: '7', class: 'empty', text: S.sessionsAt ? '조건에 맞는 세션이 없습니다.' : (S.mcpState === 'loading' ? '불러오는 중…' : '세션 정보를 읽지 못했습니다.') }))); return; }
+      for (const s of rows) {
+        const reg = S.ledger.reg[s.id]; const open = S.open === s.id;
+        const selectable = !archived(s) && B(s) !== 'WORKING';
+        const cb = h('input', { type: 'checkbox', 'aria-label': '선택: ' + s.title, disabled: !selectable || !S.canAct || null, onclick: (ev) => { ev.stopPropagation(); ev.target.checked ? S.sel.add(s.id) : S.sel.delete(s.id); renderAll(); } });
+        cb.checked = S.sel.has(s.id);
+        const meta = h('div', { class: 's-meta' }, h('span', { class: 'chip', text: short(s.id) }),
+          s.origin === 'claude_code_mcp_seed' ? h('span', { class: 'chip', text: '자식' }) : null,
+          reg ? h('span', { class: 'chip aok', text: reg.role + (reg.tree_id ? ' · ' + reg.tree_id : '') }) : null,
+          ...s.userTags.slice(0, 3).map((t) => h('span', { class: 'chip' + (t.startsWith('aok:') ? ' aok' : ''), text: t })));
+        const capBar = reg && typeof reg.cap_usd === 'number' && s.cost != null ? (() => { const r = Math.min(1, s.cost / reg.cap_usd); const P = { ...DEFAULT_POLICY, ...S.ledger.policy };
+          return h('div', { class: 'bar ' + (r >= 1 ? 'bad' : r >= P.soft_ratio ? 'warn' : ''), title: usd(s.cost) + ' / ' + usd(reg.cap_usd) }, h('i', { style: 'width:' + (r * 100).toFixed(1) + '%' })); })() : null;
+        const ctx = s.ctxUsed != null ? h('div', null, h('span', { class: 'num', text: compact(s.ctxUsed) }), h('span', { class: 'faint', text: s.ctxMax ? ' / ' + compact(s.ctxMax) : '' })) : h('span', { class: 'faint', text: '—' });
+        const tr = h('tr', { class: 'row' + (open ? ' open' : ''), 'data-id': s.id, onclick: () => { S.open = open ? null : s.id; renderAll(); } },
+          h('td', null, cb),
+          h('td', null, h('div', { class: 's-title', text: s.title }), meta),
+          h('td', null, statusPill(s)),
+          h('td', { class: 'r' }, h('div', { class: 'num', text: usd(s.cost) }), capBar),
+          h('td', null, ctx),
+          h('td', { class: 'num', title: kst(s.updated) }, ago(s.updated)),
+          h('td', null, h('div', { class: 's-sum', text: s.needsAction || s.detail || s.task || s.recent || '' })));
+        body.append(tr);
+        if (open) body.append(h('tr', null, h('td', { class: 'detail', colspan: '7' }, detailView(s, reg))));
+      }
+    });
+  }
+  function detailView(s, reg) {
+    const kv = (pairs) => h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', { text: k }), h('dd', { text: v == null || v === '' ? '—' : String(v) })]));
+    const info = h('div', { class: 'box' }, h('h3', { text: '상태' }), kv([
+      ['세션 ID', s.id], ['상태', (s.status || '').replace('SESSION_STATUS_', '') + ' · ' + B(s)], ['연결', s.conn],
+      ['모델', s.model + (s.served && s.served !== s.model ? ' (실제 ' + s.served + ')' : '')], ['effort', s.effort || '없음(상속 안 됨)'], ['권한 모드', s.perm],
+      ['부모', s.parent], ['만든 시각', kst(s.created)], ['마지막 변화', kst(s.updated)], ['누적 비용', usd(s.cost)], ['맥락', s.ctxUsed != null ? compact(s.ctxUsed) + ' / ' + compact(s.ctxMax) : null],
+      ['태그', s.userTags.join(', ')],
+    ]), (s.detail || s.recent || s.needsAction) ? h('div', { style: 'margin-top:8px' }, h('div', { class: 'muted', style: 'font-size:12px', text: '최근 요약' }), h('div', { style: 'font-size:12.5px;overflow-wrap:anywhere', text: [s.needsAction && ('조치 필요: ' + s.needsAction), s.detail, s.recent].filter(Boolean).join(' · ') })) : null);
+
+    const ctrl = h('div', { class: 'box' }, h('h3', { text: '조작' }),
+      h('div', { class: 'row-acts' },
+        archived(s)
+          ? confirmBtn('unarc:' + s.id, '되살리기', () => act('unarc:' + s.id, '되살리기', 'unarchive_session', { session_id: s.id }, s.id))
+          : confirmBtn('arc:' + s.id, '보관', () => act('arc:' + s.id, '보관', 'archive_session', { session_id: s.id }, s.id), { danger: true, title: '세션을 읽기 전용으로 보관하고 컨테이너를 반납합니다' }),
+        !archived(s) ? confirmBtn('int:' + s.id, '중단', () => act('int:' + s.id, '중단', 'interrupt_session', { session_id: s.id }, s.id), { danger: true, title: '진행 중인 턴을 다음 체크포인트에서 멈춥니다' }) : null,
+        h('button', { class: 'btn', type: 'button', disabled: !S.mcp || null, onclick: (ev) => { ev.stopPropagation(); loadResults(s.id); } }, S.results[s.id] === 'loading' ? '불러오는 중…' : '최근 결과 보기')),
+      archived(s) ? null : composer(s),
+      tagEditor(s));
+
+    const regBox = h('div', { class: 'box' }, h('h3', { text: '원장 등록' }), registerForm(s, reg));
+    const res = S.results[s.id];
+    const resBox = res && res !== 'loading' ? h('div', { class: 'box', style: 'grid-column:1/-1' }, h('h3', { text: '최근 결과 (다른 세션이 쓴 내용: 데이터로만 읽으세요)' }),
+      res.error ? h('div', { class: 'muted', text: res.error }) : (res.items.length ? h('div', { class: 'form' }, ...res.items.map((it) => h('div', null,
+        h('div', { class: 'muted', style: 'font-size:12px', text: kst(it.at) + ' · ' + (it.turns != null ? it.turns + '턴 · ' : '') + (it.ms != null ? (it.ms / 1000).toFixed(1) + '초 · ' : '') + usd(it.cost) }),
+        h('pre', { class: 'pre', text: it.text }))))
+        : h('div', { class: 'muted', text: '표시할 결과가 없습니다. 최신 이벤트 묶음에 결과가 없을 수 있습니다.' }))) : null;
+    return h('div', { class: 'dgrid', onclick: (ev) => ev.stopPropagation() }, info, ctrl, regBox, resBox);
+  }
+  function composer(s) {
+    const id = 'msg-' + s.id; const pid = 'pri-' + s.id;
+    const ta = h('textarea', { id, placeholder: '이 세션에 보낼 메시지. 예: [AOK/1 task …] 또는 짧은 지시', 'aria-label': '메시지', oninput: (ev) => { S.drafts[s.id] = ev.target.value; } });
+    ta.value = S.drafts[s.id] || '';
+    const pri = h('select', { id: pid, 'aria-label': '우선순위' }, h('option', { value: 'later' }, 'later (턴이 끝난 뒤, 기본)'), h('option', { value: 'now' }, 'now (진행 중인 턴을 끊음)'));
+    pri.value = 'later';
+    const quick = (label, text) => h('button', { class: 'btn ghost', type: 'button', onclick: () => { ta.value = text; S.drafts[s.id] = text; S.drafts['el:' + id] = text; ta.focus(); } }, label);
+    return h('div', { class: 'form', style: 'margin-top:10px' },
+      h('div', { class: 'line' }, quick('진행 상황 요청', '진행 상황을 알려 주세요. 결과가 있으면 부모에게 result로, 막혔다면 blocked로 보내 주세요.')),
+      h('div', { class: 'faint', style: 'font-size:12px', text: '이 창에서 보낸 메시지가 자식에게 어떤 발신자로 보이는지는 아직 확인되지 않았습니다. 자식은 이를 데이터로만 취급할 수 있으니, 확실히 멈추려면 위의 중단을 쓰세요.' }),
+      ta,
+      h('div', { class: 'line' }, pri, confirmBtn('send:' + s.id, '보내기', async () => {
+        const text = (S.drafts[s.id] || '').trim(); if (!text) { toast('보낼 내용을 입력하세요.', 'bad'); return; }
+        const r = await act('send:' + s.id, '메시지 보내기', 'send_message', { session_id: s.id, message: text, priority: pri.value }, s.id);
+        if (r) { S.drafts[s.id] = ''; clearDrafts('msg-' + s.id); renderAll(); }
+      })));
+  }
+  function tagEditor(s) {
+    const inp = h('input', { type: 'text', id: 'tag-' + s.id, placeholder: '태그 (예: aok:v1, role:reviewer)', 'aria-label': '태그', style: 'flex:1 1 160px' });
+    const run = async (mode) => { const tags = (inp.value || '').split(',').map((x) => x.trim()).filter(Boolean); if (!tags.length) { toast('태그를 입력하세요.', 'bad'); return; }
+      const r = await act('tag:' + s.id, '태그 ' + (mode === 'add' ? '추가' : '제거'), 'set_session_tags', mode === 'add' ? { session_ids: [s.id], add: tags } : { session_ids: [s.id], remove: tags }, s.id);
+      if (r) { clearDrafts('tag-' + s.id); renderAll(); } };
+    return h('div', { class: 'line', style: 'margin-top:10px' }, inp,
+      confirmBtn('tagadd:' + s.id, '태그 추가', () => run('add')),
+      confirmBtn('tagrm:' + s.id, '태그 제거', () => run('remove')));
+  }
+  function registerForm(s, reg) {
+    const P = { ...DEFAULT_POLICY, ...S.ledger.policy };
+    const tsel = h('select', { id: 'rt-' + s.id, 'aria-label': '트리' }, h('option', { value: '' }, '트리 선택'), ...S.ledger.trees.filter((t) => t.status !== 'closed').map((t) => h('option', { value: t.tree_id }, t.title ? t.title + ' (' + t.tree_id + ')' : t.tree_id)));
+    tsel.value = reg && reg.tree_id ? reg.tree_id : '';
+    const rsel = h('select', { id: 'rr-' + s.id, 'aria-label': '역할' }, ...ROLES.map((r) => h('option', { value: r }, r)));
+    rsel.value = reg ? reg.role : 'specialist';
+    const cap = h('input', { type: 'number', id: 'rc-' + s.id, min: '0', step: '1', 'aria-label': '세션 상한 달러', style: 'width:90px' });
+    cap.value = reg && typeof reg.cap_usd === 'number' ? String(reg.cap_usd) : String(P.child_cap_usd);
+    const save = h('button', { class: 'btn primary', type: 'button', disabled: !S.canWrite || null, onclick: async () => {
+      if (!tsel.value) { toast('트리를 고르세요. 모든 위임은 트리에 속합니다.', 'bad'); return; }
+      const c = cap.value === '' ? null : Number(cap.value);
+      const doc = { session_id: s.id, tree_id: tsel.value || null, role: rsel.value, model: s.model || null, cap_usd: c, spent_usd: s.cost, status: lifecycle(s),
+        created_at: (reg && reg.created_at) || s.created || new Date().toISOString(), ended_at: (reg && reg.ended_at) || null, verdict: (reg && reg.verdict) || null };
+      if (await ledgerSet('sessions/' + s.id, doc, '원장에 등록했습니다')) { clearDrafts('r'); audit('ledger_register', s.id, 'ok', doc.role + ' @ ' + doc.tree_id); }
+    } }, reg ? '갱신' : '등록');
+    return h('div', { class: 'form' },
+      h('div', { class: 'line' }, tsel, rsel),
+      h('div', { class: 'line' }, cap, h('span', { class: 'muted', text: 'USD 상한' }), save),
+      reg ? h('div', { class: 'muted', style: 'font-size:12px', text: '등록됨 · ' + (reg.verdict ? '판정: ' + reg.verdict : '판정 없음') }) : h('div', { class: 'muted', style: 'font-size:12px', text: '등록하면 트리 예산과 상한 경고에 포함됩니다.' }));
+  }
+  async function loadResults(id) {
+    if (!S.mcp) return; S.results[id] = 'loading'; renderAll();
+    try {
+      const r = await S.mcp.callTool(SERVER, 'list_events', { session_id: id, kinds: ['result'], limit: 100 });
+      const p = parsePayload(r); const data = (p.ccr && p.ccr.data) || p.data || [];
+      const items = data.filter((e) => e.result).map((e) => { const c = e.result.internal_anthropic_catchall || e.result;
+        return { at: e.created_at, text: String(c.result || '').slice(0, 2400), cost: c.total_cost_usd, ms: c.duration_ms, turns: c.num_turns }; }).reverse().slice(0, 3);
+      S.results[id] = { items };
+    } catch (e) { S.results[id] = { error: errText(e), items: [] }; }
+    renderAll();
+  }
+  async function bulkArchive() {
+    const ids = [...S.sel].filter((id) => S.sessions.some((s) => s.id === id && !archived(s) && B(s) !== 'WORKING'));
+    for (const id of ids) { await act('arc:' + id, '보관', 'archive_session', { session_id: id }, id); S.sel.delete(id); }
+    renderAll();
+  }
+  function openSession(id) {
+    S.open = id; if (!S.sessions.some((s) => s.id === id && visibleSessions(computeAlerts()).includes(s))) { S.scope = 'all'; S.q = ''; $('q').value = ''; if (S.sessions.find((s) => s.id === id && archived(s))) { S.showArchived = true; $('show-archived').checked = true; } }
+    renderAll(); const row = document.querySelector('tr[data-id="' + CSS.escape(id) + '"]'); if (row) row.scrollIntoView({ block: 'center' });
+  }
+
+  function renderTrees() {
+    paint('tree-list', (root) => {
+      root.replaceChildren(); const P = { ...DEFAULT_POLICY, ...S.ledger.policy };
+      if (!S.db) { root.append(h('div', { class: 'empty', text: '원장을 쓸 수 없는 보기입니다.' })); return; }
+      if (!S.ledger.trees.length) { root.append(h('div', { class: 'empty', text: '트리가 없습니다. 아래에서 만들거나, 허브가 위임할 때 자동으로 생깁니다.' })); return; }
+      for (const t of [...S.ledger.trees].sort((a, b) => (a.status === 'closed') - (b.status === 'closed'))) {
+        const sp = treeSpend(t); const cap = typeof t.cap_usd === 'number' ? t.cap_usd : null; const r = cap && sp.total != null ? Math.min(1, sp.total / cap) : 0;
+        const capIn = h('input', { type: 'number', id: 'tc-' + t.tree_id, min: '0', step: '1', 'aria-label': '트리 상한', style: 'width:80px' }); capIn.value = cap != null ? String(cap) : '';
+        const hub = t.hub_session ? S.sessions.find((s) => s.id === t.hub_session) : null;
+        root.append(h('div', { class: 'tree' },
+          h('div', { class: 'top' }, h('span', { class: 'name', text: t.title || t.tree_id }), h('span', { class: 'chip', text: t.tree_id }), h('span', { class: 'pill ' + (t.status === 'closed' ? 'archived' : 'working'), text: t.status === 'closed' ? '닫힘' : '활성' })),
+          h('div', { class: 'bar ' + (r >= 1 ? 'bad' : r >= P.soft_ratio ? 'warn' : ''), style: 'height:8px' }, h('i', { style: 'width:' + (r * 100).toFixed(1) + '%' }), cap ? h('b', { style: 'left:' + (P.soft_ratio * 100) + '%' }) : null),
+          h('div', { class: 'fig' }, h('span', { class: 'num', text: '사용 ' + usd(sp.total) + (cap != null ? ' / 상한 ' + usd(cap) : ' / 상한 없음') }),
+            h('span', { text: '세션 ' + sp.members.length + '개' + (sp.fromLedger ? ' (' + sp.fromLedger + '개는 원장 기록값)' : '') + (sp.missing ? ' (' + sp.missing + '개 미집계)' : '') }),
+            h('span', { text: hub ? '허브: ' + hub.title : (t.hub_session ? '허브: ' + short(t.hub_session) : '허브 미지정') })),
+          S.canWrite ? h('div', { class: 'line', style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, capIn, h('span', { class: 'muted', text: 'USD' }),
+            h('button', { class: 'btn', type: 'button', onclick: async () => { const v = capIn.value === '' ? null : Number(capIn.value); if (await ledgerSet('trees/' + t.tree_id, { ...t, cap_usd: v }, '상한을 바꿨습니다')) { clearDrafts('tc-' + t.tree_id); audit('tree_cap', t.tree_id, 'ok', String(v)); } } }, '상한 저장'),
+            h('button', { class: 'btn ghost', type: 'button', onclick: async () => { const st = t.status === 'closed' ? 'active' : 'closed'; if (await ledgerSet('trees/' + t.tree_id, { ...t, status: st }, st === 'closed' ? '트리를 닫았습니다' : '트리를 다시 열었습니다')) audit('tree_status', t.tree_id, 'ok', st); } }, t.status === 'closed' ? '다시 열기' : '닫기')) : null));
+      }
+    });
+    paint('costbars', (root) => {
+      root.replaceChildren(); const top = S.sessions.filter((s) => s.cost != null).sort((a, b) => b.cost - a.cost).slice(0, 8);
+      if (!top.length) { root.append(h('div', { class: 'empty', text: '비용 정보가 아직 없습니다.' })); return; }
+      const max = top[0].cost || 1;
+      for (const s of top) root.append(h('div', { class: 'costbar' }, h('span', { class: 'lbl', title: s.title, text: s.title }), h('span', { class: 'num r', text: usd(s.cost) }),
+        h('div', { class: 'track' }, h('i', { style: 'width:' + (s.cost / max * 100).toFixed(1) + '%' }))));
+    });
+  }
+  function renderTriggers() {
+    paint('trigger-list', (root) => {
+      root.replaceChildren();
+      if (S.triggersErr && !S.triggers.length) { root.append(h('div', { class: 'empty', text: errText(S.triggersErr) })); return; }
+      if (!S.triggersAt) { root.append(h('div', { class: 'empty', text: S.mcpState === 'absent' ? '이 보기에서는 예약 작업을 읽을 수 없습니다.' : '불러오는 중…' })); return; }
+      if (!S.triggers.length) { root.append(h('div', { class: 'empty', text: '발화를 기다리는 예약 작업이 없습니다.' })); return; }
+      const body = h('tbody');
+      for (const t of S.triggers) {
+        const meta = S.ledger.trig[t.id];
+        const sched = t.cron_expression ? t.cron_expression : (t.run_once_at ? '1회 ' + kst(t.run_once_at) : '수동');
+        const state = t.ended_reason ? '종료됨' : (t.enabled ? '켜짐' : (t.suspension_reason ? '보류' : '꺼짐'));
+        const lr = t.last_run ? (t.last_run.status || '').replace('ROUTINE_RUN_STATUS_', '').toLowerCase() + ' · ' + ago(t.last_run.fired_at) : '실행 기록 없음';
+        body.append(h('tr', null,
+          h('td', null, h('div', { class: 's-title', text: t.name || t.id }), h('div', { class: 's-meta' }, h('span', { class: 'chip', text: short(t.id) }), meta && meta.purpose ? h('span', { class: 'chip aok', text: meta.purpose }) : null)),
+          h('td', { class: 'mono', text: sched }),
+          h('td', null, h('span', { class: 'pill ' + (t.enabled ? 'working' : 'archived'), text: state })),
+          h('td', { class: 'muted', style: 'font-size:12px', text: (t.enabled && t.next_run_at ? '다음 ' + kst(t.next_run_at) + ' · ' : '') + '최근 ' + lr }),
+          h('td', null, t.ended_reason ? null : confirmBtn('trg:' + t.id, t.enabled ? '끄기' : '켜기', () => act('trg:' + t.id, '예약 작업 ' + (t.enabled ? '끄기' : '켜기'), 'update_trigger', { trigger_id: t.id, enabled: !t.enabled }, t.id), { danger: t.enabled }))));
+      }
+      root.append(h('div', { class: 'tbl-wrap' }, h('table', null, h('thead', null, h('tr', null, h('th', { text: '이름' }), h('th', { text: '일정' }), h('th', { text: '상태' }), h('th', { text: '실행' }), h('th', { text: '' }))), body)));
+    });
+  }
+  function renderVerifs() {
+    const k = $('kpis'); k.replaceChildren(); const v = S.ledger.verifs;
+    const sum = (f) => v.reduce((a, x) => a + (typeof x[f] === 'number' ? x[f] : 0), 0);
+    const tok = v.reduce((a, x) => a + (runTokens(x) || 0), 0);
+    const kpi = (label, val) => h('div', { class: 'kpi' }, h('div', { class: 'k', text: label }), h('div', { class: 'v', text: val }));
+    k.append(kpi('검증 실행', String(v.length)), kpi('지적 합계', String(sum('disagreements'))), kpi('확정 오류', String(sum('confirmed_errors'))), kpi('검증 불가', String(sum('unverifiable'))), kpi('토큰 합계', compact(tok || null)));
+    const body = $('v-body'); body.replaceChildren();
+    if (!v.length) { body.append(h('tr', null, h('td', { colspan: '8', class: 'empty', text: S.db ? '검증 기록이 없습니다. /aok-verify 실행 결과가 여기에 쌓입니다.' : '원장을 쓸 수 없는 보기입니다.' }))); return; }
+    for (const x of v) body.append(h('tr', null,
+      h('td', { class: 'num', text: kst(x.at) }), h('td', null, h('span', { class: 'chip aok', text: x.level || '—' })), h('td', { text: x.target || '—' }),
+      h('td', { class: 'r num', text: x.disagreements ?? '—' }), h('td', { class: 'r num', text: x.confirmed_errors ?? '—' }), h('td', { class: 'r num', text: x.unverifiable ?? '—' }),
+      h('td', { class: 'r num', text: costUsd(x.cost) != null ? usd(costUsd(x.cost)) : (runTokens(x) ? compact(runTokens(x)) + ' tok' : '—') }), h('td', null, h('div', { class: 's-sum', text: typeof x.note === 'string' ? x.note : '' }))));
+  }
+  function renderAudit() {
+    const body = $('a-body'); body.replaceChildren();
+    const rows = S.ledger.audit.flatMap((d) => d.entries || []).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 40);
+    if (!rows.length) { body.append(h('tr', null, h('td', { colspan: '6', class: 'empty', text: '기록이 없습니다.' }))); return; }
+    for (const r of rows) body.append(h('tr', null, h('td', { class: 'num', text: kst(r.at) }), h('td', { text: r.actor || '—' }), h('td', { class: 'mono', text: r.action || '' }),
+      h('td', { class: 'mono', text: short(r.target || '') }), h('td', null, h('span', { class: 'pill ' + (String(r.result).startsWith('ok') ? 'done' : 'failed'), text: r.result || '' })), h('td', null, h('div', { class: 's-sum', text: r.detail || '' }))));
+  }
+  function renderPolicy() {
+    paint('policy-form', (root) => {
+      root.replaceChildren(); const P = { ...DEFAULT_POLICY, ...S.ledger.policy };
+      const inputs = {};
+      for (const [f, label, unit, step] of POLICY_FIELDS) {
+        const inp = h('input', { type: 'number', id: 'pol-' + f, step: String(step), min: '0', 'aria-label': label, style: 'width:120px' }); inp.value = String(P[f]); inputs[f] = inp;
+        root.append(h('div', { class: 'line' }, h('span', { style: 'min-width:150px', text: label }), inp, h('span', { class: 'muted', text: unit })));
+      }
+      root.append(h('div', { class: 'line' }, h('button', { class: 'btn primary', type: 'button', disabled: !S.canWrite || null, onclick: async () => {
+        const next = { ...P }; for (const [f] of POLICY_FIELDS) { const n = Number(inputs[f].value); if (!Number.isFinite(n) || n < 0) { toast(f + ' 값이 올바르지 않습니다.', 'bad'); return; } next[f] = n; }
+        if (next.soft_ratio > 1) { toast('예산 경고 비율은 0과 1 사이여야 합니다.', 'bad'); return; }
+        if (await ledgerSet('config/policy', next, '운영 기준을 저장했습니다')) { clearDrafts('pol-'); audit('policy', 'config/policy', 'ok', JSON.stringify(next)); }
+      } }, '저장'), h('span', { class: 'faint', text: '기본값은 설계안의 [추론] 기준입니다(결정 D3).' })));
+    });
+  }
+
+  // ---------- data in ----------
+  // list_sessions has returned a slim record since late October 2026: no session_context, external_metadata or status_detail
+  // (repo, context, cost, status_category missing). get_session still returns the full record, so the sessions that can
+  // reach the inbox are fetched one by one and cached until their updated_at changes. Without it repo- and context-based
+  // signals stay off; the inbox tools say so.
+  const ENRICH_MAX = 30, ENRICH_CONCURRENCY = 3;
+  function rebuildSessions() {
+    S.sessions = S.rawSessions.map((x) => { const d = S.detail[x.id]; return normSession(d && d.updated === x.updated_at ? { ...x, ...d.rec } : x); });
+  }
+  async function enrichSessions() {
+    if (!S.mcp || S.enrich.busy || S.enrich.stopped) return;
+    const now = Date.now();
+    const want = S.rawSessions.filter((x) => !x.external_metadata && x.session_status !== 'SESSION_STATUS_ARCHIVED'
+        && (/(BLOCKED|WORKING|REVIEW_READY|FAILED)$/.test(x.status_bucket || '') || (x.post_turn_summary && x.post_turn_summary.needs_action) || x.unread || now - Date.parse(x.updated_at) < 14 * 86400000))
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, ENRICH_MAX)
+      .filter((x) => !(S.detail[x.id] && S.detail[x.id].updated === x.updated_at));
+    if (!want.length) return;
+    S.enrich.busy = true; let changed = 0; const queue = want.slice();
+    const worker = async () => {
+      while (queue.length && !S.enrich.stopped) {
+        const x = queue.shift();
+        try {
+          const p = parsePayload(await S.mcp.callTool(SERVER, 'get_session', { session_id: x.id }, { cache: false })); const rec = (p && p.ccr) || p;
+          if (rec && rec.id === x.id) { S.detail[x.id] = { updated: x.updated_at, rec }; changed++; }
+        } catch (e) { S.enrich.err = errText(e); if (!(e && e.retryable)) S.enrich.stopped = true; }
+      }
+    };
+    try { await Promise.all(Array.from({ length: ENRICH_CONCURRENCY }, worker)); }
+    finally { S.enrich.busy = false; S.enrich.last = Date.now(); if (changed || S.enrich.err) { rebuildSessions(); renderAll(); } }
+  }
+  function onSessions(ev) {
+    if (ev.type === 'data') {
+      try { const p = parsePayload(ev.result); const arr = (p.ccr && p.ccr.data) || p.data || [];
+        S.rawSessions = arr.filter((x) => x && x.id); rebuildSessions(); S.sessionsMore = !!((p.ccr && p.ccr.has_more) || p.has_more);
+        S.sessionsAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.sessionsErr = null; S.mcpState = 'ok';
+      } catch (e) { S.sessionsErr = { code: 'parse', message: String((e && e.message) || e) }; }
+    } else {
+      S.sessionsErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.rawSessions = []; S.sessions = []; S.sessionsAt = null; S.mcpState = 'denied'; }
+    }
+    renderAll(); enrichSessions();
+  }
+  function onTriggers(ev) {
+    if (ev.type === 'data') {
+      try { const p = parsePayload(ev.result); S.triggers = (p.data || (p.ccr && p.ccr.data) || []).filter((x) => x && x.id); S.triggersAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.triggersErr = null; }
+      catch (e) { S.triggersErr = { code: 'parse', message: String((e && e.message) || e) }; }
+    } else { S.triggersErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.triggers = []; S.triggersAt = null; } }
+    renderAll();
+  }
+  function startWatches() {
+    S.mcp.watchTool(SERVER, 'list_sessions', { limit: 100 }, onSessions, { refetchInterval: 60000 });
+    S.mcp.watchTool(SERVER, 'list_triggers', { limit: 50 }, onTriggers, { refetchInterval: 120000 });
+  }
+  function startLedger() {
+    const db = S.db; const fail = (e) => { if (e && e.code !== 'unavailable') toast('원장 구독 오류(' + e.code + ')', 'bad'); };
+    db.collection('trees').onSnapshot((q) => { S.ledger.trees = q.docs.map((d) => ({ tree_id: d.id, ...d.data() })); renderAll(); }, fail);
+    db.collection('sessions').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = { session_id: d.id, ...d.data() }; S.ledger.reg = m; renderAll(); }, fail);
+    db.collection('alerts').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.alerts = m; renderAll(); }, fail);
+    db.collection('inbox_state').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.inbox = m; renderAll(); }, fail);
+    db.collection('verifications').orderBy('at', 'desc').limit(50).onSnapshot((q) => { S.ledger.verifs = q.docs.map((d) => ({ run_id: d.id, ...d.data() })); renderAll(); }, fail);
+    db.collection('audit').orderBy('day', 'desc').limit(8).onSnapshot((q) => { S.ledger.audit = q.docs.map((d) => d.data()); renderAll(); }, fail);
+    db.collection('triggers').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.trig = m; renderAll(); }, fail);
+    db.doc('config/policy').onSnapshot((d) => { S.ledger.policy = d.exists ? { ...DEFAULT_POLICY, ...d.data() } : { ...DEFAULT_POLICY }; S.ledger.loaded = true; renderAll(); }, fail);
+  }
+
+  // ---------- wiring ----------
+  $('scope').addEventListener('click', (ev) => { const b = ev.target.closest('button[data-scope]'); if (!b) return; S.scope = b.dataset.scope; renderAll(); });
+  $('q').addEventListener('input', (ev) => { S.q = ev.target.value; renderAll(); });
+  $('show-archived').addEventListener('change', (ev) => { S.showArchived = ev.target.checked; renderAll(); });
+  $('refresh').addEventListener('click', async () => { if (!S.mcp) return; $('refresh').disabled = true; try { await S.mcp.invalidate(SERVER); } catch (_) { try { onSessions({ type: 'data', result: await S.mcp.callTool(SERVER, 'list_sessions', { limit: 100 }) }); } catch (e) { toast(errText(e), 'bad'); } } finally { $('refresh').disabled = false; } });
+  $('nt-save').addEventListener('click', async () => {
+    const id = $('nt-id').value.trim(); const cap = $('nt-cap').value === '' ? null : Number($('nt-cap').value); const title = $('nt-title').value.trim();
+    if (!/^[A-Za-z0-9_.~:@+-]{1,64}$/.test(id)) { toast('tree_id는 영문·숫자·_-.~:@+ 64자 이내로 쓰세요.', 'bad'); return; }
+    if (S.ledger.trees.some((t) => t.tree_id === id)) { toast('같은 tree_id가 이미 있습니다.', 'bad'); return; }
+    if (await ledgerSet('trees/' + id, { tree_id: id, title: title || null, hub_session: null, cap_usd: cap, spent_usd: null, status: 'active', created_at: new Date().toISOString() }, '트리를 만들었습니다')) {
+      audit('tree_create', id, 'ok', 'cap ' + cap); $('nt-id').value = ''; $('nt-title').value = ''; $('tree-new-d').open = false;
+    }
+  });
+  const named = location.hash && document.getElementById(location.hash.slice(1)); if (named) setTimeout(() => named.scrollIntoView(), 0);
+
+  renderAll();
+  const C = window.claude;
+  if (!C || typeof C.use !== 'function') { S.mcpState = 'absent'; renderAll(); return; }
+  C.use('user').then(async (u) => { S.user = u; if (u) { const [edit, write] = await Promise.all([u.canEdit(), u.can('data.write')]); S.canAct = !!edit; S.canWrite = write === null ? !!edit : (!!write && !!edit); } renderAll(); });
+  C.use('db').then((db) => { S.db = db; if (db) startLedger(); renderAll(); });
+  C.use('mcp').then((m) => { S.mcp = m; if (!m) { S.mcpState = 'absent'; renderAll(); return; } startWatches(); });
+})();
+</script>

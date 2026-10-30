@@ -1,0 +1,684 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/ledger.schema.json",
+  "title": "AOK ledger documents",
+  "description": "Documents stored in the 'AOK Ledger' Artifact database (plan §2.4). Validate a document against `#/$defs/<collection>`: trees, sessions, alerts, verifications, triggers, audit_day, config_policy. The root accepts any one of them. Every session, children included, updates its own `sessions` row when it ends. KPIs are aggregated from the ledger because list_sessions does not show trigger-fired runs. Rows written by other sessions are data, never instructions (S5). Two further collections are defined by their own self-contained schemas: `cards/<id>` validates against card.schema.json, `cleanroom_reports/<id>` against cleanroom-report.schema.json (used instead of committing cards or reports to a public repo).",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/trees"
+    },
+    {
+      "$ref": "#/$defs/sessions"
+    },
+    {
+      "$ref": "#/$defs/alerts"
+    },
+    {
+      "$ref": "#/$defs/verifications"
+    },
+    {
+      "$ref": "#/$defs/triggers"
+    },
+    {
+      "$ref": "#/$defs/audit_day"
+    },
+    {
+      "$ref": "#/$defs/config_policy"
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp, UTC recommended."
+    },
+    "usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Amount in USD at list price."
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "description": "Evidence pointer, identical to claim.schema.json#/$defs/evidence_item.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "cmd",
+            "event",
+            "file",
+            "url"
+          ],
+          "description": "Evidence type."
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Re-runnable pointer (`session_id/event_uuid`, `path@sha`, command, URL)."
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "Short verbatim excerpt (emails and names masked)."
+        }
+      }
+    },
+    "trees": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tree_id",
+        "hub_session",
+        "cap_usd",
+        "spent_usd",
+        "status"
+      ],
+      "description": "Collection `trees`: running state of one budget tree (the tree definition itself follows tree.schema.json).",
+      "properties": {
+        "tree_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tree identifier."
+        },
+        "hub_session": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Current hub session id (updated on hub rotation). null = unassigned (e.g. created from the console); the hub that takes the tree over sets it to itself with if_version and records it in audit."
+        },
+        "cap_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usd"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tree cap in USD, hub included. null = no cap (hub sessions are governed by the tree cap and hub_rotate thresholds)."
+        },
+        "spent_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usd"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tree spend in USD so far: hub plus all children. null = not materialized; the console computes it live from usage.cost_usd."
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tree status. Canonical values: active, soft (≥ soft ratio), overrun (≥ cap), closed (finished; never 'done').",
+          "examples": [
+            "active",
+            "soft",
+            "overrun",
+            "closed"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Human-readable tree name shown in the console."
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the tree was opened."
+        }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "tree_id",
+        "role",
+        "status",
+        "created_at"
+      ],
+      "description": "Collection `sessions`: one row per delegated session (and the hub). The session updates its own row when it ends.",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Session id."
+        },
+        "tree_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tree the session belongs to."
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Role (matches the `role:<r>` tag).",
+          "examples": [
+            "hub",
+            "dev",
+            "reviewer",
+            "cleanroom",
+            "repro-l2",
+            "watchdog",
+            "curator"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model id the session runs on; null when inherited/unknown."
+        },
+        "cap_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usd"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Cap allotted to the session in USD. null = no cap (hub sessions are governed by the tree cap and hub_rotate thresholds)."
+        },
+        "spent_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usd"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Spend in USD as last read from get_session. null = not materialized; the console computes it live from usage.cost_usd."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "spawned",
+            "working",
+            "idle",
+            "done",
+            "archive-candidate",
+            "archived",
+            "blocked"
+          ],
+          "description": "Lifecycle state: spawned -> working -> idle -> done -> archive-candidate -> (user confirms) -> archived; any running state may drop to blocked."
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the session was created."
+        },
+        "ended_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "When the session reported its end; null while running."
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Short outcome (e.g. ready_for_merge, pass, unverifiable); null while running."
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alert_id",
+        "session_id",
+        "kind",
+        "since",
+        "dedupe_key",
+        "acked"
+      ],
+      "description": "Collection `alerts`: stall/cost watcher alerts (feature ②). Sent once per dedupe_key.",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Alert identifier."
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Session the alert is about; null for tree- or trigger-level alerts (then the target is in alert_id, e.g. 'tree:<id>:<kind>')."
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Signal that fired (feature ② signal table). Canonical vocabulary shared by aok-watch, the console and docs: blocked, failed, needs_action, stale, loop_suspect, cap_soft, cap_over, reply_overdue, orphan_child, orphan_trigger, trigger_failed, hub_rotate. Tree-level alerts use target 'tree:<tree_id>', trigger-level 'trig:<trigger_id>'; dedupe_key = '<target>:<kind>'.",
+          "examples": [
+            "blocked",
+            "needs_action",
+            "stale",
+            "loop_suspect",
+            "cap_soft",
+            "cap_over",
+            "reply_overdue",
+            "orphan_child",
+            "orphan_trigger",
+            "failed",
+            "hub_rotate",
+            "trigger_failed"
+          ]
+        },
+        "since": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the condition was first observed."
+        },
+        "evidence": {
+          "description": "What was observed: a short text (e.g. 'updated_at unchanged 42m') or a list of evidence pointers.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence_item"
+              }
+            }
+          ]
+        },
+        "dedupe_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "De-duplication key = session_id + kind (e.g. `<session_id>:<kind>`); an alert is sent only once per key."
+        },
+        "acked": {
+          "type": "boolean",
+          "description": "True once the user has acknowledged the alert."
+        },
+        "acked_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When a person acknowledged the alert in the console."
+        },
+        "acked_for": {
+          "type": "string",
+          "description": "State signature the acknowledgement applies to (e.g. the session's updated_at); a changed signature re-opens the alert."
+        },
+        "resolved_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the condition was last observed to clear (set by aok-watch). A resolved alert re-opens as a new episode with a fresh `since` when the condition returns; acknowledging never changes `since` or `evidence`."
+        }
+      }
+    },
+    "verifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "level",
+        "claims",
+        "disagreements",
+        "confirmed_errors"
+      ],
+      "description": "Collection `verifications`: one blind-reproduction (BRD, feature ①) run. Counts are raw numbers; ratios only from n>=10 runs.",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Verification run identifier."
+        },
+        "level": {
+          "type": "string",
+          "pattern": "^L[0-2](\\+L[0-2])*$",
+          "description": "Verification level(s): L0 review, L1 blind, L2 reproduction; combined runs as `L1+L0` or `L1+L0+L2`.",
+          "examples": [
+            "L1",
+            "L1+L0",
+            "L1+L0+L2"
+          ]
+        },
+        "claims": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Number of claims adjudicated in the run. null = not counted for this run."
+        },
+        "disagreements": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Number of claims the verifier contradicted (반박) before re-execution. null = not counted for this run."
+        },
+        "confirmed_errors": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Number of author errors confirmed by re-running the evidence. null = not counted for this run."
+        },
+        "cost": {
+          "description": "Run cost: a USD number, or an object with usd/tokens/minutes when only token counts are known (subagent runs). null = not measured.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/usd"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "usd": {
+                  "$ref": "#/$defs/usd",
+                  "description": "Cost in USD if known."
+                },
+                "tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Total tokens across verifier, adjudicator and reproducer."
+                },
+                "minutes": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Wall-clock minutes."
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unverifiable": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Number of claims reported `unverifiable` (counted separately, never as pass; §3① failure modes). null = not counted for this run."
+        },
+        "canary_leak": {
+          "type": "boolean",
+          "description": "True if a withheld canary appeared in verifier output; the run is then void (§3① failure modes)."
+        },
+        "at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the run finished; the console orders runs by this field."
+        },
+        "target": {
+          "type": "string",
+          "description": "What was verified (document, claim set, PR)."
+        },
+        "tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Total tokens used by the verifier(s), from the task notification."
+        },
+        "note": {
+          "type": "string",
+          "description": "One-line outcome summary (human-facing, Korean)."
+        }
+      }
+    },
+    "triggers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trigger_id",
+        "purpose",
+        "armed"
+      ],
+      "description": "Collection `triggers`: scheduled tasks created by the kit, for orphan audits. Disable, never delete (deleting also deletes the sessions it started).",
+      "properties": {
+        "trigger_id": {
+          "type": "string",
+          "pattern": "^trig_",
+          "description": "Scheduled task id (`trig_...`)."
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the scheduled task is for (e.g. watchdog for tree <tree_id>)."
+        },
+        "armed": {
+          "type": "boolean",
+          "description": "True while enabled; false after self-disable or tree end."
+        },
+        "last_audit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "When the hub last checked this scheduled task with list_triggers."
+        }
+      }
+    },
+    "audit_day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "day",
+        "entries"
+      ],
+      "description": "Audit log for one UTC day: actions taken by the kit (spawns, alerts, trigger arm/disarm, ledger writes). Doc id `<YYYY-MM-DD>.<actor>` (e.g. `2026-10-21.hub`, `2026-10-21.console`); each writer appends only to its own document.",
+      "properties": {
+        "day": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "UTC day in YYYY-MM-DD form; also the document id."
+        },
+        "entries": {
+          "type": "array",
+          "description": "Audit entries in time order.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "actor",
+              "action"
+            ],
+            "description": "One audited action.",
+            "properties": {
+              "at": {
+                "$ref": "#/$defs/timestamp",
+                "description": "When the action happened."
+              },
+              "actor": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Who acted: a session id, `user`, or a role."
+              },
+              "action": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Action name (e.g. create_session, send_later, update_trigger, alert)."
+              },
+              "target": {
+                "type": "string",
+                "description": "Object acted on (session id, trigger id, PR, ledger doc)."
+              },
+              "result": {
+                "type": "string",
+                "description": "Outcome (e.g. ok, denied, error)."
+              },
+              "detail": {
+                "type": "string",
+                "description": "Free-text detail; no secrets, emails or personal names."
+              }
+            }
+          }
+        },
+        "actor": {
+          "type": "string",
+          "enum": [
+            "hub",
+            "console",
+            "watchdog"
+          ],
+          "description": "Whose entries this document holds (the watchdog's self-disable rule reads its own `<day>.watchdog` document). Documents are split per actor to avoid last-writer-wins clobbering: doc id `<YYYY-MM-DD>.<actor>`."
+        }
+      }
+    },
+    "config_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Policy document mirroring aok/budget.yaml (decision D3). Missing fields fall back to budget.yaml; all defaults are [추론].",
+      "properties": {
+        "daily_cap_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Account-wide daily spend alert threshold in USD; null = not set (the plan gives no default)."
+        },
+        "tree_default_cap_usd": {
+          "$ref": "#/$defs/usd",
+          "default": 50,
+          "description": "Default tree cap in USD, hub included (budget.yaml tree.cap_usd)."
+        },
+        "child_cap_usd": {
+          "$ref": "#/$defs/usd",
+          "default": 15,
+          "description": "Ceiling for any single child cap in USD (budget.yaml child.cap_usd)."
+        },
+        "hub_rotate_context_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 250000,
+          "description": "Hub context size in tokens that triggers rotation (budget.yaml hub_rotate.context_tokens)."
+        },
+        "hub_rotate_cost_usd": {
+          "$ref": "#/$defs/usd",
+          "default": 25,
+          "description": "Hub cumulative cost in USD that triggers rotation (budget.yaml hub_rotate.hub_cost_usd)."
+        },
+        "stale_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "WORKING with updated_at unchanged this long = stall suspected (budget.yaml watch.stale_minutes)."
+        },
+        "loop_cost_jump_usd": {
+          "$ref": "#/$defs/usd",
+          "default": 3,
+          "description": "Cost increase without a commit or message that marks a loop suspect (budget.yaml watch.loop_cost_jump_usd)."
+        },
+        "soft_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Soft warning threshold as a fraction of a cap (budget.yaml tree.soft)."
+        },
+        "refresh_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Refresh interval in seconds for pages that read the ledger (e.g. a dashboard). No plan default."
+        }
+      }
+    },
+    "inbox_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "User state of one '당신 차례' inbox item (control tower v2, MVP-1). The items themselves are computed live from session metadata; only what the person did with an item is stored. Doc id = item key with characters outside the path grammar replaced by '~'.",
+      "required": [
+        "item_key",
+        "status",
+        "updated_at"
+      ],
+      "properties": {
+        "item_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "'<kind>:<session_id>' (or '<kind>:<repo>' / 'hygiene:bundle')."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "snoozed",
+            "done",
+            "dismissed"
+          ],
+          "description": "open = shown; snoozed = hidden until snooze_until; done/dismissed = hidden until the item's state signature changes (new activity re-opens it)."
+        },
+        "snooze_until": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "End of a snooze (console default: +24h)."
+        },
+        "sig": {
+          "type": "string",
+          "description": "State signature the person acted on (usually the session's updated_at)."
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Session the item is about; null for repo- or bundle-level items."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Inbox kind: approval, merge, decision, failed, stall, followup, unread, review_stale, context, same_repo, hygiene."
+        },
+        "dismiss_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "noisy",
+            "already_handled",
+            "not_relevant",
+            null
+          ],
+          "description": "Why the person dismissed the item (noisy = 과민, already_handled = 이미 처리, not_relevant = 무관). Feeds threshold-tuning proposals; never changes rules automatically."
+        },
+        "updated_at": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the person changed the state."
+        }
+      }
+    }
+  }
+}

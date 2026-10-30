@@ -1,0 +1,18 @@
+# AOK knowledge seeds (feature ⑤, plan §3⑤)
+#
+# 아직 쓰이지 않은 유용한 아이디어를 씨앗으로 남긴다. 큐레이터가 회차마다 상위 3개를 다시 검토한다.
+# 스키마: schemas/seed.schema.json (파일 전체는 #/$defs/seeds_file)
+#
+#   - id: seed-0000
+#     idea: "<아이디어 한두 문장>"
+#     origin: "<출처: 계획 절, 보고서, 카드 id. 공개 레포에서는 session id를 쓰지 않는다>"
+#     value_hypothesis: "<반증 가능한 가치 가설>"
+#     cheapest_experiment: "<가장 싼 확인 실험>"
+#     est_cost_usd: 1.0          # [추론] 추정치
+#     status: dormant            # dormant | proposed | trial | adopted | dropped
+#     revisit_by: 2026-01-01
+#
+# PUBLIC REPO GUARD: 실제 세션 기록에서 나온 씨앗은 비공개 원장이나 비공개 레포에 둔다.
+# 커밋 전: python3 -I scripts/secret_scan.py knowledge/
+
+seeds: []
