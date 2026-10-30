@@ -2,6 +2,8 @@
 
 The cases in tests/console/inbox_cases.json were written from the rule spec (docs/dashboard.md §3a) by an agent
 that did not read the console code, so they act as a holdout set. Cases marked "ambiguous" are reported, not asserted.
+tests/console/atlas_cases.json adds fsmap measurements (ledger atlas/<session_id>, §3b) and checks that a measurement
+outranks the wording guess without changing the cases that have none.
 
 Needs node, the `playwright` package and a Chromium build; skipped when any is missing.
 Run from the repo root:  python3 -m unittest tests.test_console_inbox -v
@@ -18,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / "tests" / "console" / "run_inbox_cases.cjs"
 CASES = ROOT / "tests" / "console" / "inbox_cases.json"
+ATLAS_CASES = ROOT / "tests" / "console" / "atlas_cases.json"
 GROUP_KINDS = {"same_repo", "hygiene"}
 
 
@@ -35,8 +38,8 @@ def _node_env() -> dict | None:
     return env if ok else None
 
 
-def _run(mode: str, env: dict) -> dict:
-    out = subprocess.run(["node", str(RUNNER), str(CASES), mode], env=env, capture_output=True, text=True, timeout=120)
+def _run(mode: str, env: dict, cases: Path = CASES) -> dict:
+    out = subprocess.run(["node", str(RUNNER), str(cases), mode], env=env, capture_output=True, text=True, timeout=120)
     if out.returncode != 0:
         raise AssertionError(f"runner failed ({mode}): {out.stderr.strip()[-800:]}")
     return json.loads(out.stdout)
@@ -104,6 +107,32 @@ class ConsoleInboxCases(unittest.TestCase):
         self.assertTrue(any("스냅숏" in t for t in snap["notices"]), snap["notices"])
         full_best, snap_best = _main_kinds(self.full), _main_kinds(snap)
         self.assertEqual({k: v["kind"] for k, v in full_best.items()}, {k: v["kind"] for k, v in snap_best.items()})
+
+
+    def test_atlas_measurements(self):
+        cases = json.loads(ATLAS_CASES.read_text(encoding="utf-8"))
+        res = _run("full", self.env, ATLAS_CASES)
+        self.assertEqual(res["errors"], [])
+        best = _main_kinds(res)
+        hygiene = {sid for item in res["inbox"] if item["kind"] == "hygiene" for sid in item["n"]}
+        failures = []
+        for sid, case in zip(res["ids"], cases):
+            item = best.get(sid)
+            got = {"kind": item["kind"] if item else "none", "in_hygiene": sid in hygiene}
+            want = {"kind": case["expect_kind"], "in_hygiene": case.get("expect_in_hygiene", False)}
+            if "expect_measured" in case:
+                got["measured"], want["measured"] = bool(item and item["measured"]), case["expect_measured"]
+            if "expect_prio" in case:
+                got["prio"], want["prio"] = item["prio"] if item else None, case["expect_prio"]
+            if "expect_note" in case:
+                got["note"], want["note"] = bool(item and case["expect_note"] in item["note"]), True
+            if got != want:
+                failures.append(f"{sid} {case['case']}: {({k: (want[k], got[k]) for k in want if want[k] != got[k]})}")
+        self.assertEqual(failures, [], "\n" + "\n".join(failures))
+        measured = [c for c in cases if "atlas" in c]
+        self.assertEqual(len(res["atlasRows"]), len(measured))
+        self.assertTrue(any(t.startswith("컨테이너에만 있는 작업") and "측정 세션 " + str(len(measured)) + "개 중" in t for t in res["tiles"]), res["tiles"])
+        self.assertIn("작업공간 지도 (fsmap 측정)", res["atlasBox"] or [])
 
 
 if __name__ == "__main__":
