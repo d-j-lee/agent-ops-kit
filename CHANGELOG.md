@@ -10,6 +10,9 @@
 - 관제실 협업 타일: AI 작업 중, 사람 응답 대기 최장(중앙값), 숨은 후속
 - 인박스 MVP-1.2(적대 검토 반영): 사람 후속을 `status_detail`·`recent_action` 두 필드로 판정하고 완료 표현을 먼저 제거, 14일 뒤 "놓친 후속", 안 읽은 결과(`unread`), REQUIRES_ACTION 승인, 대체 추정, 7일 감쇠, 같은 레포는 48시간 안 세션만, 보관 후보에서 안 읽은 세션 제외와 손실 경고, 무시 사유(과민·이미 처리·무관), 세션 목록 100개
 - `inbox_state.dismiss_reason`
+- 인박스 MVP-1.3: `list_sessions`가 가벼운 레코드만 주게 된 변화(2026-10 말)에 맞춰 인박스 후보를 `get_session`으로 보강(최대 30개, 동시 3개, `updated_at` 캐시). 보강이 실패하면 꺼진 신호를 표시한다. `status_category=need_input`을 결정 대기로, 미저장 산출물(IN24, `volatile`)을 새 종류로 추가
+- 관제실 권한: `get_session` 추가, 원장 읽기를 `admin`으로(v2 D15)
+- 홀드아웃 시험 `tests/test_console_inbox.py`, 실행기 `tests/console/run_inbox_cases.cjs`, 합성 사례 `tests/console/inbox_cases.json`. node·playwright가 없으면 건너뛴다
 - `schemas/ledger.schema.json`: `inbox_state` 정의
 - 제안서 `docs/proposals/control-tower-v2.md`, 다음 과제 초안 `docs/proposals/workspace-atlas.md`, 이력 `reports/2026-10-21-v2-design-crosscheck.md`
 

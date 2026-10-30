@@ -304,6 +304,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   const S = {
     mcp: null, db: null, user: null, canAct: false, canWrite: false, mcpState: 'loading',
     sessions: [], sessionsAt: null, sessionsErr: null, sessionsMore: false,
+    rawSessions: [], detail: {}, enrich: { busy: false, stopped: false, err: null, last: 0 },
     triggers: [], triggersAt: null, triggersErr: null,
     ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
     showHidden: false,
@@ -400,7 +401,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       effort: sc.effort_level || null, perm: sc.permission_mode || s.permission_mode || '',
       cost: em.usage && typeof em.usage.cost_usd === 'number' ? em.usage.cost_usd : null,
       ctxUsed: em.context_usage ? em.context_usage.used_tokens : null, ctxMax: em.context_usage ? em.context_usage.max_tokens : null,
-      needsAction: pts.needs_action || '', detail: pts.status_detail || '', recent: pts.recent_action || '', unread: !!s.unread,
+      needsAction: pts.needs_action || '', detail: pts.status_detail || '', recent: pts.recent_action || '', unread: !!s.unread, category: pts.status_category || '',
       task: s.task_summary || em.task_summary || '', conn: s.connection_status || '', env: s.environment_id || '',
       repo: (() => { const src = (sc.sources || [])[0]; const u = src && src.git_repository && src.git_repository.url; return u ? String(u).replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') : ''; })(),
       served: em.last_served_model || '',
@@ -419,17 +420,23 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
   // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
   const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
-    unread: '안 읽은 결과', review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
+    unread: '안 읽은 결과', volatile: '미저장 산출물(추정)', review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
   // Wording that leaves work to the person: who + what remains. Tested on status_detail and recent_action; a keyword guess until work cards exist.
   const FOLLOWUP_RX = /(사용자\s?(몫|확인|설치|결정|검증|승인)|사용자가 [^.;]{0,20}(해야|필요)|사용자에게 (남김|넘김|요청)|사람에게 (남김|넘김)|남음|남았|남아 ?있|남은 (일|결정|작업)|결정 \d+건|(확인|점검|검증) 필요|새 세션에서 (확인|점검)|직접 (확인|설치|실행|해)|수동으로 (해|실행|설치|적용)|left to \w+|needs? (your|user)|awaiting (your|user)|your (review|click|call|decision|approval|sign-?off)|you (need|have) to|please (run|review|merge|install|confirm|push)|verify in a new session|review requested from you|sign-?off|후속:)/i;
   // Phrases that report finished or empty work, removed before the follow-up test ("병합 완료", "Nothing left to do").
-  const DONE_RX = /(merged|병합(을|를)?\s*(끝냈|완료|됨|했)|머지\s*(완료|됨|했)|nothing (left|remaining)|남은 (일|작업)(이|은)? 없|no (follow-?ups?|action) (needed|required))/gi;
+  const DONE_RX = /(merged|병합(을|를)?\s*(끝냈|완료|됨|했)|머지\s*(완료|됨|했)|nothing\s+(else\s+|more\s+)?(left|remaining)|nothing (else|more) to do|남은 (일|작업)(이|은)? 없|no (follow-?ups?|action) (needed|required)|(사용자\s?)?(확인|설치|검증|점검|승인)\s?(완료|됨|했|끝냈))/gi;
   const needsHuman = (t) => !!t && FOLLOWUP_RX.test(String(t).replace(DONE_RX, ' '));
   // A tool-permission prompt (real data: "Approve or deny <tool>", session_status REQUIRES_ACTION). PR or design "승인 대기" is a decision, not this.
-  const APPROVAL_RX = /(approve or deny|waiting on permission|permission (required|request)|권한 (승인|요청)|허용 필요|allow this tool)/i;
-  const MERGE_RX = /((PR|pull request|#\d+).{0,40}(merge|병합|머지)|(merge|병합|머지).{0,20}(PR|pull request|#\d+|버튼|button|commit)|병합 버튼|merge button)/i;
+  const APPROVAL_RX = /(approve or deny|waiting (on|for) permission|permission (required|request|to (run|use|write|edit|execute))|권한(을|이)?\s?(승인|요청|허용)|허용 필요|allow this tool)/i;
+  const MERGE_RX = /((PR|pull request|#\d+|커밋|commit|\b[0-9a-f]{7,40}\b).{0,40}(merge|병합|머지)|(merge|병합|머지).{0,20}(PR|pull request|#\d+|버튼|button|commit|커밋)|브랜치에\s?(병합|머지)|병합 버튼|merge button)/i;
   // The session asks the human to change settings or permission rules: shown as a note, never acted on from here (S4, S8).
   const SETTINGS_RX = /(\/config|\/permissions|allowlist|settings\.json|permission (rule|mode)|auto[ -]?mode|bypassPermissions|acceptEdits|권한 (모드|규칙)|auto 모드|설정(을|를)?\s*(변경|바꿔|바꾸|꺼|끄|켜))/i;
+  // Work that so far exists only inside the session's container (lost when the container is reclaimed or the session archived).
+  const VOLATILE_RX = /(휘발|컨테이너(에|\s?안에)만|로컬 커밋|local commits?|not (yet )?pushed|unpushed|푸시(하지 않|\s?안\s?(함|됨|했))|only in (the )?container)/i;
+  // Negated or finished forms are removed first ("no unpushed commits", "pushed to origin").
+  const VOLATILE_NEG = /(no|zero|0)\s+(unpushed|local(-only)?)\s+(commits?|changes)|nothing (left )?to push|미푸시(된)?\s?(커밋|변경)(이|은)?\s?없|푸시(까지)?\s?(완료|했|됨)|pushed to (origin|remote|github)|in sync with (origin|remote)/gi;
+  const isVolatile = (s) => VOLATILE_RX.test([s.needsAction, s.detail, s.recent].join(' ').replace(VOLATILE_NEG, ' '));
+  const VOLATILE_NOTE = '산출물이 아직 컨테이너에만 있는 것으로 보입니다. 컨테이너가 회수되거나 세션을 보관하면 사라집니다. 저장 위치(레포·Drive)를 먼저 정하세요.';
   const isChild = (s) => !!s.parent || s.origin === 'claude_code_mcp_seed';
   const sessionUrl = (id) => 'https://claude.ai/code/' + encodeURIComponent(id);
   const inboxDocId = (key) => key.replace(/[^A-Za-z0-9_\-.~:@+]/g, '~').slice(0, 200);
@@ -454,13 +461,13 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const superseded = (s) => !!s.repo && ageH(s.updated) > 72 && live.some((o) => o !== s && o.repo === s.repo && Date.parse(o.created) > Date.parse(s.updated));
     for (const s of live) {
       const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || '';
-      if (b === 'BLOCKED' || s.needsAction) {
+      if (b === 'BLOCKED' || s.needsAction || s.category === 'need_input') {
         const ask = s.needsAction || s.detail || '';
         const kind = (s.status === 'SESSION_STATUS_REQUIRES_ACTION' || APPROVAL_RX.test(ask + ' ' + (s.detail || ''))) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
-        const sup = superseded(s);
-        const notes = [sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
+        const sup = superseded(s); const vol = isVolatile(s);
+        const notes = [vol ? VOLATILE_NOTE : '', sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
           SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
-        add({ key: kind + ':' + s.id, kind, s, superseded: sup, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - fade(hrs) - (sup ? 30 : 0),
+        add({ key: kind + ':' + s.id, kind, s, superseded: sup, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - fade(hrs) - (sup ? 30 : 0) + (vol ? 10 : 0),
           detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
         continue;
       }
@@ -470,7 +477,8 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       if (b === 'COMPLETED') {
         const hit = needsHuman(s.detail) ? s.detail : needsHuman(s.recent) ? s.recent : '';
         const unreadNote = s.unread ? ' 결과를 아직 열어 보지 않은 것으로 보입니다(unread).' : '';
-        if (hit) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: hrs <= 24 * 14 ? 60 : 40, detail: hit,
+        if (isVolatile(s) && hrs <= 24 * 30) add({ key: 'volatile:' + s.id, kind: 'volatile', s, prio: 75, detail: s.recent || s.detail, note: VOLATILE_NOTE, sig });
+        else if (hit) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: hrs <= 24 * 14 ? 60 : 40, detail: hit,
           note: (hrs <= 24 * 14 ? '요약 문구로 추정했습니다.' : '14일 넘게 열려 있습니다(놓친 후속 추정).') + unreadNote, sig });
         else if (s.unread && hrs <= 24 * 14) add({ key: 'unread:' + s.id, kind: 'unread', s, prio: 55, detail: s.detail || s.recent || '끝난 세션의 결과', note: 'unread 필드로 표시했습니다(의미는 추정).', sig });
       }
@@ -480,7 +488,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s)) && ageH(s.updated) <= 48) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
     for (const [repo, arr] of Object.entries(byRepo)) if (arr.length >= 2) add({ key: 'same_repo:' + repo, kind: 'same_repo', s: null, prio: 35, sessions: arr,
       detail: repo + '에서 ' + arr.length + '개 세션이 48시간 안에 함께 움직였습니다. 같은 브랜치·파일을 건드리는지 확인하세요.', sig: hashIds(arr) });
-    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !needsHuman(s.detail) && !needsHuman(s.recent));
+    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !isVolatile(s) && !needsHuman(s.detail) && !needsHuman(s.recent));
     if (cands.length) add({ key: 'hygiene:bundle', kind: 'hygiene', s: null, prio: 10, sessions: cands, sig: hashIds(cands),
       detail: '끝난 지 7일이 넘었고, 후속 표시가 없고, 결과를 읽은 세션 ' + cands.length + '개.',
       note: '보관하면 컨테이너가 반납되어 푸시·업로드하지 않은 파일은 사라집니다. 산출물을 확인한 뒤 보관하세요.' });
@@ -683,6 +691,10 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     paint('inbox-tools', (root) => {
       root.replaceChildren();
       const hidden = inbox.filter((i) => i.state !== 'open').length;
+      const slim = S.rawSessions.filter((x) => !x.external_metadata).length; const filled = Object.keys(S.detail).length;
+      if (S.enrich.err) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세를 불러오지 못해 레포·맥락 기반 신호가 꺼져 있습니다: ' + S.enrich.err }));
+      else if (slim && S.enrich.busy) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '세션 상세 보강 중…' }));
+      else if (slim) root.append(h('span', { class: 'faint', style: 'font-size:12px', text: '상세 보강 ' + filled + '개(최근·대기 세션 최대 ' + ENRICH_MAX + '개)' }));
       if (hidden) root.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => { S.showHidden = !S.showHidden; renderAll(); } }, S.showHidden ? '미룬·처리한 항목 숨기기' : '미룬·처리한 항목 ' + hidden + '개 보기'));
     });
     paint('inbox-list', (root) => {
@@ -966,16 +978,45 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   }
 
   // ---------- data in ----------
+  // list_sessions has returned a slim record since late October 2026: no session_context, external_metadata or status_detail
+  // (repo, context, cost, status_category missing). get_session still returns the full record, so the sessions that can
+  // reach the inbox are fetched one by one and cached until their updated_at changes. Without it repo- and context-based
+  // signals stay off; the inbox tools say so.
+  const ENRICH_MAX = 30, ENRICH_CONCURRENCY = 3;
+  function rebuildSessions() {
+    S.sessions = S.rawSessions.map((x) => { const d = S.detail[x.id]; return normSession(d && d.updated === x.updated_at ? { ...x, ...d.rec } : x); });
+  }
+  async function enrichSessions() {
+    if (!S.mcp || S.enrich.busy || S.enrich.stopped) return;
+    const now = Date.now();
+    const want = S.rawSessions.filter((x) => !x.external_metadata && x.session_status !== 'SESSION_STATUS_ARCHIVED'
+        && (/(BLOCKED|WORKING|REVIEW_READY|FAILED)$/.test(x.status_bucket || '') || (x.post_turn_summary && x.post_turn_summary.needs_action) || x.unread || now - Date.parse(x.updated_at) < 14 * 86400000))
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, ENRICH_MAX)
+      .filter((x) => !(S.detail[x.id] && S.detail[x.id].updated === x.updated_at));
+    if (!want.length) return;
+    S.enrich.busy = true; let changed = 0; const queue = want.slice();
+    const worker = async () => {
+      while (queue.length && !S.enrich.stopped) {
+        const x = queue.shift();
+        try {
+          const p = parsePayload(await S.mcp.callTool(SERVER, 'get_session', { session_id: x.id }, { cache: false })); const rec = (p && p.ccr) || p;
+          if (rec && rec.id === x.id) { S.detail[x.id] = { updated: x.updated_at, rec }; changed++; }
+        } catch (e) { S.enrich.err = errText(e); if (!(e && e.retryable)) S.enrich.stopped = true; }
+      }
+    };
+    try { await Promise.all(Array.from({ length: ENRICH_CONCURRENCY }, worker)); }
+    finally { S.enrich.busy = false; S.enrich.last = Date.now(); if (changed || S.enrich.err) { rebuildSessions(); renderAll(); } }
+  }
   function onSessions(ev) {
     if (ev.type === 'data') {
       try { const p = parsePayload(ev.result); const arr = (p.ccr && p.ccr.data) || p.data || [];
-        S.sessions = arr.filter((x) => x && x.id).map(normSession); S.sessionsMore = !!((p.ccr && p.ccr.has_more) || p.has_more);
+        S.rawSessions = arr.filter((x) => x && x.id); rebuildSessions(); S.sessionsMore = !!((p.ccr && p.ccr.has_more) || p.has_more);
         S.sessionsAt = (ev.result.cache && ev.result.cache.storedAt) || Date.now(); S.sessionsErr = null; S.mcpState = 'ok';
       } catch (e) { S.sessionsErr = { code: 'parse', message: String((e && e.message) || e) }; }
     } else {
-      S.sessionsErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.sessions = []; S.sessionsAt = null; S.mcpState = 'denied'; }
+      S.sessionsErr = ev.error; if (ev.error && LOUD.includes(ev.error.code)) { S.rawSessions = []; S.sessions = []; S.sessionsAt = null; S.mcpState = 'denied'; }
     }
-    renderAll();
+    renderAll(); enrichSessions();
   }
   function onTriggers(ev) {
     if (ev.type === 'data') {

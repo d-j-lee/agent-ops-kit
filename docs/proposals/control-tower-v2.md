@@ -6,11 +6,11 @@
 | 바뀌는 관점 | v1은 "허브가 띄운 자식"을 관리했다. v2는 **사용자의 모든 세션**(사람이 연 세션 포함)을 대상으로 상황 파악, 분류, 검증, 개입, 보고를 한다 |
 | 판단 축 | 사람과 AI의 협업 효용이다. 공이 누구에게 있는지, 사람 응답 지연, 놓친 후속, 검증된 주장, 결정의 재사용으로 잰다(§2a). **비용은 참고 수치로만 쓴다** |
 | 근거 | 2026-10-21 01:05 UTC 세션 스냅숏(최근 35개, 레포 밖 비공개 자료), v1 실측 기록(`reports/2026-10-20-field-test.md`) |
-| 이미 동작하는 것 | MVP-1.2 "당신 차례" 인박스와 협업 타일(`dashboard/console.html`, 규칙은 `docs/dashboard.md` §3a) |
+| 이미 동작하는 것 | MVP-1.3 "당신 차례" 인박스와 협업 타일, `get_session` 보강(`dashboard/console.html`, 규칙은 `docs/dashboard.md` §3a, 홀드아웃 시험은 `tests/test_console_inbox.py`) |
 | 다음 과제 | 작업공간 지도: 세션 맥락 × 세션 파일시스템 × GitHub × Google Drive를 시각화까지 포함해 관리한다(`docs/proposals/workspace-atlas.md`) |
 
 **번호 체계.** 이 문서는 다음 접두어를 쓴다.
-- 휴리스틱 IN01–IN23(IN03은 반박되어 비워 둔다), 갱신 단계 U0–U3, 자율 수준 A0–A3, 검증 사다리 V0–V5, 미확인 시험 F1–F16, 사용자 결정 D10–D18.
+- 휴리스틱 IN01–IN24(IN03은 반박되어 비워 둔다), 갱신 단계 U0–U3, 자율 수준 A0–A3, 검증 사다리 V0–V5, 미확인 시험 F1–F16, 사용자 결정 D10–D18.
 - 층 이름은 규칙층·샘플층·매니저층·원격층이라고 적는다.
 - 다른 문서와는 별개 번호다. 안전 규칙 S1–S9(`CLAUDE.md`), v1 시험 T1–T6과 결정 D1–D9(`docs/rollout.md`), 가설 H1–H9(`docs/architecture.md`)가 그렇다.
 
@@ -39,6 +39,8 @@
 | 완료 세션의 사람 몫 | 14일 안에 끝난 세션 약 13개 중 8–9개가 요약에 사람 몫을 남겼다(병합, 실기기 검증, 남은 결정, 새 세션에서 확인 등). `status_detail`에만 있기도 하고 `recent_action`에만 있기도 하다 | 두 필드를 함께 본다 |
 | 안 읽은 결과 | 세션 레코드에 `unread` 필드가 있다(35개 중 9개 참). 의미는 이름으로 추정한다 | 사람이 아직 보지 않은 AI 산출물이다. 보관 후보에서 뺀다 |
 | 완료형 주장 | "테스트 N개 통과", "CI green" 같은 구절이 6–7세션에 있다. 그중 1세션은 레포가 붙어 있지 않다 | 검증 큐의 원천이다. 레포가 없으면 재실행 검증을 할 수 없다 |
+| 데이터 원천 변화(2026-10-30 재실측) | `list_sessions`가 가벼운 레코드만 준다. 레포·맥락·사용량·`status_detail`이 빠졌다. `get_session`은 전체 레코드와 새 필드 `status_category`(`need_input`, `completed`)를 준다 [확인] | 콘솔에 보강 계층을 둔다(§5 U0). 플랫폼 응답은 예고 없이 바뀐다. 그래서 형식이 바뀌면 신호가 꺼졌다고 화면에 표시한다 |
+| 미저장 산출물 | 막힌 세션 하나가 "산출물이 로컬 커밋 2개로 휘발성 컨테이너에만 있다"며 저장 위치 결정을 기다린다 [기록됨: 2026-10-30 list_sessions] | 휘발 위험은 지도(W2)를 기다리지 않고 메타데이터 문구로 먼저 잡는다(IN24) |
 | 이 설계를 쓴 허브 | 맥락 695k [확인: list_sessions]. 대화 압축도 한 번 겪었다 | 매니저 세션도 맥락 기준 교대(250k)를 강제해야 한다. 맥락 포화는 판단 품질을 떨어뜨린다 [추론] |
 
 ## 2. 원칙
@@ -126,7 +128,7 @@
 
 | 단계 | 언제 | 읽기 | 쓰기 | 부담 |
 |---|---|---|---|---|
-| U0 관측 | `watchTool` 주기 | `list_sessions` 최근 100개 | 서명(`bucket, updated_at, needs_action, status_detail`)이 바뀐 것만 다시 계산 | 없음 |
+| U0 관측 | `watchTool` 주기 | `list_sessions` 최근 100개 + 인박스 후보 최대 30개의 `get_session`(동시 3개, `updated_at`이 바뀔 때만) | 서명(`bucket, updated_at, needs_action, status_detail`)이 바뀐 것만 다시 계산 | 첫 로드 때 `get_session` 수십 회, 이후 바뀐 세션만 |
 | U1 증분 | 카드를 열거나 "갱신"을 누를 때 | `list_events(kinds=[result], after_id=cursor, limit≤20)` | 정규식으로 주장·후속을 뽑고 커서를 전진 | 페이지 크기는 F4로 잰다 [미확인] |
 | U2 소화 | "정리"를 누를 때(한 번에 10건 이하) | 카드 + 최근 result 48KB 이하 | `goal, state, options, followups` | 사용자 한도, `sample` quick |
 | U3 심층 | 매니저: 검증·브리프·주간 정리 | `scripts/harvest_events.py`로 정제한 이벤트 | event_uuid가 붙은 주장 원장 | 서브에이전트 165k–320k 토큰 [확인: brd.md] |
@@ -142,16 +144,16 @@
 
 | id | 조건 | kind | 상태 |
 |---|---|---|---|
-| IN01 | BLOCKED이거나 `needs_action`이 있음(아래 둘 제외) | decision | ✓ |
+| IN01 | BLOCKED이거나, `needs_action`이 있거나, `status_category=need_input`(아래 둘 제외) | decision | ✓ |
 | IN02 | `session_status=REQUIRES_ACTION`, 또는 문구가 `Approve or deny`·`Waiting on permission`·권한 요청에 맞음. PR·시안 "승인 대기"는 IN01 | approval. 승인은 세션 UI에서만 | ✓ |
 | IN04 | `needs_action`이 PR·버튼·커밋과 함께 merge·병합을 말함 | merge | ✓ |
 | IN05 | 7일 지난 대기는 하루 2점씩 최대 40점 감쇠(절벽 없음) | — | ✓ |
 | IN06 | COMPLETED이고 `status_detail`·`recent_action`이 사람 몫을 말함(완료 표현은 먼저 제거). 14일이 지나면 "놓친 후속"으로 점수를 낮춰 계속 보인다 | followup | ✓ |
 | IN07 | 테스트 어휘 + 수치 + 통과 어휘가 한 구절에, 또는 `all tests pass`·`CI green` | claim → 검증 제안 | P1 |
 | IN08 | IN07인데 세션에 레포가 없음 | 사다리 상한 V2 | P1 |
-| IN09 | 맥락 600k 이상이고 미완료. 100k 늘 때마다 다시 연다 | context | ✓ |
+| IN09 | 맥락 600k 이상이고 미완료. 100k 늘 때마다 다시 연다 | context | ✓(보강 필요) |
 | IN10 | WORKING, 1시간 동안 활동(토큰 증가)은 있는데 새 result가 없음(진전 없는 반복) | loop_suspect | P3(시계열 필요) |
-| IN11 | 같은 레포에서 48시간 안에 움직인 WORKING·BLOCKED 세션 2개 이상 | same_repo | ✓ |
+| IN11 | 같은 레포에서 48시간 안에 움직인 WORKING·BLOCKED 세션 2개 이상 | same_repo | ✓(보강 필요) |
 | IN12 | 정규화한 제목이 같거나, 짧은 쪽 토큰이 긴 쪽에 포함(7일 안) | 워크스트림 묶기 제안 | P1 |
 | IN13 | 맥락 0이고 활동 흔적 없음, 24시간 이상 | hygiene | P1 |
 | IN14 | 맥락 0인데 사용량 > 0 | "요약 받아 새 세션" 제안 | 의미 미확인(F3) |
@@ -163,13 +165,14 @@
 | IN20 | `external_metadata.rate_limit_info.status`가 allowed가 아님, 또는 리셋 임박 | 상태 띠 표시 | 씨앗. allowed 밖의 값은 [미확인] |
 | IN21 | `external_metadata.artifacts` | 작업 카드의 "산출물" 링크 | 씨앗 [확인: 필드 존재] |
 | IN22 | 같은 파일을 여러 세션이 고침 | 작업공간 지도로 넘김 | atlas W2 |
-| IN23 | 72시간 넘게 기다린 결정류 항목의 레포에 그 뒤 만든 세션이 있음 | "대체됐을 수 있음", −30, 대기 지표에서 제외 | ✓ |
+| IN23 | 72시간 넘게 기다린 결정류 항목의 레포에 그 뒤 만든 세션이 있음 | "대체됐을 수 있음", −30, 대기 지표에서 제외 | ✓(보강 필요) |
+| IN24 | `needs_action`·`status_detail`·`recent_action`이 산출물이 컨테이너에만 있다고 말함 | 완료 세션이면 volatile(75), 결정류면 +10과 경고. 보관 후보에서 뺀다 | ✓ |
 
 **점수:**
 - 결정류(approval·merge·decision): `base + 대기 min(15, 3·log2(h+1)) − 감쇠 − 대체 30`.
 - review_stale: `base + 대기 가산/3`. 나머지는 base만 쓴다.
 - 비용은 점수에 넣지 않는다.
-- base: approval 95, merge 90, decision 85, failed 80, stall 70, followup 60(14일 뒤 40), unread 55, review_stale 50, context 45, same_repo 35, hygiene 10. 반박된 검증 결과는 90(P1).
+- base: approval 95, merge 90, decision 85, failed 80, volatile 75, stall 70, followup 60(14일 뒤 40), unread 55, review_stale 50, context 45, same_repo 35, hygiene 10. 반박된 검증 결과는 90(P1).
 
 ## 7. 개입 카탈로그와 자율 수준
 
@@ -315,7 +318,7 @@
 | D12 | 샘플층(`sample`) 사용 | 쓴다. 클릭할 때만, quick 등급, F5 통과 후 |
 | D13 ★ | 매니저 세션을 UI에서 새로 만들어 이 작업을 넘길지 | 만든다. v1 허브 역할을 겸하고 필요할 때 깨운다. 맥락 250k에서 교대 |
 | D14 | A3 사전 위임 | 처음에는 없음. S4 조작은 계속 사람 확인 |
-| D15 | 원장 읽기 권한과 카드 보존 기간 | P1 시작 때 `admin` 읽기, 90일 보존 |
+| D15 | 원장 읽기 권한과 카드 보존 기간 | `admin` 읽기(2026-10-30 적용), 90일 보존 |
 | D16 | 매니저 모델과 검증 깊이 기본값 | 기본 모델. 병합·공개 전에는 V1 다음 V3. 비용은 표시만 |
 | D17 | 브리프 시각과 푸시 | 평일 오전, 푸시 켬 |
 | D18 ★ | 이미 있는 개인 비서 프로젝트(인박스 기능 포함)와의 관계 | 그 프로젝트의 범위를 먼저 읽어 본 뒤 정한다. 겹치면 인박스는 하나로 둔다 |

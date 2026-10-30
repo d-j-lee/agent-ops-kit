@@ -23,10 +23,10 @@ AOK 운영을 한 화면에서 **보고(모니터링)** 바로 **조작(컨트�
 ```json
 {
   "mcp": {"servers": [{"server": "Claude Code Remote", "tools": [
-    "list_sessions", "list_triggers", "list_events",
+    "list_sessions", "get_session", "list_triggers", "list_events",
     "archive_session", "unarchive_session", "interrupt_session",
     "send_message", "update_trigger", "set_session_tags"]}]},
-  "db": {"rules": [{"path": "", "read": "view", "write": "admin"}]},
+  "db": {"rules": [{"path": "", "read": "admin", "write": "admin"}]},
   "user": {}
 }
 ```
@@ -34,7 +34,7 @@ AOK 운영을 한 화면에서 **보고(모니터링)** 바로 **조작(컨트�
 - **커넥터 호출:** 모든 호출은 **보는 사람의 권한**으로 실행된다. 첫 호출에서 claude.ai가 허용 여부를 묻는다.
   - 조회(`list_*`)는 `watchTool`로 1–2분마다 갱신한다.
   - 조작은 `callTool` 1회로 실행하고, 캐시하지 않는다.
-- **원장 권한:** 읽기는 보는 사람 누구나(`view`), 쓰기는 편집자 이상(`admin`)이다. 조작 버튼은 편집 권한이 있을 때만 켜진다.
+- **원장 권한:** 읽기와 쓰기 모두 편집자 이상(`admin`)이다(v2 D15, 2026-10-30부터). 원장에는 경보 근거, 감사 기록, 인박스 상태처럼 다른 세션의 문구가 쌓이므로, 콘솔을 보기 전용으로 공유해도 원장은 보이지 않게 했다. 조작 버튼은 편집 권한이 있을 때만 켜진다.
 - **세션 생성 제외:** `create_session`과 `create_trigger`는 일부러 넣지 않았다. 위임은 허브의 입장 검사(⑥)를 거쳐야 하기 때문이다.
 
 ## 3. 감지 신호 (`aok-watch` A층과 같은 기준)
@@ -63,7 +63,8 @@ AOK 운영을 한 화면에서 **보고(모니터링)** 바로 **조작(컨트�
 |---|---|---|
 | 권한 승인 대기(`approval`) | BLOCKED이거나 `needs_action`이 있고, `session_status`가 REQUIRES_ACTION이거나 문구가 "Approve or deny…", "Waiting on permission…", 권한 요청 표현에 맞음. PR·시안의 "승인 대기"는 결정으로 본다 | 95 + 대기 가산 − 감쇠 |
 | 병합 대기(`merge`) | 위와 같은 조건에서 `needs_action`이 PR·버튼·커밋과 함께 merge·병합을 말함 | 90 + 대기 가산 − 감쇠 |
-| 결정 대기(`decision`) | BLOCKED이거나 `needs_action`이 있음(위 두 종류 제외) | 85 + 대기 가산 − 감쇠 |
+| 결정 대기(`decision`) | BLOCKED이거나, `needs_action`이 있거나, `status_category`가 `need_input`임(위 두 종류 제외) | 85 + 대기 가산 − 감쇠 |
+| 미저장 산출물(`volatile`) | COMPLETED, 30일 이내, `needs_action`·`status_detail`·`recent_action`이 산출물이 컨테이너에만 있다고 말함("휘발", "컨테이너에만", "로컬 커밋", "not pushed", "unpushed" 등). "no unpushed commits", "pushed to origin" 같은 부정·완료 표현은 먼저 지운다. 결정류 항목에 이 표현이 있으면 그 항목에 +10과 경고를 붙인다 | 75 |
 | 마지막 턴 실패(`failed`) | FAILED | 80 |
 | 정지 의심(`stall`) | WORKING인데 `stale_minutes` 넘게 그대로 | 70 |
 | 사람 후속(`followup`) | COMPLETED이고 `status_detail` 또는 `recent_action`이 사람 몫을 말함("사용자 몫·확인·설치", "남음", "결정 N건", "확인 필요", "새 세션에서 확인", "left to …", "your review" 등). "병합 완료", "Nothing left to do" 같은 완료 표현은 먼저 지운다 | 14일 이내 60, 그 뒤 40("놓친 후속") |
@@ -71,16 +72,23 @@ AOK 운영을 한 화면에서 **보고(모니터링)** 바로 **조작(컨트�
 | 검토 대기 방치(`review_stale`) | REVIEW_READY이고 72시간 초과 | 50 + 대기 가산/3 |
 | 맥락 포화(`context`) | 맥락 600k 이상(완료 세션 제외). 100k 늘 때마다 다시 연다 | 45 |
 | 같은 레포 동시 작업(`same_repo`) | 같은 레포에서 48시간 안에 움직인 WORKING·BLOCKED 세션이 2개 이상 | 35 |
-| 보관 후보(`hygiene`) | 끝난 지 7일 넘음, 후속 표시 없음, `unread` 아님 | 10 |
+| 보관 후보(`hygiene`) | 끝난 지 7일 넘음, 후속 표시 없음, `unread` 아님, 미저장 표현 없음 | 10 |
 
-- **대기 가산:** `min(15, 3·log2(대기 시간 + 1))`. AI가 사람의 답을 오래 기다릴수록 위로 올린다. 비용은 점수에 넣지 않는다(참고 수치).
+- **용어와 판정 순서:**
+  - 결정류는 approval·merge·decision이다.
+  - 한 세션은 approval → merge → decision 순서로 처음 맞는 하나가 된다. `needs_action`이 있으면 상태가 COMPLETED여도 결정류가 먼저다. 그때 미저장 표현은 경고와 +10으로만 붙는다.
+  - "끝난 세션"은 COMPLETED만 뜻한다. REVIEW_READY와 FAILED는 끝난 것으로 보지 않고, 보관 후보에도 들지 않는다. FAILED는 감쇠 없이 80점을 유지한다. 실패는 사람이 확인하기 전까지 남겨 둔다.
+  - 후속 표시는 사람 후속과 미저장 산출물을 함께 뜻한다.
+  - 정지 기준 `stale_minutes`의 기본값은 30분이며 운영 기준(`config/policy`)에서 바꾼다.
+- **대기 가산:** `min(15, 3·log2(대기 시간 + 1))`. 대기 시간은 시간 단위이며 `updated_at`부터 잰다. AI가 사람의 답을 오래 기다릴수록 위로 올린다. 비용은 점수에 넣지 않는다(참고 수치).
 - **감쇠:** 7일이 지나면 하루에 2점씩, 최대 40점 내린다. 7일 경계에서 점수가 갑자기 떨어지지 않게 하려는 것이다.
-- **대체 추정:** 72시간 넘게 기다린 결정류 항목이 있는데, 같은 레포에 그 마지막 변화 이후 만든 세션이 있으면 "대체됐을 수 있음"으로 표시하고 30점 내린다. 이런 항목은 "사람 응답 대기" 타일에서 뺀다.
+- **대체 추정:** 72시간 넘게 기다린 결정류 항목이 있는데, 같은 레포에 그 마지막 변화 이후 만든 세션(보관된 세션은 근거로 쓰지 않는다)이 있으면 "대체됐을 수 있음"으로 표시하고 30점 내린다. 이런 항목은 "사람 응답 대기" 타일에서 뺀다.
 - **보관된 세션은 제외한다.** 보관하면 버킷이 COMPLETED로 바뀌어도 예전 `needs_action`이 남는다 [기록됨: 비공개 스냅숏의 보관 세션 3건].
 - **보관의 손실:** 보관하면 컨테이너가 반납된다. 되살리면 새 컨테이너가 붙는다 [문서: 도구 설명]. 푸시·업로드하지 않은 파일은 사라질 수 있으니 보관 후보에 이 경고를 붙인다.
 - **설정·권한 변경 요청 표시:** `needs_action`에 `/config`, `/permissions`, allowlist, settings.json, permission rule·mode, auto mode, 권한 모드·규칙, "설정을 변경·꺼" 같은 표현이 있으면 문구를 붙인다. 콘솔은 조치하지 않는다(S4·S8).
 - **출처 칩:** 부모가 있거나 `origin`이 MCP 생성이면 "자식", 아니면 "사람".
 - **처리 상태:** 처리함·무시는 그 항목의 상태 서명에 묶인다. 서명은 세션 항목이면 `updated_at`, 묶음 항목이면 세션 ID 목록의 해시, 맥락 항목이면 100k 단위다. 서명이 바뀌면 다시 열린다. 내일 다시는 24시간 동안 숨긴다. 무시할 때는 이유(과민·이미 처리·무관)를 남기고, 이 기록은 임계값 조정을 **제안**하는 데만 쓴다.
+- **데이터 원천과 보강:** 2026-10 말부터 `list_sessions`는 가벼운 레코드만 준다. `session_context`(레포·모델), `external_metadata`(맥락·사용량), `status_detail`, `status_category`가 빠졌다 [확인: 2026-10-30, limit 3·100]. `get_session`은 전체 레코드를 준다 [확인]. 그래서 콘솔은 인박스에 들 수 있는 세션(보관 제외, 대기·작업 중·검토·실패 상태, `needs_action`, `unread`, 14일 안에 움직임)을 최근순으로 최대 30개 골라 `get_session`으로 보강하고, `updated_at`이 바뀔 때까지 캐시한다. 동시 호출은 3개다. 보강이 실패하면 레포·맥락에 기대는 신호(IN09·IN11·IN23)가 꺼지고, 인박스 도구 줄에 그 사실을 표시한다. 보강 대상이 아닌 세션(14일이 지난 완료 세션 등)은 `status_detail`·`status_category` 없이 `needs_action`·`recent_action`만으로 판정한다. 그래서 14일이 지난 "놓친 후속"과 15–30일 된 미저장 산출물은 `recent_action`에 그 표현이 있을 때만 잡힌다. 보강되지 않은 세션은 레포가 없으므로 대체 추정의 근거가 되지 못한다.
 - **보는 범위:** `list_sessions` 최근 100개. Cowork 세션과 예약 작업이 띄운 세션은 기본 목록에 나오지 않는다 [문서]. 100개를 넘는 오래된 세션은 보이지 않는다.
 - **세션 열기:** `https://claude.ai/code/<session_id>` 링크다. 형식은 플랫폼이 세션 링크로 쓰는 표기를 따랐다 [문서]. 다른 세션에서도 열리는지는 첫 사용 때 확인한다 [미확인].
 - **결정 위치:** 사람이 연 세션의 결정은 그 세션에서 사람이 직접 한다. 콘솔은 안내만 한다.
