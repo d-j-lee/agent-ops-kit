@@ -19,6 +19,7 @@
   - `get_session` 응답이 예상과 다르면 그 결과도 캐시해 반복 호출을 막는다
 - 원장 스키마: `snapshot_sessions`, `diag`, `handoff`. `verifications`에 v2 사다리 수준(V0–V5)과 `session_id`·`verdict`·`ref`
 - 시험: 스냅숏 대체 화면이 실시간과 같은 분류를 내는지(`test_snapshot_fallback_without_connector`)
+- CI(`.github/workflows/ci.yml`): PR과 main에서 단위 시험·공개 레포 스캔(`checks`), 헤드리스 Chromium 콘솔 시험(`console`)
 - 관제실 "당신 차례" 인박스(관제탑 v2 MVP-1.1): 모든 세션의 메타데이터로 권한 승인·병합·결정 대기, 실패, 정지, 사람 후속, 검토 방치, 맥락 포화, 같은 레포 동시 작업, 보관 후보를 우선순위대로 모은다. 처리 상태는 원장 `inbox_state`
 - 관제실 협업 타일: AI 작업 중, 사람 응답 대기 최장(중앙값), 숨은 후속
 - 인박스 MVP-1.2(적대 검토 반영): 사람 후속을 `status_detail`·`recent_action` 두 필드로 판정하고 완료 표현을 먼저 제거, 14일 뒤 "놓친 후속", 안 읽은 결과(`unread`), REQUIRES_ACTION 승인, 대체 추정, 7일 감쇠, 같은 레포는 48시간 안 세션만, 보관 후보에서 안 읽은 세션 제외와 손실 경고, 무시 사유(과민·이미 처리·무관), 세션 목록 100개

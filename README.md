@@ -86,7 +86,8 @@ agent-ops-kit/
 ├─ aok/budget.yaml                 # 예산 기본값(D3)
 ├─ dashboard/console.html          # 관제실 소스
 ├─ knowledge/                      # 카드·씨앗 형식과 템플릿만
-├─ tests/
+├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/)
+├─ .github/workflows/ci.yml        # PR·main에서 시험과 공개 레포 스캔
 └─ reports/                        # 이력: 실측, 검증 기록
 ```
 
