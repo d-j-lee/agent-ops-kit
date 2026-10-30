@@ -147,6 +147,17 @@ tr.row.open td { background: var(--accent-soft); }
 .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px; }
 .bar.warn > i { background: var(--warn); } .bar.bad > i { background: var(--bad); }
 .bar > b { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--ink); opacity: .5; }
+.strip { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; margin: 5px 0 3px; }
+.strip i { width: 12px; height: 12px; border-radius: 2px; background: var(--ok-soft); border: 1px solid var(--ok); }
+.strip i.local { background: var(--warn); border-color: var(--warn); }
+.atlas-row { padding: 8px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.atlas-row:last-child { border-bottom: 0; }
+.atlas-row .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.atlas-row .hd .when { flex: none; font-size: 12px; color: var(--faint); white-space: nowrap; }
+.repo-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.repo-list > div { border-left: 3px solid var(--ok); padding: 2px 0 2px 8px; font-size: 12.5px; overflow-wrap: break-word; min-width: 0; }
+.repo-list > div.local { border-left-color: var(--warn); }
+.atlas-row .t { background: none; border: 0; padding: 0; font: inherit; font-weight: 500; color: var(--accent); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
 
 /* Detail */
 td.detail { background: var(--panel-2); padding: 12px; }
@@ -205,7 +216,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
 <div class="band" id="band">
   <div class="band-in">
-    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · 콘솔 v11</span></div>
+    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · 콘솔 v12</span></div>
     <div class="verdict" id="verdict"><span class="dot"></span><span>상태를 불러오는 중</span></div>
     <span class="spacer"></span>
     <nav class="jump" aria-label="섹션으로 이동">
@@ -272,6 +283,11 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         <div class="card-h"><h2>예약 작업</h2><span class="note">켜짐·꺼짐을 바로 바꿉니다. 이미 발화한 일회성 작업은 숨깁니다.</span></div>
         <div id="trigger-list"></div>
       </section>
+
+      <section class="card" id="atlas">
+        <div class="card-h"><h2>작업공간</h2><span class="note">세션이 자기 컨테이너를 fsmap으로 잰 기록. 칸 하나가 git 저장소 하나이고, 채운 칸은 컨테이너에만 있는 작업이 있는 저장소입니다.</span></div>
+        <div id="atlas-list"></div>
+      </section>
     </div>
   </div>
 
@@ -310,7 +326,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 <script>
 (() => {
   const SERVER = 'Claude Code Remote';
-  const CONSOLE_VERSION = 'v11';
+  const CONSOLE_VERSION = 'v12';
   const MCP_PERM = 'mcp:' + SERVER; // scoped permission name: consent is per connector (mcp.d.ts)
   const UA_KIND = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : /Electron|ClaudeDesktop|Claude\/[0-9]/i.test(navigator.userAgent) ? 'app' : 'browser';
   // Authorization denials: connector-derived data is withdrawn and the ledger snapshot is not shown in its place (mcp.d.ts failure design).
@@ -339,7 +355,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     perm: null, permState: null, asked: false, watching: false, liveOk: false, fromSnapshot: false, snap: null, snapSavedAt: 0, snapSig: '', myId: null, firstReading: false, ledgerUnsubs: [], ledgerRetryAt: 0,
     diag: { boot_at: new Date().toISOString(), caps: {}, events: [], calls: {} },
     triggers: [], triggersAt: null, triggersErr: null,
-    ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
+    ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, atlas: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
     showHidden: false,
     scope: 'all', q: '', showArchived: false, open: null, sel: new Set(),
     confirm: null, busy: {}, drafts: {}, results: {}, deferred: new Set(),
@@ -456,7 +472,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
   // ---------- inbox: what needs the human now, across ALL sessions (deterministic layer D) ----------
   const INBOX_LABEL = { approval: '권한 승인 대기', merge: '병합 대기', decision: '결정 대기', failed: '마지막 턴 실패', stall: '정지 의심', followup: '사람 후속(추정)',
-    unread: '안 읽은 결과', volatile: '미저장 산출물(추정)', review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
+    unread: '안 읽은 결과', volatile: '미저장 산출물',  review_stale: '검토 대기 방치', context: '맥락 포화', same_repo: '같은 레포 동시 작업', hygiene: '보관 후보' };
   // Wording that leaves work to the person: who + what remains. Tested on status_detail and recent_action; a keyword guess until work cards exist.
   const FOLLOWUP_RX = /(사용자\s?(몫|확인|설치|결정|검증|승인)|사용자가 [^.;]{0,20}(해야|필요)|사용자에게 (남김|넘김|요청)|사람에게 (남김|넘김)|남음|남았|남아 ?있|남은 (일|결정|작업)|결정 \d+건|(확인|점검|검증) 필요|새 세션에서 (확인|점검)|직접 (확인|설치|실행|해)|수동으로 (해|실행|설치|적용)|left to \w+|needs? (your|user)|awaiting (your|user)|your (review|click|call|decision|approval|sign-?off)|you (need|have) to|please (run|review|merge|install|confirm|push)|verify in a new session|review requested from you|sign-?off|후속:)/i;
   // Phrases that report finished or empty work, removed before the follow-up test ("병합 완료", "Nothing left to do").
@@ -472,7 +488,71 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   // Negated or finished forms are removed first ("no unpushed commits", "pushed to origin").
   const VOLATILE_NEG = /(no|zero|0)\s+(unpushed|local(-only)?)\s+(commits?|changes)|nothing (left )?to push|미푸시(된)?\s?(커밋|변경)(이|은)?\s?없|푸시(까지)?\s?(완료|했|됨)|pushed to (origin|remote|github)|in sync with (origin|remote)/gi;
   const isVolatile = (s) => VOLATILE_RX.test([s.needsAction, s.detail, s.recent].join(' ').replace(VOLATILE_NEG, ' '));
-  const VOLATILE_NOTE = '산출물이 아직 컨테이너에만 있는 것으로 보입니다. 컨테이너가 회수되거나 세션을 보관하면 사라집니다. 저장 위치(레포·Drive)를 먼저 정하세요.';
+  const VOLATILE_NOTE = '산출물이 아직 컨테이너에만 있는 것으로 보입니다(요약 문구로 추정). 컨테이너가 회수되거나 세션을 보관하면 사라집니다. 저장 위치(레포·Drive)를 먼저 정하세요.';
+  // Measured: the session's own fsmap scan of its container (ledger atlas/<session_id>, written by scripts/atlas_record.py; docs/dashboard.md §3b).
+  // A measurement at generated_at, not live state. "Current" allows 10 minutes because posting the record itself moves the session's updated_at;
+  // a longer window would hide work done after a clean scan.
+  const ATLAS_GRACE_MS = 10 * 60000;
+  const repoLocal = (r) => !!(r.dirty || r.untracked || r.stashes || (r.local_commits != null ? r.local_commits : r.ahead) || (r.unpushed_branches || []).length);
+  // Ledger rows are written by other sessions and are not schema-checked on write: coerce every field, drop rows that do not fit.
+  function normAtlas(id, a) {
+    if (!a || typeof a !== 'object' || !a.local_only || typeof a.local_only !== 'object') return null;
+    if (a.session_id != null && a.session_id !== id) return null;
+    const n = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+    const str = (v) => (typeof v === 'string' ? v : null);
+    const repos = (Array.isArray(a.repos) ? a.repos : []).filter((r) => r && typeof r === 'object').map((r) => ({
+      path: str(r.path) || '.', head: str(r.head), branch: str(r.branch), upstream: str(r.upstream), ahead: n(r.ahead), behind: n(r.behind),
+      dirty: n(r.dirty), untracked: n(r.untracked), stashes: n(r.stashes), local_commits: typeof r.local_commits === 'number' ? n(r.local_commits) : null,
+      unpushed_branches: (Array.isArray(r.unpushed_branches) ? r.unpushed_branches : []).filter((b) => typeof b === 'string'), shallow: r.shallow === true }));
+    const lo = a.local_only; const cov = a.coverage && typeof a.coverage === 'object' ? a.coverage : null; const tot = a.totals && typeof a.totals === 'object' ? a.totals : {};
+    const rec = { session_id: id, label: str(a.label), generated_at: str(a.generated_at), tool: str(a.tool), root: str(a.root),
+      totals: Object.fromEntries(['files', 'bytes', 'disk', 'code', 'tokens'].map((k) => [k, n(tot[k])])), repos, repos_total: Math.max(n(a.repos_total), repos.length),
+      local_only: { volatile: lo.volatile === true, repos: n(lo.repos), dirty: n(lo.dirty), untracked: n(lo.untracked), stashes: n(lo.stashes), ahead: n(lo.ahead),
+        unpushed_branches: n(lo.unpushed_branches), local_commits: n(lo.local_commits) },
+      // Without a coverage block, or with gaps, a record can show risk but never proves a workspace clean.
+      complete: !!cov && cov.complete === true && Array.isArray(cov.gaps) && cov.gaps.length === 0,
+      gaps: cov && Array.isArray(cov.gaps) ? cov.gaps.filter((g) => g && typeof g.code === 'string').map((g) => ({ code: g.code, detail: str(g.detail) })) : [],
+      findings: (Array.isArray(a.findings) ? a.findings : []).filter((f) => f && typeof f === 'object' && typeof f.title === 'string')
+        .map((f) => ({ severity: str(f.severity) || 'info', rule: str(f.rule), title: f.title.slice(0, 200) })),
+      findings_total: n(a.findings_total), report_url: str(a.report_url) };
+    if (repos.some(repoLocal)) rec.local_only.volatile = true; // the repo rows win over the summary flag, in the safe direction
+    return rec;
+  }
+  const GAP_LABEL = { local_commits_unchecked: '원격에 없는 커밋 미확인', repo_error: 'git 오류', hygiene_fields_missing: 'fsmap 형식 변경', repos_not_analysed: '분석하지 못한 저장소', no_repos: 'git 저장소 없음' };
+  const gapText = (a) => a.gaps.length ? a.gaps.map((g) => (GAP_LABEL[g.code] || g.code) + (g.detail ? ' ' + g.detail : '')).join(', ') : '측정 범위 정보 없음';
+  function atlasOf(s) {
+    const a = s && S.ledger.atlas[s.id]; if (!a) return null;
+    const at = Date.parse(a.generated_at || ''); const upd = Date.parse(s.updated || '');
+    return { a, current: Number.isFinite(at) && (!Number.isFinite(upd) || at >= upd - ATLAS_GRACE_MS) };
+  }
+  // measured: fsmap saw local-only git work (whenever it measured). clean: a current, complete scan saw none. guess_scanned: the wording says so but a
+  // current, complete scan found no git work (files outside repositories are outside the measurement). guess: wording only. unknown: an old or
+  // incomplete scan that saw nothing; it proves nothing either way.
+  function volState(s) {
+    try {
+      const m = atlasOf(s); const guess = isVolatile(s);
+      if (m && m.a.local_only.volatile) return { kind: 'measured', m };
+      if (m && m.current && m.a.complete) return { kind: guess ? 'guess_scanned' : 'clean', m };
+      if (guess) return { kind: 'guess', m };
+      return m ? { kind: 'unknown', m } : null;
+    } catch (e) { dlog('atlas', { ok: false, code: 'eval', id: s && s.id }); return isVolatile(s) ? { kind: 'guess', m: null } : null; }
+  }
+  const atRisk = (v) => !!v && ['measured', 'guess', 'guess_scanned'].includes(v.kind);
+  // Sessions whose turn has ended or that wait on the person: the only ones whose local work the inbox and the tile report.
+  const turnEnded = (s) => ['BLOCKED', 'REVIEW_READY', 'COMPLETED', 'FAILED'].includes(B(s)) || !!s.needsAction || s.category === 'need_input';
+  function atlasSummary(a) {
+    const lo = a.local_only; const parts = []; const repos = a.repos || [];
+    if (lo.dirty) parts.push('미커밋 파일 ' + lo.dirty); if (lo.untracked) parts.push('추적 안 된 파일 ' + lo.untracked); if (lo.stashes) parts.push('stash ' + lo.stashes);
+    const commits = repos.some((r) => r.local_commits != null) ? lo.local_commits : lo.ahead;
+    if (commits) parts.push('원격에 없는 커밋 ' + commits);
+    const br = repos.flatMap((r) => (r.unpushed_branches || []).map((b) => (repos.length > 1 ? r.path + ':' : '') + b));
+    if (br.length) parts.push('미푸시 브랜치 ' + br.slice(0, 4).join(', ') + (br.length > 4 ? ' 외 ' + (br.length - 4) + '개' : ''));
+    return parts.join(' · ') || '로컬 전용 작업 없음';
+  }
+  const measuredNote = (m) => 'fsmap이 이 세션의 컨테이너에서 잰 git 상태입니다(' + kst(m.a.generated_at) + ' 측정' + (m.current ? '' : ', 이후 세션이 움직였으니 다시 재면 달라질 수 있음') +
+    '). 컨테이너가 회수되거나 세션을 보관하면 사라집니다. 커밋·푸시하거나 Drive에 올린 뒤 다시 재면 이 항목이 닫힙니다.';
+  const GUESS_SCANNED_NOTE = '요약 문구는 컨테이너에만 있는 산출물을 말하지만, fsmap 측정에는 git 저장소의 로컬 전용 작업이 없습니다. 저장소 밖 파일과 gitignore된 파일은 측정 범위 밖이니 문구를 확인하세요.';
+  const unusedScanNote = (m) => m ? ' fsmap 측정(' + kst(m.a.generated_at) + ')은 ' + (m.current ? '빈틈이 있어(' + gapText(m.a) + ')' : '이후 세션이 움직여') + ' 판단에 쓰지 않았습니다.' : '';
   const isChild = (s) => !!s.parent || s.origin === 'claude_code_mcp_seed';
   const sessionUrl = (id) => 'https://claude.ai/code/' + encodeURIComponent(id);
   const inboxDocId = (key) => key.replace(/[^A-Za-z0-9_\-.~:@+]/g, '~').slice(0, 200);
@@ -495,28 +575,38 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const live = S.sessions.filter((s) => !archived(s));
     // A newer session on the same repo, created after this one last moved: the old wait was probably replaced (guess).
     const superseded = (s) => !!s.repo && ageH(s.updated) > 72 && live.some((o) => o !== s && o.repo === s.repo && Date.parse(o.created) > Date.parse(s.updated));
+    // Measured local-only work outranks the wording guess (75): it is what fsmap saw, not what a summary suggests.
+    // One item per session: other signals of the same session ride along as notes.
+    const addMeasured = (s, m, extra) => add({ key: 'volatile:' + s.id, kind: 'volatile', s, measured: true, prio: 78, detail: '[측정] ' + atlasSummary(m.a),
+      note: [measuredNote(m), ...(extra || [])].filter(Boolean).join(' '), sig: (s.updated || '') + '|' + (m.a.generated_at || '') });
     for (const s of live) {
-      const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || '';
+      const b = B(s); const hrs = ageH(s.updated); const sig = s.updated || ''; const vs = volState(s); const measured = !!vs && vs.kind === 'measured';
       if (b === 'BLOCKED' || s.needsAction || s.category === 'need_input') {
         const ask = s.needsAction || s.detail || '';
         const kind = (s.status === 'SESSION_STATUS_REQUIRES_ACTION' || APPROVAL_RX.test(ask + ' ' + (s.detail || ''))) ? 'approval' : MERGE_RX.test(s.needsAction) ? 'merge' : 'decision';
-        const sup = superseded(s); const vol = isVolatile(s);
-        const notes = [vol ? VOLATILE_NOTE : '', sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
+        const sup = superseded(s); const vol = !!vs && (vs.kind === 'measured' || vs.kind === 'guess');
+        const notes = [measured ? '[측정] ' + atlasSummary(vs.m.a) + '. ' + measuredNote(vs.m) : vs && vs.kind === 'guess' ? VOLATILE_NOTE + unusedScanNote(vs.m) : vs && vs.kind === 'guess_scanned' ? GUESS_SCANNED_NOTE : '', sup ? '같은 레포에 이 세션 이후 만든 세션이 있습니다. 대체됐을 수 있으니 답하거나 정리하세요(추정).' : (hrs > 168 ? '7일 넘게 기다리고 있습니다.' : ''),
           SETTINGS_RX.test(ask) ? '설정·권한 변경 요청이 들어 있습니다. 콘솔은 자동으로 조치하지 않습니다. 세션에서 직접 판단하세요.' : ''].filter(Boolean);
         add({ key: kind + ':' + s.id, kind, s, superseded: sup, prio: { approval: 95, merge: 90, decision: 85 }[kind] + bonus(hrs) - fade(hrs) - (sup ? 30 : 0) + (vol ? 10 : 0),
           detail: ask || '세션을 열어 무엇을 기다리는지 확인하세요.', note: notes.join(' '), sig });
         continue;
       }
-      if (b === 'FAILED') add({ key: 'failed:' + s.id, kind: 'failed', s, prio: 80, detail: s.detail || '세션을 열어 오류를 확인하세요.', sig });
+      if (b === 'FAILED') add({ key: 'failed:' + s.id, kind: 'failed', s, prio: 80, detail: s.detail || '세션을 열어 오류를 확인하세요.', note: measured ? '[측정] ' + atlasSummary(vs.m.a) + '. ' + measuredNote(vs.m) : '', sig });
       if (b === 'WORKING' && mins(s.updated) > P.stale_minutes) add({ key: 'stall:' + s.id, kind: 'stall', s, prio: 70, detail: Math.floor(mins(s.updated)) + '분째 변화 없음. ' + (s.detail || s.task || ''), note: '긴 명령 실행 중에도 갱신되는지는 아직 미확인(T4)', sig });
-      if (b === 'REVIEW_READY' && hrs > 72) add({ key: 'review_stale:' + s.id, kind: 'review_stale', s, prio: 50 + bonus(hrs) / 3, detail: s.detail || '검토를 기다립니다.', sig });
+      if (b === 'REVIEW_READY') {
+        if (measured) addMeasured(s, vs.m, [hrs > 72 ? '검토를 ' + Math.round(hrs) + '시간째 기다립니다.' : '']);
+        else if (hrs > 72) add({ key: 'review_stale:' + s.id, kind: 'review_stale', s, prio: 50 + bonus(hrs) / 3, detail: s.detail || '검토를 기다립니다.', sig });
+      }
       if (b === 'COMPLETED') {
         const hit = needsHuman(s.detail) ? s.detail : needsHuman(s.recent) ? s.recent : '';
         const unreadNote = s.unread ? ' 결과를 아직 열어 보지 않은 것으로 보입니다(unread).' : '';
-        if (isVolatile(s) && hrs <= 24 * 30) add({ key: 'volatile:' + s.id, kind: 'volatile', s, prio: 75, detail: s.recent || s.detail, note: VOLATILE_NOTE, sig });
+        const scannedNote = vs && vs.kind === 'guess_scanned' ? ' ' + GUESS_SCANNED_NOTE : '';
+        if (measured) addMeasured(s, vs.m, [hit ? '요약에 사람 몫도 있습니다: ' + hit : '', s.unread ? '결과를 아직 열어 보지 않았습니다(unread).' : '']);
+        else if (vs && vs.kind === 'guess' && hrs <= 24 * 30) add({ key: 'volatile:' + s.id, kind: 'volatile', s, prio: 75, detail: s.recent || s.detail, note: VOLATILE_NOTE + unusedScanNote(vs.m), sig });
         else if (hit) add({ key: 'followup:' + s.id, kind: 'followup', s, prio: hrs <= 24 * 14 ? 60 : 40, detail: hit,
-          note: (hrs <= 24 * 14 ? '요약 문구로 추정했습니다.' : '14일 넘게 열려 있습니다(놓친 후속 추정).') + unreadNote, sig });
-        else if (s.unread && hrs <= 24 * 14) add({ key: 'unread:' + s.id, kind: 'unread', s, prio: 55, detail: s.detail || s.recent || '끝난 세션의 결과', note: 'unread 필드로 표시했습니다(의미는 추정).', sig });
+          note: (hrs <= 24 * 14 ? '요약 문구로 추정했습니다.' : '14일 넘게 열려 있습니다(놓친 후속 추정).') + unreadNote + scannedNote, sig });
+        else if (s.unread && hrs <= 24 * 14) add({ key: 'unread:' + s.id, kind: 'unread', s, prio: 55, detail: s.detail || s.recent || '끝난 세션의 결과', note: 'unread 필드로 표시했습니다(의미는 추정).' + scannedNote, sig });
+        else if (scannedNote && hrs <= 24 * 30) add({ key: 'volatile:' + s.id, kind: 'volatile', s, prio: 50, detail: s.recent || s.detail, note: GUESS_SCANNED_NOTE, sig });
       }
       if ((s.ctxUsed || 0) >= 600000 && b !== 'COMPLETED') add({ key: 'context:' + s.id, kind: 'context', s, prio: 45, detail: '맥락 ' + compact(s.ctxUsed) + '. 인계 메모를 받아 새 세션으로 옮기는 것을 검토하세요.', sig: 'ctx' + Math.floor(s.ctxUsed / 100000) });
     }
@@ -524,9 +614,10 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     for (const s of live) if (s.repo && ['WORKING', 'BLOCKED'].includes(B(s)) && ageH(s.updated) <= 48) (byRepo[s.repo] = byRepo[s.repo] || []).push(s);
     for (const [repo, arr] of Object.entries(byRepo)) if (arr.length >= 2) add({ key: 'same_repo:' + repo, kind: 'same_repo', s: null, prio: 35, sessions: arr,
       detail: repo + '에서 ' + arr.length + '개 세션이 48시간 안에 함께 움직였습니다. 같은 브랜치·파일을 건드리는지 확인하세요.', sig: hashIds(arr) });
-    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !isVolatile(s) && !needsHuman(s.detail) && !needsHuman(s.recent));
+    const cands = live.filter((s) => B(s) === 'COMPLETED' && ageH(s.updated) > 24 * 7 && !s.unread && !atRisk(volState(s)) && !needsHuman(s.detail) && !needsHuman(s.recent));
+    const scanned = cands.filter((s) => { const v = volState(s); return v && v.kind === 'clean'; }).length;
     if (cands.length) add({ key: 'hygiene:bundle', kind: 'hygiene', s: null, prio: 10, sessions: cands, sig: hashIds(cands),
-      detail: '끝난 지 7일이 넘었고, 후속 표시가 없고, 결과를 읽은 세션 ' + cands.length + '개.',
+      detail: '끝난 지 7일이 넘었고, 후속 표시가 없고, 결과를 읽은 세션 ' + cands.length + '개.' + (scanned ? ' 그중 ' + scanned + '개는 빈틈 없는 fsmap 측정으로 git 저장소에 로컬 전용 작업이 없음을 확인했습니다(gitignore된 파일과 저장소 밖 파일은 범위 밖).' : ''),
       note: '보관하면 컨테이너가 반납되어 푸시·업로드하지 않은 파일은 사라집니다. 산출물을 확인한 뒤 보관하세요.' });
     out.sort((a, b) => b.prio - a.prio);
     return out;
@@ -670,7 +761,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     let inbox = []; safe('inbox-compute', () => { inbox = computeInbox(); }); S.inboxNow = inbox;
     safe('band', () => renderBand(alerts, inbox)); safe('notices', renderNotices); safe('diag', renderDiag); safe('tiles', () => renderTiles(alerts, inbox));
     safe('inbox', () => renderInbox(inbox)); safe('alerts', () => renderAlerts(alerts));
-    safe('sessions', () => renderSessions(alerts)); safe('trees', renderTrees); safe('triggers', renderTriggers); safe('verifs', renderVerifs); safe('audit', renderAudit); safe('policy', renderPolicy);
+    safe('sessions', () => renderSessions(alerts)); safe('trees', renderTrees); safe('triggers', renderTriggers); safe('atlas', renderAtlas); safe('verifs', renderVerifs); safe('audit', renderAudit); safe('policy', renderPolicy);
   }
   function renderBand(alerts, inbox) {
     const open = alerts.filter((a) => !a.muted && !SESSION_KINDS.has(a.kind)); const crit = open.filter((a) => a.sev === 'critical').length;
@@ -730,6 +821,9 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const followups = mine.filter((i) => i.kind === 'followup').length;
     const open = alerts.filter((a) => !a.muted);
     const enabled = S.triggers.filter((x) => x.enabled).length;
+    // A working session's local edits are work in progress; the tile counts sessions whose turn ended with work only in the container.
+    const scannedLive = live.filter((s) => atlasOf(s)); const localAll = scannedLive.filter((s) => atlasOf(s).a.local_only.volatile);
+    const localLive = localAll.filter(turnEnded).length; const localWorking = localAll.length - localLive;
     const tile = (k, v, s, cls) => h('div', { class: 'tile ' + (cls || '') }, h('span', { class: 'k', text: k }), h('span', { class: 'v', text: v }), h('span', { class: 's', text: s }));
     const ready = S.sessionsAt != null;
     t.append(
@@ -738,6 +832,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(median(waits)) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
       tile('숨은 후속', ready ? String(followups) : '—', '완료 세션에 남은 사람 몫(추정)', ''),
       tile('켜진 예약 작업', S.triggersAt != null ? String(enabled) : '—', '목록 ' + S.triggers.length + '개 중', ''),
+      tile('컨테이너에만 있는 작업', scannedLive.length ? String(localLive) : '—', scannedLive.length ? '턴이 끝난 세션 기준 · 측정 ' + scannedLive.length + '개 중' + (localWorking ? ' · 작업 중 ' + localWorking + '개 제외' : '') : '측정한 세션이 없습니다', localLive ? 'warn' : ''),
     );
   }
   // Session-level signals live in the inbox; the operational list keeps AOK tree/budget/trigger/hub signals.
@@ -880,7 +975,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         h('div', { class: 'muted', style: 'font-size:12px', text: kst(it.at) + ' · ' + (it.turns != null ? it.turns + '턴 · ' : '') + (it.ms != null ? (it.ms / 1000).toFixed(1) + '초 · ' : '') + usd(it.cost) }),
         h('pre', { class: 'pre', text: it.text }))))
         : h('div', { class: 'muted', text: '표시할 결과가 없습니다. 최신 이벤트 묶음에 결과가 없을 수 있습니다.' }))) : null;
-    return h('div', { class: 'dgrid', onclick: (ev) => ev.stopPropagation() }, info, ctrl, regBox, resBox);
+    return h('div', { class: 'dgrid', onclick: (ev) => ev.stopPropagation() }, info, ctrl, regBox, atlasBox(s), resBox);
   }
   function composer(s) {
     const id = 'msg-' + s.id; const pid = 'pri-' + s.id;
@@ -951,6 +1046,60 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   function openSession(id) {
     S.open = id; if (!S.sessions.some((s) => s.id === id && visibleSessions(computeAlerts()).includes(s))) { S.scope = 'all'; S.q = ''; $('q').value = ''; if (S.sessions.find((s) => s.id === id && archived(s))) { S.showArchived = true; $('show-archived').checked = true; } }
     renderAll(); const row = document.querySelector('tr[data-id="' + CSS.escape(id) + '"]'); if (row) row.scrollIntoView({ block: 'center' });
+  }
+
+  // ---------- workspace atlas: each session's own fsmap scan of its container (ledger atlas/<session_id>) ----------
+  const bytes = (n) => typeof n !== 'number' ? '—' : n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+  const repoSummary = (r) => atlasSummary({ local_only: r, repos: [r] });
+  function repoStrip(a) {
+    const repos = a.repos || []; const total = a.repos_total || repos.length; const more = Math.max(0, total - repos.length);
+    return h('div', { class: 'strip', role: 'img', 'aria-label': '저장소 ' + total + '개 중 컨테이너에만 있는 작업이 있는 저장소 ' + (a.local_only.repos || 0) + '개' },
+      ...repos.map((r) => h('i', { class: repoLocal(r) ? 'local' : null, title: r.path + (r.branch ? ' @' + r.branch : '') + ' — ' + (repoLocal(r) ? repoSummary(r) : '로컬 전용 작업 없음') })),
+      more ? h('span', { class: 'faint', style: 'font-size:11px', text: '+' + more }) : null);
+  }
+  function atlasBox(s) {
+    const m = atlasOf(s); if (!m) return null; const a = m.a; const t = a.totals || {}; const repos = a.repos || [];
+    const url = a.report_url && /^https:\/\/claude\.ai\//.test(a.report_url) ? a.report_url : null;
+    const findings = a.findings;
+    return h('div', { class: 'box', style: 'grid-column:1/-1' }, h('h3', { text: '작업공간 지도 (fsmap 측정)' }),
+      h('div', { class: 'muted', style: 'font-size:12px', text: kst(a.generated_at) + ' 측정' + (m.current ? '' : ' · 이후 세션이 움직였습니다') + (a.tool ? ' · ' + a.tool : '') + ' · 루트 ' + (a.root || '—') }),
+      h('div', { style: 'font-size:12.5px;margin:4px 0', text: '파일 ' + compact(t.files) + ' · ' + bytes(t.bytes) + ' · 코드 ' + compact(t.code) + '줄 · 토큰 약 ' + compact(t.tokens) }),
+      a.complete ? null : h('div', { class: 'muted', style: 'font-size:12px', text: '측정 빈틈: ' + gapText(a) + '. 깨끗하다는 근거로 쓰지 않습니다.' }),
+      repoStrip(a),
+      repos.length ? h('div', { class: 'repo-list' }, ...repos.map((r) => h('div', { class: repoLocal(r) ? 'local' : null },
+        h('div', null, h('b', { style: 'font-weight:500', text: r.path }), h('span', { class: 'muted', text: ' · ' + (r.branch || '—') + (r.upstream ? ' → ' + r.upstream : ' (업스트림 없음)') + (r.behind ? ' · 뒤처짐 ' + r.behind : '') + (r.shallow ? ' · 얕은 복제' : '') })),
+        h('div', { style: repoLocal(r) ? 'color:var(--warn)' : null, class: repoLocal(r) ? null : 'faint', text: repoLocal(r) ? '컨테이너에만: ' + repoSummary(r) : '컨테이너에만 있는 작업 없음' })))
+        , (a.repos_total || 0) > repos.length ? h('div', { class: 'faint', style: 'font-size:12px', text: '외 ' + (a.repos_total - repos.length) + '개 저장소는 기록에서 생략' }) : null) : h('div', { class: 'muted', text: '측정 범위에 git 저장소가 없습니다.' }),
+      findings.length ? h('div', { style: 'margin-top:8px' }, h('div', { class: 'muted', style: 'font-size:12px', text: 'fsmap 발견 ' + (a.findings_total || findings.length) + '건 중 상위 ' + Math.min(5, findings.length) + '건' }),
+        ...findings.slice(0, 5).map((f) => h('div', { style: 'font-size:12.5px;overflow-wrap:anywhere;margin-top:2px' }, h('span', { class: 'chip', text: f.severity }), ' ', f.title))) : null,
+      url ? h('div', { style: 'margin-top:8px' }, h('a', { href: url, target: '_blank', rel: 'noopener', text: '전체 fsmap 보고서 열기' })) : null);
+  }
+  function renderAtlas() {
+    paint('atlas-list', (root) => {
+      root.replaceChildren();
+      if (!S.db) { root.append(h('div', { class: 'empty', text: '원장을 쓸 수 없는 보기입니다.' })); return; }
+      const byId = Object.fromEntries(S.sessions.map((s) => [s.id, s]));
+      // Work only in the container of a session whose turn ended first, then in-progress work, then clean workspaces.
+      const rank = (r) => !r.a.local_only.volatile ? 0 : (r.s && !turnEnded(r.s) ? 1 : 2);
+      // A measurement of a session no longer in the list stays only for 14 days; older ones are hidden, not deleted.
+      const ghost = (r) => !r.s && !(Date.parse(r.a.generated_at || '') > Date.now() - 14 * 86400000);
+      const all = Object.entries(S.ledger.atlas).map(([id, a]) => ({ id, a, s: byId[id] || null })).filter((r) => !r.s || !archived(r.s) || S.showArchived);
+      const rows = all.filter((r) => !ghost(r)).sort((x, y) => (rank(y) - rank(x)) || ((Date.parse(y.a.generated_at || '') || 0) - (Date.parse(x.a.generated_at || '') || 0)));
+      const hidden = all.length - rows.length;
+      if (!rows.length) { root.append(h('div', { class: 'empty', text: '아직 측정한 세션이 없습니다. 세션에서 aok-atlas 스킬로 자기 컨테이너를 재어 원장에 올리면 여기에 보입니다.' + (hidden ? ' (목록 밖 오래된 측정 ' + hidden + '개 숨김)' : '') })); return; }
+      for (const { id, a, s } of rows) {
+        const t = a.totals || {}; const m = s ? atlasOf(s) : null;
+        const high = a.findings.filter((f) => f.severity === 'high').length;
+        root.append(h('div', { class: 'atlas-row' },
+          h('div', { class: 'hd' },
+            s ? h('button', { class: 't', type: 'button', onclick: () => openSession(id), text: s.title }) : h('span', { class: 's-title', text: a.label || short(id) }),
+            h('span', { class: 'when', title: kst(a.generated_at), text: ago(a.generated_at) + ' 측정' + (m && !m.current ? ' · 이후 변화' : '') + (s && archived(s) ? ' · 보관됨' : s && !turnEnded(s) ? ' · 작업 중' : '') })),
+          repoStrip(a),
+          h('div', { class: 'muted', style: 'font-size:12px', text: '저장소 ' + a.repos_total + ' · 파일 ' + compact(t.files) + ' · ' + bytes(t.bytes) + ' · 코드 ' + compact(t.code) + '줄' + (high ? ' · fsmap 높음 ' + high + '건' : '') + (a.complete ? '' : ' · 측정 빈틈') }),
+          a.local_only.volatile ? h('div', { style: 'font-size:12.5px;color:var(--warn);overflow-wrap:anywhere', text: '컨테이너에만: ' + atlasSummary(a) }) : null));
+      }
+      if (hidden) root.append(h('div', { class: 'faint', style: 'font-size:12px;margin-top:6px', text: '목록 밖 오래된 측정 ' + hidden + '개 숨김' }));
+    });
   }
 
   function renderTrees() {
@@ -1217,7 +1366,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const keep = (u) => { if (typeof u === 'function') S.ledgerUnsubs.push(u); };
     // A subscription that ends 'unavailable' recovers only by subscribing again; 'revoked' means this view lost read access (db.d.ts).
     const fail = (e) => { const code = e && e.code; dlog('ledger', { ok: false, code });
-      if (code === 'revoked' || code === 'permission_denied') { S.ledger = { ...S.ledger, trees: [], reg: {}, alerts: {}, inbox: {}, verifs: [], audit: [], trig: {} }; S.ledgerErr = code; renderAll(); return; }
+      if (code === 'revoked' || code === 'permission_denied') { S.ledger = { ...S.ledger, trees: [], reg: {}, alerts: {}, inbox: {}, verifs: [], audit: [], trig: {}, atlas: {} }; S.ledgerErr = code; renderAll(); return; }
       if (code === 'unavailable' && Date.now() > S.ledgerRetryAt) { S.ledgerRetryAt = Date.now() + 60000; setTimeout(startLedger, 2000 + Math.random() * 3000); return; }
       if (code && code !== 'unavailable') toast('원장 구독 오류(' + code + ')', 'bad'); };
     keep(db.collection('trees').onSnapshot((q) => { S.ledger.trees = q.docs.map((d) => ({ tree_id: d.id, ...d.data() })); renderAll(); }, fail));
@@ -1227,6 +1376,9 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     keep(db.collection('verifications').orderBy('at', 'desc').limit(50).onSnapshot((q) => { S.ledger.verifs = q.docs.map((d) => ({ run_id: d.id, ...d.data() })); renderAll(); }, fail));
     keep(db.collection('audit').orderBy('day', 'desc').limit(8).onSnapshot((q) => { S.ledger.audit = q.docs.map((d) => d.data()); renderAll(); }, fail));
     keep(db.collection('triggers').onSnapshot((q) => { const m = {}; for (const d of q.docs) m[d.id] = d.data(); S.ledger.trig = m; renderAll(); }, fail));
+    keep(db.collection('atlas').orderBy('generated_at', 'desc').limit(200).onSnapshot((q) => { const m = {}; let dropped = 0;
+      for (const d of q.docs) { const a = normAtlas(d.id, d.data()); if (a) m[d.id] = a; else dropped++; }
+      if (dropped) dlog('atlas', { ok: false, code: 'dropped', count: dropped }); S.ledger.atlas = m; renderAll(); }, fail));
     keep(db.doc('config/policy').onSnapshot((d) => { S.ledger.policy = d.exists ? { ...DEFAULT_POLICY, ...d.data() } : { ...DEFAULT_POLICY }; S.ledger.loaded = true; renderAll(); }, fail));
   }
 

@@ -1,6 +1,7 @@
 # Runs the repo's own checks on every pull request and on main.
 #   checks:  schema/script unit tests and the public-repo hygiene scan (stdlib only)
-#   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback)
+#   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback, fsmap measurements)
+#   atlas:   scripts/atlas_record.py against a real fsmap binary built from a pinned commit (the fsmap/1 contract)
 name: CI
 
 on:
@@ -43,3 +44,23 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
         run: python -m unittest tests.test_console_inbox -v
+
+  atlas:
+    runs-on: ubuntu-24.04
+    env:
+      # fsmap (https://github.com/d-j-lee/filesystemMap) is the workspace-atlas engine. Pinned so a change there cannot break
+      # this repo silently; bump it on purpose and let this job check the fsmap/1 contract.
+      FSMAP_REV: a80a2dfacb698484b5e4d6c3122e8f7416f0d242
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build fsmap
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable install --locked --git https://github.com/d-j-lee/filesystemMap --rev "$FSMAP_REV" fsmap --root "$RUNNER_TEMP/fsmap"
+      - name: Atlas tests with a real fsmap
+        env:
+          FSMAP: ${{ runner.temp }}/fsmap/bin/fsmap
+        run: python -m unittest tests.test_atlas -v

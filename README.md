@@ -53,6 +53,7 @@ register_repo_root(owner="d-j-lee", repo="agent-ops-kit", directory="<clone 경�
 | `/aok-cleanroom` | README·설정을 바꾼 PR, 병합 직후, 릴리스 전 |
 | `/aok-loop` | 왕복이 3회 이상 예상되는 PR |
 | `/aok-garden` | 주 1회, 또는 끝난 세션이 20개 쌓였을 때 |
+| `/aok-atlas` | 산출물을 만든 턴을 끝내기 전, 보관·인계 전. 자기 컨테이너를 fsmap으로 재서 원장 `atlas/`에 올린다 |
 
 ## 이어받기 (어느 세션이든)
 
@@ -77,17 +78,17 @@ agent-ops-kit/
 │  ├─ patterns/{brd,watchdog,cleanroom,loop,curator,budget}.md   # 기능별 런북
 │  ├─ rollout.md                   # 단계, 시험 T1–T6, KPI, 결정 D1–D9
 │  ├─ dashboard.md                 # 관제실 콘솔
-│  └─ proposals/{control-tower-v2,workspace-atlas}.md   # 제안: 모든 세션의 중간관리자·비서, 다음 과제 작업공간 지도(합의 전)
+│  └─ proposals/{control-tower-v2,workspace-atlas}.md   # 제안: 모든 세션의 중간관리자·비서(Rust 적용 §4a), 작업공간 지도(측정은 구현)
 ├─ schemas/{aok1,tree,ledger,claim,card,seed,cleanroom-report}.schema.json
-├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden}/SKILL.md
+├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden,atlas}/SKILL.md
 ├─ .claude/agents/{verifier,adjudicator}.md                      # 읽기 전용 도구
 ├─ templates/system-prompts/{child-base,dev,reviewer,cleanroom,repro-l2,watchdog,curator}.md
-├─ scripts/{sanitize_packet,harvest_events,secret_scan}.py
+├─ scripts/{sanitize_packet,harvest_events,secret_scan,atlas_record}.py   # atlas_record: fsmap 스냅숏 → 원장 atlas 레코드
 ├─ aok/budget.yaml                 # 예산 기본값(D3)
 ├─ dashboard/console.html          # 관제실 소스
 ├─ knowledge/                      # 카드·씨앗 형식과 템플릿만
 ├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/)
-├─ .github/workflows/ci.yml        # PR·main에서 시험과 공개 레포 스캔
+├─ .github/workflows/ci.yml        # PR·main에서 시험, 공개 레포 스캔, 콘솔 브라우저 시험, 고정 커밋 fsmap 계약 시험
 └─ reports/                        # 이력: 실측, 검증 기록
 ```
 
@@ -98,8 +99,8 @@ agent-ops-kit/
 | 버전 | v1.0.0 ([CHANGELOG](CHANGELOG.md)) |
 | 단계 | 1단계(기반 + 실현성 시험). **T1–T6 미실시** — 결과 전까지 ②B, ③ 야간, ⑤ 예약은 꺼 둔다 |
 | 결정 | D1(키트 위치 = 이 레포)만 확정. D2–D9는 [rollout.md §4](docs/rollout.md#4-결정-사항) |
-| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). MVP-1.2 인박스는 콘솔에 들어갔고, 나머지는 결정 D10–D18을 받은 뒤 진행한다 |
-| 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md) |
+| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). 인박스(MVP-1.3)와 작업공간 측정(Rust 적용 R1, fsmap)은 콘솔에 들어갔다. 나머지는 결정 D10–D18·D22–D24를 받은 뒤 진행한다 |
+| 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md), [콘솔 v11 런타임](reports/2026-10-30-console-v11-runtime.md), [fsmap 통합](reports/2026-10-30-atlas-fsmap.md) |
 
 ## 공개 레포 주의
 
