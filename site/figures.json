@@ -128,11 +128,11 @@
   "claim": "C-wa-tests"
  },
  "dc.edit": {
-  "text": "-42%",
+  "text": "-42~-46%",
   "claim": "C-dc-demo"
  },
  "dc.prompt": {
-  "text": "-39%",
+  "text": "-38~-39%",
   "claim": "C-dc-demo"
  },
  "trap.empty": {
