@@ -62,7 +62,8 @@ function slim(rec) {
     window.__fetched = [];
     const empty = { docs: [], exists: false, data: () => ({}) };
     const docsOf = (name) => name === 'atlas' ? { docs: Object.entries(atlas).map(([id, rec]) => ({ id, data: () => rec })) } : empty;
-    const coll = (name) => ({ onSnapshot: (cb) => { setTimeout(() => cb(docsOf(name)), 5); return () => {}; }, orderBy() { return this; }, limit() { return this; } });
+    // Collections answer later than list_sessions, so the inbox is first computed without ledger data and must be recomputed when it lands.
+    const coll = (name) => ({ onSnapshot: (cb) => { setTimeout(() => cb(docsOf(name)), 80); return () => {}; }, orderBy() { return this; }, limit() { return this; } });
     const db = { collection: coll, doc: (path) => ({ onSnapshot: (cb) => { setTimeout(() => cb(path === 'data/users/u_test/snapshot' && snap ? { exists: true, data: () => snap } : empty), 5); return () => {}; }, set: async () => {} }) };
     const mcp = {
       watchTool: (srv, tool, input, handler) => { setTimeout(() => handler({ type: 'data', result: { payload: tool === 'list_sessions' ? list : { data: [] } } }), 20); return () => {}; },
@@ -77,7 +78,10 @@ function slim(rec) {
     window.claude = { use: async (n) => (n === 'mcp' ? (snap ? null : mcp) : n === 'user' ? user : n === 'db' ? db : null) };
   }, { list, byId, snap, atlas });
   await p.goto('file://' + tmp);
-  await p.waitForFunction(() => Array.isArray(window.__inbox) && window.__inbox.length > 0, null, { timeout: 10000 });
+  // The ledger answers after the sessions (80 ms vs 20 ms here, any order in real use): with measurements, wait until the workspace card shows them,
+  // which happens in the same render that recomputes the inbox with them.
+  const measured = Object.keys(atlas).length > 0;
+  await p.waitForFunction((m) => Array.isArray(window.__inbox) && window.__inbox.length > 0 && (!m || document.querySelectorAll('#atlas-list .atlas-row').length > 0), measured, { timeout: 10000 });
   if (mode === 'slim') await p.waitForTimeout(1500);
   const inbox = await p.evaluate(() => window.__inbox); const fetched = await p.evaluate(() => window.__fetched);
   const notices = await p.$$eval('#notices .notice p', (els) => els.map((e) => e.textContent));
