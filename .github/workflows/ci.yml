@@ -25,7 +25,8 @@ jobs:
         run: python -I scripts/secret_scan.py --strict .
 
   console:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
