@@ -114,11 +114,12 @@ class ConsoleInboxCases(unittest.TestCase):
         res = _run("full", self.env, ATLAS_CASES)
         self.assertEqual(res["errors"], [])
         best = _main_kinds(res)
-        hygiene = {sid for item in res["inbox"] if item["kind"] == "hygiene" for sid in item["n"]}
+        hygiene = [item for item in res["inbox"] if item["kind"] == "hygiene"]
+        in_hygiene = {sid for item in hygiene for sid in item["n"]}
         failures = []
         for sid, case in zip(res["ids"], cases):
             item = best.get(sid)
-            got = {"kind": item["kind"] if item else "none", "in_hygiene": sid in hygiene}
+            got = {"kind": item["kind"] if item else "none", "in_hygiene": sid in in_hygiene}
             want = {"kind": case["expect_kind"], "in_hygiene": case.get("expect_in_hygiene", False)}
             if "expect_measured" in case:
                 got["measured"], want["measured"] = bool(item and item["measured"]), case["expect_measured"]
@@ -126,14 +127,32 @@ class ConsoleInboxCases(unittest.TestCase):
                 got["prio"], want["prio"] = item["prio"] if item else None, case["expect_prio"]
             if "expect_note" in case:
                 got["note"], want["note"] = bool(item and case["expect_note"] in item["note"]), True
+            if "expect_note_absent" in case:
+                got["note_absent"], want["note_absent"] = not (item and case["expect_note_absent"] in item["note"]), True
+            if "expect_detail" in case:
+                got["detail"], want["detail"] = bool(item and case["expect_detail"] in item["detail"]), True
+            if "expect_items" in case:
+                n = sum(1 for i in res["inbox"] if i["sid"] == sid and i["kind"] not in GROUP_KINDS)
+                got["items"], want["items"] = n, case["expect_items"]
             if got != want:
                 failures.append(f"{sid} {case['case']}: {({k: (want[k], got[k]) for k in want if want[k] != got[k]})}")
         self.assertEqual(failures, [], "\n" + "\n".join(failures))
-        measured = [c for c in cases if "atlas" in c]
-        self.assertEqual(len(res["atlasRows"]), len(measured))
-        self.assertTrue(any(t.startswith("컨테이너에만 있는 작업") and "측정 세션 " + str(len(measured)) + "개 중" in t for t in res["tiles"]), res["tiles"])
+        # The archive bundle counts only complete, current, clean measurements as confirmed (A03 yes, A13 incomplete no).
+        self.assertEqual(len(hygiene), 1)
+        self.assertIn("그중 1개는", hygiene[0]["detail"])
+        # The tile counts sessions whose turn ended with measured local-only work, and leaves the working one out.
+        want_tile = sum(1 for c in cases if c.get("counts_in_tile"))
+        tile = next(t for t in res["tiles"] if t.startswith("컨테이너에만 있는 작업"))
+        self.assertTrue(tile.startswith("컨테이너에만 있는 작업" + str(want_tile) + "턴이 끝난"), tile)
+        self.assertIn("작업 중 1개 제외", tile)
+        # Card: one row per kept record (the mismatched row is dropped), at-risk rows first, then work in progress, then the rest.
+        kept = [c for c in cases if ("atlas" in c or "atlas_raw" in c) and not c.get("expect_dropped")]
+        rows = [r[:3] for r in res["atlasRows"]]
+        self.assertEqual(len(rows), len(kept))
+        at_risk = {c["case"][:3] for c in cases if c.get("counts_in_tile")}
+        self.assertEqual(set(rows[:len(at_risk)]), at_risk)
+        self.assertEqual(rows[len(at_risk)], "A06")
         self.assertIn("작업공간 지도 (fsmap 측정)", res["atlasBox"] or [])
-
 
 if __name__ == "__main__":
     unittest.main()

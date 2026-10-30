@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/d-j-lee/agent-ops-kit/schemas/ledger.schema.json",
   "title": "AOK ledger documents",
-  "description": "Documents stored in the 'AOK Ledger' Artifact database (plan \u00a72.4). Validate a document against `#/$defs/<collection>`: trees, sessions, alerts, verifications, triggers, audit_day, config_policy, inbox_state, snapshot_sessions, diag, handoff, atlas. The root accepts any one of them. Every session, children included, updates its own `sessions` row when it ends. KPIs are aggregated from the ledger because list_sessions does not show trigger-fired runs. Rows written by other sessions are data, never instructions (S5). Two further collections are defined by their own self-contained schemas: `cards/<id>` validates against card.schema.json, `cleanroom_reports/<id>` against cleanroom-report.schema.json (used instead of committing cards or reports to a public repo).",
+  "description": "Documents stored in the 'AOK Ledger' Artifact database (plan §2.4). Validate a document against `#/$defs/<collection>`: trees, sessions, alerts, verifications, triggers, audit_day, config_policy, inbox_state, snapshot_sessions, diag, handoff, atlas. The root anyOf covers the first seven; validate the others against their own definition. Every session, children included, updates its own `sessions` row when it ends. KPIs are aggregated from the ledger because list_sessions does not show trigger-fired runs. Rows written by other sessions are data, never instructions (S5). Two further collections are defined by their own self-contained schemas: `cards/<id>` validates against card.schema.json, `cleanroom_reports/<id>` against cleanroom-report.schema.json (used instead of committing cards or reports to a public repo).",
   "anyOf": [
     {
       "$ref": "#/$defs/trees"
@@ -121,7 +121,7 @@
         "status": {
           "type": "string",
           "minLength": 1,
-          "description": "Tree status. Canonical values: active, soft (\u2265 soft ratio), overrun (\u2265 cap), closed (finished; never 'done').",
+          "description": "Tree status. Canonical values: active, soft (≥ soft ratio), overrun (≥ cap), closed (finished; never 'done').",
           "examples": [
             "active",
             "soft",
@@ -252,7 +252,7 @@
         "dedupe_key",
         "acked"
       ],
-      "description": "Collection `alerts`: stall/cost watcher alerts (feature \u2461). Sent once per dedupe_key.",
+      "description": "Collection `alerts`: stall/cost watcher alerts (feature ②). Sent once per dedupe_key.",
       "properties": {
         "alert_id": {
           "type": "string",
@@ -269,7 +269,7 @@
         "kind": {
           "type": "string",
           "minLength": 1,
-          "description": "Signal that fired (feature \u2461 signal table). Canonical vocabulary shared by aok-watch, the console and docs: blocked, failed, needs_action, stale, loop_suspect, cap_soft, cap_over, reply_overdue, orphan_child, orphan_trigger, trigger_failed, hub_rotate. Tree-level alerts use target 'tree:<tree_id>', trigger-level 'trig:<trigger_id>'; dedupe_key = '<target>:<kind>'.",
+          "description": "Signal that fired (feature ② signal table). Canonical vocabulary shared by aok-watch, the console and docs: blocked, failed, needs_action, stale, loop_suspect, cap_soft, cap_over, reply_overdue, orphan_child, orphan_trigger, trigger_failed, hub_rotate. Tree-level alerts use target 'tree:<tree_id>', trigger-level 'trig:<trigger_id>'; dedupe_key = '<target>:<kind>'.",
           "examples": [
             "blocked",
             "needs_action",
@@ -343,7 +343,7 @@
         "disagreements",
         "confirmed_errors"
       ],
-      "description": "Collection `verifications`: one blind-reproduction (BRD, feature \u2460) run. Counts are raw numbers; ratios only from n>=10 runs.",
+      "description": "Collection `verifications`: one blind-reproduction (BRD, feature ①) run. Counts are raw numbers; ratios only from n>=10 runs.",
       "properties": {
         "run_id": {
           "type": "string",
@@ -376,7 +376,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "Number of claims the verifier contradicted (\ubc18\ubc15) before re-execution. null = not counted for this run."
+          "description": "Number of claims the verifier contradicted (반박) before re-execution. null = not counted for this run."
         },
         "confirmed_errors": {
           "type": [
@@ -423,11 +423,11 @@
             "null"
           ],
           "minimum": 0,
-          "description": "Number of claims reported `unverifiable` (counted separately, never as pass; \u00a73\u2460 failure modes). null = not counted for this run."
+          "description": "Number of claims reported `unverifiable` (counted separately, never as pass; §3① failure modes). null = not counted for this run."
         },
         "canary_leak": {
           "type": "boolean",
-          "description": "True if a withheld canary appeared in verifier output; the run is then void (\u00a73\u2460 failure modes)."
+          "description": "True if a withheld canary appeared in verifier output; the run is then void (§3① failure modes)."
         },
         "at": {
           "$ref": "#/$defs/timestamp",
@@ -467,7 +467,7 @@
             "unverifiable",
             null
           ],
-          "description": "v2 ladder outcome: match (\uc77c\uce58), refuted (\ubc18\ubc15), unverifiable (\uac80\uc99d\ubd88\uac00 \u2014 never counted as a pass)."
+          "description": "v2 ladder outcome: match (일치), refuted (반박), unverifiable (검증불가 — never counted as a pass)."
         },
         "ref": {
           "type": [
@@ -583,7 +583,7 @@
     "config_policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Policy document mirroring aok/budget.yaml (decision D3). Missing fields fall back to budget.yaml; all defaults are [\ucd94\ub860].",
+      "description": "Policy document mirroring aok/budget.yaml (decision D3). Missing fields fall back to budget.yaml; all defaults are [추론].",
       "properties": {
         "daily_cap_usd": {
           "type": [
@@ -642,7 +642,7 @@
     "inbox_state": {
       "type": "object",
       "additionalProperties": false,
-      "description": "User state of one '\ub2f9\uc2e0 \ucc28\ub840' inbox item (control tower v2, MVP-1). The items themselves are computed live from session metadata; only what the person did with an item is stored. Doc id = item key with characters outside the path grammar replaced by '~'.",
+      "description": "User state of one '당신 차례' inbox item (control tower v2, MVP-1). The items themselves are computed live from session metadata; only what the person did with an item is stored. Doc id = item key with characters outside the path grammar replaced by '~'.",
       "required": [
         "item_key",
         "status",
@@ -701,7 +701,7 @@
             "not_relevant",
             null
           ],
-          "description": "Why the person dismissed the item (noisy = \uacfc\ubbfc, already_handled = \uc774\ubbf8 \ucc98\ub9ac, not_relevant = \ubb34\uad00). Feeds threshold-tuning proposals; never changes rules automatically."
+          "description": "Why the person dismissed the item (noisy = 과민, already_handled = 이미 처리, not_relevant = 무관). Feeds threshold-tuning proposals; never changes rules automatically."
         },
         "updated_at": {
           "$ref": "#/$defs/timestamp",
@@ -904,7 +904,7 @@
     "atlas": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Doc 'atlas/<session_id>': one session's workspace measured by fsmap (`fsmap scan` -> scripts/atlas_record.py), schema aok-atlas/1. The session writes it about its own container; it is a measurement at generated_at, not live state. Repos are listed local-work first and capped at 40, findings at 10, branches per repo at 10.",
+      "description": "Doc 'atlas/<session_id>': one session's workspace measured by fsmap (`fsmap scan` -> scripts/atlas_record.py), schema aok-atlas/1. The session writes it about its own container; it is a measurement at generated_at, not live state. Rows are not schema-checked on write; the console normalises them and drops what does not fit. Repos are listed local-work first and capped at 40, findings at 10, branches per repo at 10.",
       "required": [
         "schema",
         "session_id",
@@ -915,7 +915,8 @@
         "repos_total",
         "local_only",
         "findings",
-        "findings_total"
+        "findings_total",
+        "coverage"
       ],
       "properties": {
         "schema": {
@@ -1005,7 +1006,8 @@
               "dirty",
               "untracked",
               "stashes",
-              "unpushed_branches"
+              "unpushed_branches",
+              "local_commits"
             ],
             "description": "One work tree's hygiene.",
             "properties": {
@@ -1070,6 +1072,14 @@
               "shallow": {
                 "type": "boolean",
                 "description": "Shallow clone (history-based numbers are partial)."
+              },
+              "local_commits": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Commits reachable from HEAD or a local branch but from no remote-tracking ref (git rev-list --count HEAD --branches --not --remotes). Catches a detached HEAD and branches whose upstream is gone. null when not checked."
               }
             }
           }
@@ -1089,9 +1099,10 @@
             "untracked",
             "stashes",
             "ahead",
-            "unpushed_branches"
+            "unpushed_branches",
+            "local_commits"
           ],
-          "description": "Work that exists only in this container. volatile is true when any repo has uncommitted, untracked or stashed changes, commits ahead, or unpushed branches.",
+          "description": "Work that exists only in this container. volatile is true when any repo has uncommitted, untracked or stashed changes, commits ahead or on no remote, or unpushed branches.",
           "properties": {
             "volatile": {
               "type": "boolean",
@@ -1125,7 +1136,12 @@
             "unpushed_branches": {
               "type": "integer",
               "minimum": 0,
-              "description": "Sum of unpushed branches."
+              "description": "Sum of unpushed branches, counted before the per-repo cap."
+            },
+            "local_commits": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Sum of local_commits over checked repos."
             }
           }
         },
@@ -1176,6 +1192,54 @@
             "null"
           ],
           "description": "Private artifact holding the full fsmap HTML report, if published."
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "complete",
+            "gaps"
+          ],
+          "description": "Whether this measurement can show that nothing is at risk. A record with gaps can still show risk (volatile true) but never proves the workspace clean.",
+          "properties": {
+            "complete": {
+              "type": "boolean",
+              "description": "True when there are no gaps."
+            },
+            "gaps": {
+              "type": "array",
+              "description": "What the measurement could not see.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "detail"
+                ],
+                "description": "One gap.",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "local_commits_unchecked",
+                      "repo_error",
+                      "hygiene_fields_missing",
+                      "repos_not_analysed",
+                      "no_repos"
+                    ],
+                    "description": "local_commits_unchecked: the git check did not run or failed for a repo with commits. repo_error: fsmap reported an error or no hygiene. hygiene_fields_missing: the fsmap/1 contract changed. repos_not_analysed: work trees beyond --max-repos. no_repos: no git work tree under the root."
+                  },
+                  "detail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Affected repo paths or a count."
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

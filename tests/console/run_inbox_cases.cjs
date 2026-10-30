@@ -3,7 +3,8 @@
 //   full: list_sessions returns full records (classification test).
 //   slim: list_sessions returns the slim record (2026-10 format) and get_session returns the full one (enrichment test).
 //   snapshot: no connector in this view; the ledger holds a snapshot of the full records (fallback test).
-// A case may carry `atlas: { generated_hours_ago, repos: [...] }`; it becomes the ledger doc atlas/<session_id> (fsmap measurement) in every mode.
+// A case may carry `atlas: { generated_hours_ago, repos: [...], gaps }` or a raw row `atlas_raw`; it becomes the ledger doc atlas/<session_id>
+// (fsmap measurement) in every mode.
 // Needs the `playwright` package (NODE_PATH) and a Chromium build; tests/test_console_inbox.py skips when either is missing.
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const { chromium } = require('playwright');
@@ -24,14 +25,19 @@ function full(c, i) {
   };
 }
 function atlasRecord(c, i) {
-  const repos = (c.atlas.repos || []).map((r) => ({ path: '.', head: null, branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, untracked: 0, stashes: 0, unpushed_branches: [], shallow: false, ...r }));
-  const local = repos.filter((r) => r.dirty || r.untracked || r.stashes || r.ahead || r.unpushed_branches.length);
-  const sum = (k) => repos.reduce((a, r) => a + r[k], 0);
+  // atlas_raw: a hand-written ledger row, used as is (garbled or mismatched rows the console must survive).
+  if (c.atlas_raw) return { session_id: ids[i], ...c.atlas_raw };
+  const repos = (c.atlas.repos || []).map((r) => {
+    const x = { path: '.', head: 'abc1234', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, untracked: 0, stashes: 0, unpushed_branches: [], shallow: false, ...r };
+    return { ...x, local_commits: r.local_commits != null ? r.local_commits : x.ahead };
+  });
+  const local = repos.filter((r) => r.dirty || r.untracked || r.stashes || r.local_commits || r.unpushed_branches.length);
+  const sum = (k) => repos.reduce((a, r) => a + r[k], 0); const gaps = c.atlas.gaps || [];
   return { schema: 'aok-atlas/1', session_id: ids[i], label: null, generated_at: at(c.atlas.generated_hours_ago), tool: 'fsmap 0.1.0', root: 'user',
     totals: { files: 120, bytes: 2400000, disk: 2600000, code: 5400, tokens: 61000 }, repos, repos_total: repos.length,
     local_only: { volatile: local.length > 0, repos: local.length, dirty: sum('dirty'), untracked: sum('untracked'), stashes: sum('stashes'), ahead: sum('ahead'),
-      unpushed_branches: repos.reduce((a, r) => a + r.unpushed_branches.length, 0) },
-    findings: [{ severity: 'high', rule: 'unpushed-work', title: 'unpushed work' }], findings_total: 1, report_url: null };
+      unpushed_branches: repos.reduce((a, r) => a + r.unpushed_branches.length, 0), local_commits: sum('local_commits') },
+    coverage: { complete: gaps.length === 0, gaps }, findings: [{ severity: 'high', rule: 'unpushed-work', title: 'unpushed work' }], findings_total: 1, report_url: null };
 }
 function slim(rec) {
   const { session_context, external_metadata, ...rest } = rec;
@@ -42,7 +48,7 @@ function slim(rec) {
   const fulls = cases.map(full);
   const list = { ccr: { data: mode === 'slim' ? fulls.map(slim) : fulls, has_more: false } };
   const byId = Object.fromEntries(fulls.map((r) => [r.id, r]));
-  const atlas = Object.fromEntries(cases.map((c, i) => [i, c]).filter(([, c]) => c.atlas).map(([i, c]) => [ids[i], atlasRecord(c, Number(i))]));
+  const atlas = Object.fromEntries(cases.map((c, i) => [i, c]).filter(([, c]) => c.atlas || c.atlas_raw).map(([i, c]) => [ids[i], atlasRecord(c, Number(i))]));
   const src = fs.readFileSync(path.join(__dirname, '..', '..', 'dashboard', 'console.html'), 'utf8');
   if (!src.includes(ANCHOR)) { console.error('anchor not found in console.html: ' + ANCHOR); process.exit(3); }
   const page = src.replace(ANCHOR, ANCHOR + ' window.__inbox = inbox.map((i) => ({ kind: i.kind, prio: i.prio, sid: i.s ? i.s.id : null, note: i.note || "", superseded: !!i.superseded, measured: !!i.measured, detail: String(i.detail || ""), n: (i.sessions || []).map((x) => x.id) }));');
