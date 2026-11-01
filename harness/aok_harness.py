@@ -1045,7 +1045,7 @@ def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tupl
     not followed exactly; there the pre-push hook is what holds."""
     dirs, publishing, created, named, cur = [], [], [], [], cwd
     for raw in simple_commands(cmd) or []:
-        for w in raw[:200]:
+        for w in raw[:PATH_WORDS]:
             m = REDIRECT.match(w)
             for v in {m.group(1) if m else w, w.split("=", 1)[-1]}:
                 if v and not v.startswith("-"):
@@ -1563,6 +1563,7 @@ GIT_HOOKS_MSG = "the harness owns the git hooks (.git/hooks); leave them alone, 
 SHELL_ALIAS_MSG = ("this command defines a shell alias (alias.*=!...), which can publish where the command reading "
                    "cannot see; run the commands directly")
 ASSIGN_GIT_CONFIG = re.compile(r"GIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=")
+PATH_WORDS = 1000  # words of one simple command read as paths (a command naming more is read up to there)
 ENV_LONG = ("unset", "ignore-environment", "chdir", "split-string", "argv0", "null", "debug", "block-signal",
             "default-signal", "ignore-signal", "list-signal-handling", "help", "version")
 ENV_LONG_WITH_VALUE = {"unset", "chdir", "split-string", "argv0"}
@@ -1645,10 +1646,19 @@ def names_hook_var(w: str) -> bool:
     return any(part in w for part in HOOK_VAR_PARTS)
 
 
-def changer_operands(seg: list[str]) -> tuple[list[str], bool] | None:
+def operand_names_hook_var(a: str, nameref: bool) -> bool:
+    """For a word a variable-changing command operates on: `NAME=value` changes NAME, and its value names a variable
+    only for a nameref (declare -n r=NAME); export PATH=$PATH:/opt/CLAUDE_CODE_x/bin changes PATH."""
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", a, re.S)
+    if m and not nameref:
+        return m.group(1) in HOOK_VARS
+    return names_hook_var(a)
+
+
+def changer_operands(seg: list[str]) -> tuple[list[str], bool, bool] | None:
     """When a simple command can change a variable (a VAR_BUILTINS word, `printf -v`, or a command whose name is put
-    together by expansion, as in ${u}set): the words after it, and whether the name it changes is put together by
-    expansion (unset $v; declare -n r=$v, whose value is a name). Else None."""
+    together by expansion, as in ${u}set): the words after it, whether the name it changes is put together by
+    expansion (unset $v; declare -n r=$v, whose value is a name), and whether it makes namerefs (-n). Else None."""
     words = drop_redirections(seg)
     for k, w in enumerate(words):
         if w in VAR_BUILTINS or (w == "printf" and "-v" in words[k + 1:]):
@@ -1658,7 +1668,7 @@ def changer_operands(seg: list[str]) -> tuple[list[str], bool] | None:
         cw = command_word(seg)
         if cw is None or not re.search(r"[$`]", cw):
             return None
-        return words[words.index(cw) + 1:], True
+        return words[words.index(cw) + 1:], True, False
     nameref = any(re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", a) for a in ops)
     computed = False
     for a in ops:
@@ -1667,7 +1677,7 @@ def changer_operands(seg: list[str]) -> tuple[list[str], bool] | None:
         m = re.fullmatch(r"([^=]*)=(.*)", a, re.S)
         if re.search(r"[$`]", m.group(1) if m else a) or (nameref and m and re.search(r"[$`]", m.group(2))):
             computed = True
-    return ops, computed
+    return ops, computed, nameref
 
 
 def tamper_problem(cmd: str) -> str | None:
@@ -1694,8 +1704,8 @@ def tamper_problem(cmd: str) -> str | None:
         found = changer_operands(seg)
         if found is None:
             continue
-        operands, by_expansion = found
-        if any(names_hook_var(a) for a in operands):
+        operands, by_expansion, nameref = found
+        if any(operand_names_hook_var(a, nameref) for a in operands):
             return CLAUDECODE_MSG
         computed |= by_expansion
     if computed and any(names_hook_var(w) for seg in cmds for w in seg):

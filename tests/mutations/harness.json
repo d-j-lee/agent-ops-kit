@@ -2361,7 +2361,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a mention beside a builtin is taken for a change",
-  "old": "        if any(names_hook_var(a) for a in operands):\n",
+  "old": "        if any(operand_names_hook_var(a, nameref) for a in operands):\n",
   "new": "        if any(names_hook_var(w) for s2 in cmds for w in s2):\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
@@ -2378,5 +2378,26 @@
   "old": "VAR_BUILTINS = (\"unset\", \"export\", \"declare\", \"typeset\", \"local\", \"readonly\", \"read\", \"mapfile\", \"readarray\")\n",
   "new": "VAR_BUILTINS = (\"unset\", \"export\", \"declare\", \"typeset\", \"local\", \"readonly\")\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an assignment's value is read as a name without -n",
+  "old": "    if m and not nameref:\n        return m.group(1) in HOOK_VARS\n",
+  "new": "",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a nameref's value is not read as a name",
+  "old": "    if m and not nameref:\n",
+  "new": "    if m:\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "only the first word of a command is read as a path",
+  "old": "PATH_WORDS = 1000  #",
+  "new": "PATH_WORDS = 1  #",
+  "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
  }
 ]

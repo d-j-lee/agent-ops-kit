@@ -1068,6 +1068,7 @@ class PreBashTests(Harness):
                     "export DEBUG=1 && grep -rn CLAUDE_CODE_CHILD_SESSION harness/ > CLAUDE_CODE_CHILD_SESSION.log",
                     "export PATH=$HOME/bin:$PATH && grep -rn CLAUDECODE docs", "unset CLAUDECODE_EXTRA",
                     "export MY_CLAUDECODE_COPY=1", "read -r line < notes.txt", "printf '%s' CLAUDECODE",
+                    "export PATH=$PATH:/opt/CLAUDE_CODE_tools/bin && make",
                     "git config alias.st status", "git st",
                     "git config --unset core.hooksPath", "env FOO=1 python3 -c pass", "env -u HOME python3 -c pass"):
             self.assertIsNone(self.bash(cmd), cmd)
