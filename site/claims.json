@@ -1,0 +1,718 @@
+[
+ {
+  "id": "C-res-huang",
+  "claim": "외부 피드백 없는 자기 수정은 추론 성능을 개선하지 못했고 때로는 악화시켰다(Huang 외, 2023).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/abs/2310.01798v2"
+   }
+  ],
+  "scope": "논문의 실험 조건"
+ },
+ {
+  "id": "C-res-tyen",
+  "claim": "추론 과정의 첫 오류 위치를 찾는 정확도는 가장 좋은 모델(GPT-4)도 52.87%였고, 오류 위치를 알려 주면 스스로 고쳐 전체 성능이 올랐다(Tyen 외, 2023).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/html/2311.08516v3"
+   }
+  ],
+  "scope": "논문의 BIG-Bench Mistake 실험"
+ },
+ {
+  "id": "C-res-panickssery",
+  "claim": "LLM 평가자는 자기 출력을 알아보고 더 높게 평가했고, 알아보는 능력과 편애의 강도가 선형으로 함께 움직였다(Panickssery 외, NeurIPS 2024).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://papers.nips.cc/paper_files/paper/2024/hash/7f1f0218e45f5414c79c0679633e47bc-Abstract-Conference.html"
+   }
+  ],
+  "scope": "논문의 요약 과제 실험"
+ },
+ {
+  "id": "C-res-kim-helm",
+  "claim": "HELM 리더보드(모델 71개, 4지선다)에서 두 모델이 모두 틀린 문제의 평균 60%에서 같은 오답을 골랐다. 무작위라면 33%다(Kim 외, ICML 2025).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/abs/2506.07962v1"
+   }
+  ],
+  "scope": "HELM MMLU 결과"
+ },
+ {
+  "id": "C-res-kim-all",
+  "claim": "350개가 넘는 모델 전체에서, 크고 정확한 모델일수록 제공사와 구조가 달라도 오류가 강하게 상관됐다(Kim 외, ICML 2025).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/abs/2506.07962v1"
+   }
+  ],
+  "scope": "HELM과 HuggingFace 리더보드"
+ },
+ {
+  "id": "C-res-sharma",
+  "claim": "사용자 견해와 맞는 응답이 사람 평가에서 선호되며, 이 선호가 RLHF 모델에서 흔한 아첨의 원인 중 하나일 가능성이 높다(Sharma 외, 2023).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://www.anthropic.com/research/towards-understanding-sycophancy-in-language-models"
+   }
+  ],
+  "scope": "논문의 실험 조건"
+ },
+ {
+  "id": "C-res-swe",
+  "claim": "테스트를 통과한 AI 패치의 7.8%가 수정 파일만이 아닌 전체 개발자 테스트에서 실패했고, 표본 수동 검사로 추정한 오답 비율은 약 11%였다(ICSE 2026).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/html/2503.15223v2"
+   },
+   {
+    "kind": "url",
+    "ref": "https://openai.com/index/introducing-swe-bench-verified/"
+   }
+  ],
+  "scope": "SWE-bench Verified, 도구 3종 평균"
+ },
+ {
+  "id": "C-res-mutgen",
+  "claim": "LLM이 만든 테스트가 줄·분기 커버리지 100%인데 변이 점수는 4%인 사례가 있다(MutGen, 2025).",
+  "grade": "문서",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/html/2506.02954v6"
+   }
+  ],
+  "scope": "HumanEval-Java 사례 1건"
+ },
+ {
+  "id": "C-res-survey",
+  "claim": "2025 State of Rust 설문에서 '소속 조직이 Rust를 의미 있게 쓴다'는 응답은 48.8%였다(2023년 38.7%, 2024년 45.5%). 응답자의 가장 큰 걱정은 '업계에서 충분히 쓰이지 않는다' 42.1%와 '언어가 너무 복잡해진다' 41.6%였다.",
+  "grade": "문서",
+  "scope": "응답 7,156건. 응답자 대부분이 이미 Rust를 쓰는 사람이다",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://raw.githubusercontent.com/rust-lang/surveys/main/surveys/2025/annual-survey/report/annual-survey-2025-report.pdf"
+   },
+   {
+    "kind": "url",
+    "ref": "https://blog.rust-lang.org/2026/03/02/2025-State-Of-Rust-Survey-results"
+   },
+   {
+    "kind": "url",
+    "ref": "https://blog.rust-lang.org/2025/02/13/2024-State-Of-Rust-Survey-results/"
+   }
+  ]
+ },
+ {
+  "id": "C-res-android",
+  "claim": "구글은 안드로이드에서 Rust의 메모리 안전 취약점 밀도가 C/C++보다 약 1000배 낮고, 중대형 변경의 롤백률이 약 4배 낮으며, 코드 리뷰 시간이 약 25% 짧다고 보고했다.",
+  "grade": "문서",
+  "scope": "2025-11 발표. 1000배는 Rust 약 500만 줄의 잠재 취약점 1건을 과거 C/C++ 밀도와 비교한 추정이고, 리뷰 시간은 팀 숙련도 영향일 수 있다고 구글 스스로 적었다",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://blog.google/security/rust-in-android-move-fast-fix-things/"
+   }
+  ]
+ },
+ {
+  "id": "C-res-rustassistant",
+  "claim": "RustAssistant는 LLM과 컴파일러를 반복시켜 실제 저장소의 Rust 컴파일 오류를 최고 약 74%까지 고쳤다.",
+  "grade": "문서",
+  "scope": "GPT-4 시절. 컴파일되게 만든 비율이지 동작이 맞다는 뜻이 아니다",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://www.microsoft.com/en-us/research/wp-content/uploads/2024/08/paper.pdf"
+   }
+  ]
+ },
+ {
+  "id": "C-res-rustevo",
+  "claim": "RustEvo²에서 LLM의 정답률은 학습 시점 이전 API 56.1%, 이후 API 32.5%였고, 검색 보강이 평균 13.5%p 올렸다. 시그니처는 그대로이고 의미만 바뀐 API에서는 38.0%였다.",
+  "grade": "문서",
+  "scope": "2025-03, 당시 모델 기준",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/abs/2503.16922v1"
+   }
+  ]
+ },
+ {
+  "id": "C-res-crust",
+  "claim": "C를 safe Rust로 옮기는 CRUST-Bench에서 o3는 테스트 기반 수정 3회로 48%, 한 번에는 19%를 풀었다.",
+  "grade": "문서",
+  "scope": "2025",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://arxiv.org/html/2504.15254v3"
+   }
+  ]
+ },
+ {
+  "id": "C-res-metr",
+  "claim": "METR의 2025년 초 실험(숙련 개발자 16명, 익숙한 대형 저장소)에서 AI를 쓴 작업은 19% 더 오래 걸렸지만 참가자들은 20% 빨라졌다고 느꼈다.",
+  "grade": "문서",
+  "scope": "METR 2025-07 발표(원문). 2026-02 후속 발표로 갱신됐다",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/"
+   }
+  ]
+ },
+ {
+  "id": "C-res-metr2",
+  "claim": "METR의 2025년 하반기 후속 실험에서 같은 참가자 10명은 18%, 새 참가자 47명은 4% 빨라진 것으로 추정됐고 신뢰구간이 0을 포함한다.",
+  "grade": "문서",
+  "scope": "2026-02-24 발표",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://evals.alignment.org/blog/2026-02-24-uplift-update/"
+   }
+  ]
+ },
+ {
+  "id": "C-rounds-r1",
+  "claim": "1라운드 적대적 검증(새 서브에이전트, 코드와 공격 범위만 받음)이 Rust 작업 하네스에서 높음 4, 중간 10, 낮음 14를 찾았다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "2026-10-28~29, 하네스 1차 완성본"
+ },
+ {
+  "id": "C-rounds-r2",
+  "claim": "2라운드 회귀 재검증(1라운드와 같은 서브에이전트)에서 높음·중간 중 FIXED 9, PARTIAL 4였고, 새 문제는 중간 2와 낮음 2, 공허한 테스트는 3개였다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "2026-10-29, 1라운드 수정본"
+ },
+ {
+  "id": "C-rounds-r3",
+  "claim": "3라운드 적대적 검증(앞 라운드 발견 목록을 받지 않은 새 서브에이전트)이 높음 0, 중간 3, 낮음 5, 문서 6을 찾았다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "2026-10-29, 2라운드 수정본"
+ },
+ {
+  "id": "C-rounds-fc",
+  "claim": "가이드의 팩트체크(새 서브에이전트)가 높음 3, 중간 7을 찾았다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "2026-10-28, Rust × AI 활용 지도 초판"
+ },
+ {
+  "id": "C-rounds-r4",
+  "claim": "플레이북과 핫스팟 결과물의 적대적 검증이 높음 0, 중간 6을 찾았고, 같은 검증자의 재검증에서 중간 6건이 모두 FIXED, 새 높음·중간 0이었다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "2026-10-30"
+ },
+ {
+  "id": "C-rounds-vacuous",
+  "claim": "수정마다 만든 회귀 테스트 중 4개가, 보호하려던 코드를 지워도 통과했다(2라운드 3개, 3라운드 1개).",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "Rust 작업 하네스의 훅 회귀 테스트"
+ },
+ {
+  "id": "C-rounds-trend",
+  "claim": "새로 찾은 높음은 4 → 0 → 0, 중간은 10 → 2 → 3이었고, 2라운드에는 부분 수정 4건(높음 1, 중간 3)이 남아 있었다.",
+  "grade": "기록됨",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ],
+  "scope": "1~3라운드"
+ },
+ {
+  "id": "C-rounds-cost",
+  "claim": "검증 서브에이전트 한 번마다 작업 완료 알림에 표시된 토큰은 약 20만~26만, 실행 시간은 53분에서 약 3시간이었다.",
+  "grade": "기록됨",
+  "scope": "1~3라운드와 팩트체크 4회(4·5라운드는 시간 정의가 달라 뺐다). 작업 완료 알림 기준이라 다시 돌릴 수 없다. 토큰이 누적값인지는 미확인",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
+ },
+ {
+  "id": "C-rounds-timebox",
+  "claim": "3라운드에 한 시간 안쪽을 요청했으나 176.6분이 걸렸다.",
+  "grade": "기록됨",
+  "scope": "작업 완료 알림 기준",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
+ },
+ {
+  "id": "C-brd-pr4",
+  "claim": "이 키트의 PR #4 전체에 ① T2(L1 둘, L0 둘, 판정자)를 돌리자, 작성자 주장 15건 중 일치 9, 반박 4, 미검증 2였고 검증자만 찾은 항목이 44건이었다. 반박 4건 중 2건은 작성자 근거가 재현되지 않은 확정 오류였다.",
+  "grade": "기록됨",
+  "scope": "2026-10-31~11-01, run v-20261031-01. 판정자 보고 기준. 카나리 누출 0",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
+ },
+ {
+  "id": "C-harness-hooktests",
+  "claim": "Rust 작업 하네스의 훅 회귀 테스트는 수정 라운드를 거치며 18개 → 27개 → 30개로 늘었고, 마지막 판에서 30개가 모두 통과했다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, 출발점 세션의 하네스 사본(이 저장소에 없다). 1회차 구현은 이후 fsmap(d-j-lee/filesystemMap)에 들어갔다",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
+ },
+ {
+  "id": "C-harness-gate",
+  "claim": "Rust 작업 하네스의 전체 게이트(정책, fmt, clippy -D warnings, 테스트 15개와 doctest 2개, Python 브리지, rustdoc, cargo-deny)가 통과했다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, rustc 1.99.1, 출발점 세션의 하네스 사본",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
+ },
+ {
+  "id": "C-harness-log",
+  "claim": "하네스를 만들며 겪은 일(잠긴 PyO3 판의 API 변경, 컴파일을 통과한 누수, unsafe 설정 추론의 오류, clippy의 억제 권고, Cargo exclude의 glob, 빌드 디렉터리 공유)은 실제 빌드·실행에서 나왔다.",
+  "grade": "기록됨",
+  "scope": "2026-10-28~30, 출발점 세션. PyO3·unsafe·Cargo·린트·벤치 항목은 별도 검토 에이전트가 같은 환경에서 다시 재현했다"
+ },
+ {
+  "id": "C-bench-bridge",
+  "claim": "30만 줄 logfmt 로그의 level 집계에서 Python 루프 2.05–2.26 s, Python 정규식 1.15–1.42 s, Rust 확장 131–170 ms였다. 실행별 배율은 정규식 판 대비 7.2~9.8배, 루프 판 대비 12.0~17.2배였다.",
+  "grade": "기록됨",
+  "scope": "출발점 세션의 하네스 사본(bridges/py-logq). 실행마다 5회 중 최솟값, 6번 실행(작성 3, 독립 검토 3)의 범위. 세 구현의 결과 일치를 단언한 뒤 잼"
+ },
+ {
+  "id": "C-rmcp",
+  "claim": "공식 Rust MCP SDK인 rmcp 3.8.0이 crates.io에 있다.",
+  "grade": "확인",
+  "scope": "2026-11-01 조회",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cargo info rmcp@3.8.0"
+   },
+   {
+    "kind": "url",
+    "ref": "https://crates.io/crates/rmcp/3.8.0"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-hooks",
+  "claim": "work-atlas 훅 지연 패치(PR #1)로 번갈아 21회 잰 중앙값이 편집 훅 LANG -43.2·-46.3%, ZK -47.0·-45.3%, 프롬프트 훅 LANG -37.1·-37.6%, ZK -33.1·-40.5% 줄었고(두 번 측정), 출력은 바이트 단위로 같고 두 번째 실행에서도 같았다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, Python 3.13.18, orjson 3.13.0, work-atlas 10011b6 대 49e4fbe, diffcheck --determinism --timing 21, 비교마다 쪽별 인스턴스 사본",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/work-atlas/measure.sh  # 변수는 reports/2026-10-30-hotspots/README.md"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-hooks.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-aa",
+  "claim": "같은 원본 훅끼리 인스턴스 사본을 따로 주고 번갈아 21회 잰 A/A의 중앙값 변화는 +0.6%였다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK 편집 훅",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/work-atlas/measure.sh  # A/A 단계"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-hooks.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-history",
+  "claim": "앞선 측정에서도 편집 훅은 -42~-47%, 프롬프트 훅은 -38~-42%였다(10-30 bench-hooks.sh 21회, 10-31 diffcheck 11회 2회).",
+  "grade": "기록됨",
+  "scope": "2026-10-30~31. 원자료를 남기지 않았거나 일부만 남겼다",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-abs",
+  "claim": "같은 ZK 편집 훅의 원본 쪽 중앙값은 날과 호출 방식에 따라 143~278ms로 달랐다.",
+  "grade": "기록됨",
+  "scope": "10-30 192ms, 10-31 143~153ms(원자료 없음), 11-01 241~278ms(A/A 포함, 원자료 있음). 10-30은 python -c, 이후는 python -I -c",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-hooks.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-build",
+  "claim": "같은 기준 시각으로 지은 ZK 전체 빌드는 쌍마다 -3.8~-20.5% 줄었고(21.6~24.9초 → 18.2~22.8초, 3회씩 두 번), 모델 파일 5개는 두 번 모두 바이트 단위로 같았다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, atlas build --as-of 2026-10-29T00:00:00+00:00 --no-llm. 10-30에는 18.2~18.8초 → 14.1~14.4초였다(기록됨)",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/work-atlas/measure-build.sh"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-build.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-wa-tests",
+  "claim": "패치한 work-atlas가 테스트 277개를 통과했다(1개 skip). orjson이 있을 때와 없을 때 모두 같다.",
+  "grade": "확인",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cd $WA_CAND && python3 -m unittest discover -s tests  # work-atlas PR #1 판, 변수는 reports/2026-10-30-hotspots/README.md"
+   },
+   {
+    "kind": "url",
+    "ref": "https://github.com/d-j-lee/work-atlas/pull/1"
+   }
+  ],
+  "scope": "Python 3.13.18 로컬, PR CI는 Linux 3.11·3.13과 Windows 3.13"
+ },
+ {
+  "id": "C-trap-empty",
+  "claim": "세션 ID 하나를 고정하고 쪽마다 인스턴스 사본을 따로 주면, 첫 비교는 양쪽 306바이트로 identical이고 다시 비교하면 양쪽 0바이트라 diffcheck가 empty로 실패한다. 새 사본에서 같은 ID로 --determinism을 주면 첫 비교에서 nondeterministic으로 잡힌다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK 편집 훅",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/work-atlas/measure.sh  # trap 단계"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-hooks.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-trap-asof",
+  "claim": "work-atlas를 기준 시각 없이 두 번 빌드하면 categories.json이 as_of와 age_h_p50에서 달라진다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/work-atlas/measure-build.sh  # trap 단계"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-build.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-sim-same",
+  "claim": "Rust 질의 프로토타입은 저장한 질의 2개(LANG, ZK)에서 Python의 표준 json·orjson 판과 같은 상위 200개를 냈다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, serde_json float_roundtrip, Python round(x, 4)와 같은 반올림",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "WORK_ATLAS=$WA_CAND reports/2026-10-30-hotspots/atlas-sim/bench-sim.sh $INST/zk/data/model/text_index.json - reports/2026-10-30-hotspots/atlas-sim/queries/zk.txt 11"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-sim.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-sim-same-old",
+  "claim": "10-30에는 실제 질의 4종, 합성 다국어 질의 13종, 반올림 경계 값 13,048개 색인에서 같은 결과를 냈다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30. 합성 질의와 경계 색인은 남기지 않았다",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-sim-ulp",
+  "claim": "Rust 이식의 실수 파싱이 1 ULP 어긋나 반올림 경계 값 13,048개 중 1,159개에서 Python과 달랐고, 고친 뒤 0개가 됐다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, 독립 검증자가 만든 경계 색인",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-sim-proc",
+  "claim": "질의 1회를 프로세스 단위로 재면 Python(orjson) 대비 Rust가 LANG 197→68ms, ZK 339→166ms였다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 번갈아 11회 중앙값",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "WORK_ATLAS=$WA_CAND reports/2026-10-30-hotspots/atlas-sim/bench-sim.sh $INST/zk/data/model/text_index.json - reports/2026-10-30-hotspots/atlas-sim/queries/zk.txt 11"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-sim.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-sim-inproc",
+  "claim": "같은 프로세스 안의 색인 읽기와 질의만 비교하면 ZK 180→128ms라서, 프로세스 단위 차이 173ms 중 단계 밖에서 생긴 약 121ms(70%)는 대부분 Python 기동과 import로 본다(단계 밖에는 결과 200줄 출력과 종료도 들어 있다).",
+  "grade": "추론",
+  "scope": "C-sim-proc와 같은 실행의 단계별 시간에서 계산",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-sim.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-db-js",
+  "claim": "docbench의 jsdiff 비교가 4,334줄 문서에서 가벼운 수정 35ms, 40% 재작성 4.67초, 재배치·재작성 5.44초였고, 이 계산은 화면 스레드에서 돈다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, diff@9.0.0, Node 22.23.4. 10-30에는 19ms · 3.6초 · 4.0초였다(기록됨). 가벼운 수정 시간은 실행마다 약 19ms와 약 35ms 두 값을 오간다(3회차 검증자 재현)",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node mkcases.mjs && node bench.mjs 1000 2000 4334  # base_all.md 만드는 법(고정 커밋)은 reports/2026-10-30-hotspots/README.md"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-docbench.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-db-wasm",
+  "claim": "같은 의미로 옮긴 Rust → WASM은 JSON 왕복을 포함해 40% 재작성 0.84초, 재배치·재작성 0.57초였고, 가벼운 수정에서는 35→41ms로 오히려 느렸다. wasm 파일은 최적화 전 561KB다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, V8(Node 22.23.4). 10-30에는 0.72초 · 0.50초, 가벼운 수정 19→33ms였다(기록됨). 가벼운 수정의 배수는 측정마다 흔들린다(3회차 검증자 재현 0.96~1.83배)",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node bench-wasm.mjs target/wasm32-unknown-unknown/release/docdiff.wasm 1000 2000 4334"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-docbench.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-db-lines",
+  "claim": "WASM 이식은 더한·지운 줄 수가 9개 경우 모두, 줄 목록이 6개 경우에서 jsdiff와 같았다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 실제 문서 4,334줄로 만든 9개 경우",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node bench-wasm.mjs target/wasm32-unknown-unknown/release/docdiff.wasm 1000 2000 4334"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-docbench.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-db-highlight",
+  "claim": "낱말 강조까지 jsdiff와 같은 것은 9개 경우 중 가벼운 수정 3개뿐이었다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, 독립 검증자의 비교. 비교 스크립트를 남기지 않았다",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-db-fuzz",
+  "claim": "무작위 입력 4,000쌍에서 WASM 이식과 jsdiff는 줄 수 100%, 줄 목록 99%, 낱말 분할 86%가 같았다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, CRLF·이모지·결합 문자·빈 문자열 포함 생성기. 생성기를 남기지 않았다",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-db-caps",
+  "claim": "jsdiff의 timeout(200)·maxEditLength(1000) 옵션은 각각 약 204ms·137ms 만에 포기하고 undefined를 돌려준다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, diff@9.0.0",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node caps.mjs"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-docbench.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-tool-ruff",
+  "claim": "ruff 0.17.3이 work-atlas 16,738줄을 버그 계열 규칙(F·B·E9·PLE)으로 45~81ms(중앙값 57ms)에 검사했고 18건을 냈다.",
+  "grade": "확인",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 실행 파일 직접 21회(uvx 경유는 80~128ms, 중앙값 95ms)",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "bash reports/2026-10-30-hotspots/tooling/measure-ruff.sh"
+   },
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/logs/2026-11-01-ruff.txt"
+   }
+  ]
+ },
+ {
+  "id": "C-tool-oxlint",
+  "claim": "oxlint 1.90.0이 docbench 약 2만 1천 줄을 0.10~0.13초에 검사했고 경고 34건을 냈다. 확인된 버그는 없었다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, npx 기동 시간 제외",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/tooling/README.md"
+   }
+  ]
+ },
+ {
+  "id": "C-tool-uv",
+  "claim": "uv 0.13.6이 work-atlas 가상환경 설치를 캐시 없이 13.5→6.0초, 캐시 있을 때 6.6→1.2초로 줄였다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30, 각 1회 측정",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots/tooling/README.md"
+   }
+  ]
+ },
+ {
+  "id": "C-excluded",
+  "claim": "work-atlas 전체 빌드(LANG 6초, ZK 약 18초, 주 1회 무인), 평가(시점 1개 6.1초), 세션 기록 수집(219MB를 2.2초)은 지금 규모에서 병목이 아니다.",
+  "grade": "기록됨",
+  "scope": "2026-10-30 측정",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-hotspots.md"
+   }
+  ]
+ },
+ {
+  "id": "C-self-muts",
+  "claim": "⑦ 도구와 허브 빌드에서 변이 목록에 올린 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 33개, vacuity_check 25개, build_site 72개).",
+  "grade": "확인",
+  "scope": "이 저장소, CI의 checks 작업과 같은 검사(CI는 python -I, --jobs 4, --timeout 300). 변이 목록은 작성자가 골랐다",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_regress_tools.DiffcheckTests\" --mutations tests/mutations/diffcheck.json --jobs 4"
+   },
+   {
+    "kind": "cmd",
+    "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_regress_tools.VacuityCheckTests\" --mutations tests/mutations/vacuity_check.json --jobs 4"
+   },
+   {
+    "kind": "cmd",
+    "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_site.BuildCheckTests\" --mutations tests/mutations/build_site.json --jobs 4"
+   }
+  ]
+ }
+]

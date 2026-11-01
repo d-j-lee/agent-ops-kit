@@ -4,7 +4,7 @@ AOK는 claude.ai 클라우드 세션으로 멀티에이전트 작업을 돌릴 �
 
 ## 구성
 
-**기능 6개**
+**기능 7개**
 
 | # | 기능 | 하는 일 | 스킬 | 런북 | v1 상태 |
 |---|---|---|---|---|---|
@@ -14,6 +14,7 @@ AOK는 claude.ai 클라우드 세션으로 멀티에이전트 작업을 돌릴 �
 | ④ | 리뷰↔개발 루프 | PR을 정본으로 dev·reviewer가 최대 3라운드 왕복 | `/aok-loop` | [loop.md](docs/patterns/loop.md) | v1 |
 | ⑤ | 큐레이터 (정원사) | 세션 기록 → 카드·씨앗 → 사람 검토 → 스킬 갱신 | `/aok-garden` | [curator.md](docs/patterns/curator.md) | 수동 v1 · 예약 조건부(T1) |
 | ⑥ | 예산 가드 (트리 상한) | 허브 포함 트리 상한, 입장 검사, 허브 교대 | `/aok-delegate` | [budget.md](docs/patterns/budget.md) | v1 |
+| ⑦ | 회귀 고정 | 고친 뒤에도 전에 되던 것이 되는지. 기준 고정, 공허한 테스트 검사(음성 대조), 빈 출력·비결정성을 거르는 전후 비교(양성 대조) | `/aok-regress` | [regression.md](docs/patterns/regression.md) | v1(D25) |
 
 **공통 기반 5개**
 
@@ -54,6 +55,7 @@ register_repo_root(owner="d-j-lee", repo="agent-ops-kit", directory="<clone 경�
 | `/aok-loop` | 왕복이 3회 이상 예상되는 PR |
 | `/aok-garden` | 주 1회, 또는 끝난 세션이 20개 쌓였을 때 |
 | `/aok-atlas` | 산출물을 만든 턴을 끝내기 전, 보관·인계 전. 자기 컨테이너를 fsmap으로 재서 원장 `atlas/`에 올린다 |
+| `/aok-regress` | 버그 수정·리팩터링·이식·최적화 PR, ④의 각 라운드, 수치를 바꾼 문서 |
 
 ## 이어받기 (어느 세션이든)
 
@@ -75,20 +77,23 @@ agent-ops-kit/
 ├─ docs/
 │  ├─ architecture.md              # 규범: 원칙, 구조, 공통 기반, 전달 경로
 │  ├─ protocol-aok1.md             # 메일박스 규격과 예시
-│  ├─ patterns/{brd,watchdog,cleanroom,loop,curator,budget}.md   # 기능별 런북
-│  ├─ rollout.md                   # 단계, 시험 T1–T6, KPI, 결정 D1–D9
+│  ├─ patterns/{brd,watchdog,cleanroom,loop,curator,budget,regression}.md   # 기능별 런북
+│  ├─ rollout.md                   # 단계, 시험 T1–T6, KPI, 결정 D1–D9·D25–D29
 │  ├─ dashboard.md                 # 관제실 콘솔
-│  └─ proposals/{control-tower-v2,workspace-atlas}.md   # 제안: 모든 세션의 중간관리자·비서(Rust 적용 §4a), 작업공간 지도(측정은 구현)
+│  └─ proposals/{control-tower-v2,workspace-atlas,regression-harness-hub}.md   # 제안: 중간관리자·비서(Rust 적용 §4a), 작업공간 지도(측정은 구현), 회귀 고정·작업 레포 하네스·읽기 허브
 ├─ schemas/{aok1,tree,ledger,claim,card,seed,cleanroom-report}.schema.json
-├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden,atlas}/SKILL.md
-├─ .claude/agents/{verifier,adjudicator}.md                      # 읽기 전용 도구
+├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden,atlas,regress}/SKILL.md
+├─ .claude/agents/{verifier,adjudicator}.md                      # 읽기·실행 도구(쓰기·편집 없음)
 ├─ templates/system-prompts/{child-base,dev,reviewer,cleanroom,repro-l2,watchdog,curator}.md
 ├─ scripts/{sanitize_packet,harvest_events,secret_scan,atlas_record}.py   # atlas_record: fsmap 스냅숏 → 원장 atlas 레코드
+├─ scripts/{diffcheck,vacuity_check}.py      # ⑦ 전후 비교, 공허한 테스트 검사
+├─ scripts/build_site.py           # 읽기 허브 빌드(site/ → site/dist/)
 ├─ aok/budget.yaml                 # 예산 기본값(D3)
 ├─ dashboard/console.html          # 관제실 소스
+├─ site/                           # 읽기 허브 원본: pages, assets, 수치 레지스트리 claims.json
 ├─ knowledge/                      # 카드·씨앗 형식과 템플릿만
-├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/)
-├─ .github/workflows/ci.yml        # PR·main에서 시험, 공개 레포 스캔, 콘솔 브라우저 시험, 고정 커밋 fsmap 계약 시험
+├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/), ⑦ 변이 목록(tests/mutations/)
+├─ .github/workflows/ci.yml        # PR·main에서 시험, 공개 레포 스캔, 변이 자기 시험, 콘솔 브라우저 시험, 고정 커밋 fsmap 계약 시험
 └─ reports/                        # 이력: 실측, 검증 기록
 ```
 
@@ -98,7 +103,7 @@ agent-ops-kit/
 |---|---|
 | 버전 | v1.0.0 ([CHANGELOG](CHANGELOG.md)) |
 | 단계 | 1단계(기반 + 실현성 시험). **T1–T6 미실시** — 결과 전까지 ②B, ③ 야간, ⑤ 예약은 꺼 둔다 |
-| 결정 | D1(키트 위치 = 이 레포)만 확정. D2–D9는 [rollout.md §4](docs/rollout.md#4-결정-사항) |
+| 결정 | D1(키트 위치 = 이 레포), D25·D27–D29(회귀 고정, 읽기 허브, 수치 규칙, [문서] 등급 범위)가 확정. D2–D9는 [rollout.md §4](docs/rollout.md#4-결정-사항). D26(작업 레포 하네스)은 [제안](docs/proposals/regression-harness-hub.md) |
 | 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). 인박스(MVP-1.3)와 작업공간 측정(Rust 적용 R1, fsmap)은 콘솔에 들어갔다. 나머지는 결정 D10–D18·D22–D24를 받은 뒤 진행한다 |
 | 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md), [콘솔 v11 런타임](reports/2026-10-30-console-v11-runtime.md), [fsmap 통합](reports/2026-10-30-atlas-fsmap.md) |
 
@@ -106,4 +111,4 @@ agent-ops-kit/
 
 - 이 레포는 공개다. 세션 ID, 컨테이너 ID, 트리거 ID, 계정 UUID, 이메일, Artifact URL, 다른 세션 기록 발췌를 쓰지 않는다. `session_<id>` 같은 자리표시자를 쓴다.
 - **실제 지식 카드·씨앗·원장 데이터는 여기에 커밋하지 않는다.** 원장은 Artifact DB에, 실제 카드와 씨앗은 비공개 원장이나 비공개 레포에 둔다. `knowledge/`에는 형식과 템플릿만 있다.
-- 커밋 전 `python3 -I scripts/secret_scan.py .`
+- 커밋 전 `python3 -I scripts/secret_scan.py --strict .`

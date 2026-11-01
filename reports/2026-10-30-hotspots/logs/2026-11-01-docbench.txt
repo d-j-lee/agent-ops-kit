@@ -1,0 +1,25 @@
+# 2026-11-01T01:24:38Z 2 vCPU · node v22.23.4 · diff@9.0.0 · base_all.md 4333 newlines · sha256 acf740366394
+## node mkcases.mjs && node bench.mjs 1000 2000 4334
+ 1000 lines  light  median      8.6 ms   (+31 -31)
+ 1000 lines  heavy  median    752.5 ms   (+369 -369)
+ 1000 lines  other  median    386.9 ms   (+788 -788)
+ 2000 lines  light  median      4.3 ms   (+47 -47)
+ 2000 lines  heavy  median   1433.6 ms   (+691 -691)
+ 2000 lines  other  median   1064.1 ms   (+1534 -1534)
+ 4334 lines  light  median     35.0 ms   (+139 -139)
+ 4334 lines  heavy  median   4665.0 ms   (+1441 -1441)
+ 4334 lines  other  median   5435.1 ms   (+3420 -3419)
+## node bench-wasm.mjs docdiff.wasm 1000 2000 4334 (wasm 561403 bytes)
+ 1000 lines  light  wasm median    10.4 ms  (+31 -31)  same lines as jsdiff: true  words rejoin: true
+ 1000 lines  heavy  wasm median   184.4 ms  (+369 -369)  same lines as jsdiff: true  words rejoin: true
+ 1000 lines  other  wasm median    45.8 ms  (+788 -788)  same lines as jsdiff: false  words rejoin: true
+ 2000 lines  light  wasm median    11.9 ms  (+47 -47)  same lines as jsdiff: true  words rejoin: true
+ 2000 lines  heavy  wasm median   311.5 ms  (+691 -691)  same lines as jsdiff: true  words rejoin: true
+ 2000 lines  other  wasm median   188.4 ms  (+1534 -1534)  same lines as jsdiff: false  words rejoin: true
+ 4334 lines  light  wasm median    40.9 ms  (+139 -139)  same lines as jsdiff: true  words rejoin: true
+ 4334 lines  heavy  wasm median   842.2 ms  (+1441 -1441)  same lines as jsdiff: true  words rejoin: true
+ 4334 lines  other  wasm median   569.2 ms  (+3420 -3419)  same lines as jsdiff: false  words rejoin: true
+## node caps.mjs
+{}                     4657 ms → 2268 parts
+{"timeout":200}        204 ms → undefined (gave up)
+{"maxEditLength":1000} 137 ms → undefined (gave up)

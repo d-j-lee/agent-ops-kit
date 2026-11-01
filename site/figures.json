@@ -1,0 +1,342 @@
+{
+ "tyen.acc": {
+  "text": "52.87%",
+  "claim": "C-res-tyen"
+ },
+ "kim.helm": {
+  "text": "평균 60%",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.chance": {
+  "text": "33%",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.models": {
+  "text": "모델 71개",
+  "claim": "C-res-kim-helm"
+ },
+ "kim.all": {
+  "text": "350개가 넘는 모델",
+  "claim": "C-res-kim-all"
+ },
+ "swe.fullfail": {
+  "text": "7.8%",
+  "claim": "C-res-swe"
+ },
+ "swe.wrong": {
+  "text": "약 11%",
+  "claim": "C-res-swe"
+ },
+ "mutgen.cov": {
+  "text": "100%",
+  "claim": "C-res-mutgen"
+ },
+ "mutgen.mut": {
+  "text": "4%",
+  "claim": "C-res-mutgen"
+ },
+ "r1.counts": {
+  "text": "높음 4 · 중간 10 · 낮음 14",
+  "claim": "C-rounds-r1"
+ },
+ "r1.high": {
+  "text": "높음 4건",
+  "claim": "C-rounds-r1"
+ },
+ "r2.counts": {
+  "text": "높음·중간 중 수정 확인 9 · 부분 4 · 새 문제 중간 2 · 낮음 2 · 공허한 테스트 3",
+  "claim": "C-rounds-r2"
+ },
+ "r3.counts": {
+  "text": "높음 0 · 중간 3 · 낮음 5 · 문서 6",
+  "claim": "C-rounds-r3"
+ },
+ "fc.counts": {
+  "text": "높음 3 · 중간 7",
+  "claim": "C-rounds-fc"
+ },
+ "r4.counts": {
+  "text": "높음 0 · 중간 6",
+  "claim": "C-rounds-r4"
+ },
+ "rounds.tokens": {
+  "text": "약 20만~26만",
+  "claim": "C-rounds-cost"
+ },
+ "rounds.time": {
+  "text": "53분에서 약 3시간",
+  "claim": "C-rounds-cost"
+ },
+ "vacuous.total": {
+  "text": "4개",
+  "claim": "C-rounds-vacuous"
+ },
+ "trend.high": {
+  "text": "4 → 0 → 0",
+  "claim": "C-rounds-trend"
+ },
+ "trend.mid": {
+  "text": "10 → 2 → 3",
+  "claim": "C-rounds-trend"
+ },
+ "trend.partial": {
+  "text": "부분 수정 4건(높음 1·중간 3)",
+  "claim": "C-rounds-trend"
+ },
+ "timebox": {
+  "text": "약 3시간",
+  "claim": "C-rounds-timebox"
+ },
+ "hooktests.history": {
+  "text": "18 → 27 → 30",
+  "claim": "C-harness-hooktests"
+ },
+ "hooktests.n": {
+  "text": "훅 회귀 테스트 30개",
+  "claim": "C-harness-hooktests"
+ },
+ "gate.tests": {
+  "text": "테스트 15개와 doctest 2개",
+  "claim": "C-harness-gate"
+ },
+ "survey.2025": {
+  "text": "48.8%",
+  "claim": "C-res-survey"
+ },
+ "survey.2023": {
+  "text": "38.7%",
+  "claim": "C-res-survey"
+ },
+ "survey.2024": {
+  "text": "45.5%",
+  "claim": "C-res-survey"
+ },
+ "survey.worry.use": {
+  "text": "42.1%",
+  "claim": "C-res-survey"
+ },
+ "survey.worry.complex": {
+  "text": "41.6%",
+  "claim": "C-res-survey"
+ },
+ "android.vuln": {
+  "text": "약 1000배",
+  "claim": "C-res-android"
+ },
+ "android.rollback": {
+  "text": "약 4배",
+  "claim": "C-res-android"
+ },
+ "android.review": {
+  "text": "약 25%",
+  "claim": "C-res-android"
+ },
+ "rustassistant": {
+  "text": "약 74%",
+  "claim": "C-res-rustassistant"
+ },
+ "rustevo.before": {
+  "text": "56.1%",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.after": {
+  "text": "32.5%",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.rag": {
+  "text": "13.5%p",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.semantic": {
+  "text": "38.0%",
+  "claim": "C-res-rustevo"
+ },
+ "crust.repair": {
+  "text": "48%",
+  "claim": "C-res-crust"
+ },
+ "crust.single": {
+  "text": "19%",
+  "claim": "C-res-crust"
+ },
+ "metr.slower": {
+  "text": "19%",
+  "claim": "C-res-metr"
+ },
+ "metr.felt": {
+  "text": "20%",
+  "claim": "C-res-metr"
+ },
+ "metr2.same": {
+  "text": "18%",
+  "claim": "C-res-metr2"
+ },
+ "metr2.new": {
+  "text": "4%",
+  "claim": "C-res-metr2"
+ },
+ "bench.loop": {
+  "text": "2.05~2.26 s",
+  "claim": "C-bench-bridge"
+ },
+ "bench.re": {
+  "text": "1.15~1.42 s",
+  "claim": "C-bench-bridge"
+ },
+ "bench.rs": {
+  "text": "131~170 ms",
+  "claim": "C-bench-bridge"
+ },
+ "bench.x.re": {
+  "text": "7.2~9.8배",
+  "claim": "C-bench-bridge"
+ },
+ "bench.x.loop": {
+  "text": "12.0~17.2배",
+  "claim": "C-bench-bridge"
+ },
+ "pr4.counts": {
+  "text": "일치 9 · 반박 4 · 미검증 2",
+  "claim": "C-brd-pr4"
+ },
+ "pr4.only": {
+  "text": "44건",
+  "claim": "C-brd-pr4"
+ },
+ "pr4.wrong": {
+  "text": "확정 오류 2건",
+  "claim": "C-brd-pr4"
+ },
+ "wa.edit": {
+  "text": "-43~-47%",
+  "claim": "C-wa-hooks"
+ },
+ "wa.prompt": {
+  "text": "-33~-41%",
+  "claim": "C-wa-hooks"
+ },
+ "wa.aa": {
+  "text": "+0.6%",
+  "claim": "C-wa-aa"
+ },
+ "wa.history.edit": {
+  "text": "-42~-47%",
+  "claim": "C-wa-history"
+ },
+ "wa.history.prompt": {
+  "text": "-38~-42%",
+  "claim": "C-wa-history"
+ },
+ "wa.abs": {
+  "text": "143~278ms",
+  "claim": "C-wa-abs"
+ },
+ "wa.build": {
+  "text": "-4~-21%",
+  "claim": "C-wa-build"
+ },
+ "wa.tests": {
+  "text": "277개",
+  "claim": "C-wa-tests"
+ },
+ "trap.empty": {
+  "text": "306바이트 → 0바이트",
+  "claim": "C-trap-empty"
+ },
+ "sim.same": {
+  "text": "상위 200개",
+  "claim": "C-sim-same"
+ },
+ "sim.proc": {
+  "text": "LANG 197→68ms, ZK 339→166ms",
+  "claim": "C-sim-proc"
+ },
+ "sim.inproc": {
+  "text": "ZK 180→128ms",
+  "claim": "C-sim-inproc"
+ },
+ "sim.startup": {
+  "text": "약 121ms(70%)",
+  "claim": "C-sim-inproc"
+ },
+ "sim.ulp": {
+  "text": "13,048개 중 1,159개",
+  "claim": "C-sim-ulp"
+ },
+ "db.js.light": {
+  "text": "35ms",
+  "claim": "C-db-js"
+ },
+ "db.js": {
+  "text": "4.67~5.44초",
+  "claim": "C-db-js"
+ },
+ "db.wasm": {
+  "text": "4.67초→0.84초, 5.44초→0.57초",
+  "claim": "C-db-wasm"
+ },
+ "db.wasm.small": {
+  "text": "35→41ms",
+  "claim": "C-db-wasm"
+ },
+ "db.wasm.size": {
+  "text": "561KB",
+  "claim": "C-db-wasm"
+ },
+ "db.counts": {
+  "text": "9개 경우 모두",
+  "claim": "C-db-lines"
+ },
+ "db.lines": {
+  "text": "6개 경우",
+  "claim": "C-db-lines"
+ },
+ "db.highlight": {
+  "text": "9개 경우 중 3개",
+  "claim": "C-db-highlight"
+ },
+ "db.fuzz": {
+  "text": "줄 수 100%, 줄 목록 99%, 낱말 분할 86%",
+  "claim": "C-db-fuzz"
+ },
+ "db.caps": {
+  "text": "약 204ms·137ms",
+  "claim": "C-db-caps"
+ },
+ "tool.ruff": {
+  "text": "45~81ms",
+  "claim": "C-tool-ruff"
+ },
+ "tool.ruff.n": {
+  "text": "버그 계열 18건",
+  "claim": "C-tool-ruff"
+ },
+ "tool.oxlint": {
+  "text": "약 0.1초",
+  "claim": "C-tool-oxlint"
+ },
+ "tool.oxlint.n": {
+  "text": "34건",
+  "claim": "C-tool-oxlint"
+ },
+ "tool.uv": {
+  "text": "캐시 없이 13.5→6.0초, 캐시 있을 때 6.6→1.2초",
+  "claim": "C-tool-uv"
+ },
+ "excluded.build": {
+  "text": "LANG 6초, ZK 약 18초",
+  "claim": "C-excluded"
+ },
+ "excluded.eval": {
+  "text": "6.1초",
+  "claim": "C-excluded"
+ },
+ "excluded.harvest": {
+  "text": "219MB를 2.2초",
+  "claim": "C-excluded"
+ },
+ "self.muts": {
+  "text": "변이 130개",
+  "claim": "C-self-muts"
+ }
+}

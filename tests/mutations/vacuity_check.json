@@ -1,0 +1,177 @@
+[
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "drop the exactly-once rule",
+  "old": "    if n != 1:",
+  "new": "    if n < 1:",
+  "expect": "test_mutation_must_match_exactly_once"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "skip baseline-must-pass",
+  "old": "        if b[\"exit\"] != 0:\n            report[\"verdict\"] = \"baseline_fails\"",
+  "new": "        if False:\n            report[\"verdict\"] = \"baseline_fails\"",
+  "expect": "test_baseline_must_pass"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "never report vacuous",
+  "old": "                elif r[\"exit\"] == 0:\n                    row.update(status=\"vacuous\"",
+  "new": "                elif False:\n                    row.update(status=\"vacuous\"",
+  "expect": "test_vacuous"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "write through links out of the copy",
+  "old": "    if real != root and root not in real.parents:",
+  "new": "    if False:",
+  "expect": "test_symlink_out_of_the_copy_is_not_written"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "accept mutations that break the syntax",
+  "old": "    if real.suffix == \".py\":",
+  "new": "    if False:",
+  "expect": "test_syntax_breaking_mutation_is_invalid_not_guarded"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "count a timeout as guarded",
+  "old": "                if r[\"timeout\"]:\n                    row.update(status=\"timeout\"",
+  "new": "                if False:\n                    row.update(status=\"timeout\"",
+  "expect": "test_timeout_is_inconclusive"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "ignore expect",
+  "old": "                elif m.get(\"expect\") and not re.search(",
+  "new": "                elif False and not re.search(",
+  "expect": "test_expect_separates_the_right_failure"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "expect matched as a substring",
+  "old": "r\"(?<![\\w.])\" + re.escape(m[\"expect\"]) + r\"(?![\\w])\"",
+  "new": "re.escape(m[\"expect\"])",
+  "expect": "test_expect_is_a_whole_word"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "global expect not applied to a mutations file",
+  "old": "                         \"expect\": m.get(\"expect\", args.expect)})",
+  "new": "                         \"expect\": m.get(\"expect\")})",
+  "expect": "test_global_expect_applies_to_a_mutations_file"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "overlapping matches not counted",
+  "old": "    n = len(re.findall(b\"(?=\" + re.escape(old) + b\")\", data))",
+  "new": "    n = data.count(old)",
+  "expect": "test_overlapping_matches_count"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "copy errors are crashes",
+  "old": "    except (shutil.Error, OSError) as e:  # a socket or named pipe",
+  "new": "    except KeyError as e:  # a socket or named pipe",
+  "expect": "test_uncopyable_repository_is_a_tool_error"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "nan slips through the range test",
+  "old": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if args.timeout <= 0 or args.timeout > 86400 or args.jobs < 1:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "no timeout ceiling",
+  "old": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if not 0 < args.timeout or args.jobs < 1:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "unreadable mutations file is a traceback",
+  "old": "        except OSError as e:\n            raise UsageError(f\"cannot read mutations file {args.mutations}: {e}\") from e\n",
+  "new": "",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "vacuous before mutation_error",
+  "old": "    if statuses & ERROR_STATUSES:\n        report[\"verdict\"] = \"mutation_error\"\n    elif \"vacuous\" in statuses:\n        report[\"verdict\"] = \"vacuous\"",
+  "new": "    if \"vacuous\" in statuses:\n        report[\"verdict\"] = \"vacuous\"\n    elif statuses & ERROR_STATUSES:\n        report[\"verdict\"] = \"mutation_error\"",
+  "expect": "test_verdict_precedence"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "inconclusive before vacuous",
+  "old": "    elif \"vacuous\" in statuses:\n        report[\"verdict\"] = \"vacuous\"\n    elif statuses & INCONCLUSIVE_STATUSES:\n        report[\"verdict\"] = \"inconclusive\"",
+  "new": "    elif statuses & INCONCLUSIVE_STATUSES:\n        report[\"verdict\"] = \"inconclusive\"\n    elif \"vacuous\" in statuses:\n        report[\"verdict\"] = \"vacuous\"",
+  "expect": "test_verdict_precedence"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "--ignore not honoured",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
+  "new": "    ignore = DEFAULT_IGNORE",
+  "expect": "test_ignore_adds_to_the_defaults"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "--ignore replaces the defaults",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
+  "new": "    ignore = [n for n in given if n != \"none\"] or DEFAULT_IGNORE",
+  "expect": "test_ignore_adds_to_the_defaults"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "'none' with other names keeps the defaults",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
+  "new": "    ignore = [] if given == [\"none\"] else [n for n in given if n != \"none\"] + DEFAULT_IGNORE",
+  "expect": "test_ignore_adds_to_the_defaults"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "read the target as UTF-8 text",
+  "old": "    data = real.read_bytes()",
+  "new": "    data = real.read_text(encoding=\"utf-8\").encode()",
+  "expect": "test_any_file_encoding"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "an unrunnable test command is not a tool error",
+  "old": "    except OSError as e:\n        raise UsageError(f\"cannot run {argv[0]}: {e.strerror or e}\") from e\n",
+  "new": "",
+  "expect": "test_tool_errors_exit_2"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "report rows in completion order",
+  "old": "            report[\"mutations\"] = list(pool.map(one, range(len(muts)), muts))",
+  "new": "            futures = [pool.submit(one, i, m) for i, m in enumerate(muts)]\n            report[\"mutations\"] = [f.result() for f in reversed(futures)]",
+  "expect": "test_jobs_keep_input_order"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "mutation fields not type-checked",
+  "old": "            if not isinstance(m, dict) or not all(isinstance(m.get(k), str) for k in (\"file\", \"old\", \"new\")):\n                raise UsageError(f\"mutation #{i} needs string fields file, old, new\")\n",
+  "new": "",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "expect type not checked",
+  "old": "            if \"expect\" in m and (not isinstance(m[\"expect\"], str) or not m[\"expect\"].strip()):",
+  "new": "            if False:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "empty expect accepted",
+  "old": "            if \"expect\" in m and (not isinstance(m[\"expect\"], str) or not m[\"expect\"].strip()):",
+  "new": "            if \"expect\" in m and not isinstance(m[\"expect\"], str):",
+  "expect": "test_usage_errors"
+ }
+]

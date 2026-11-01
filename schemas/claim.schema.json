@@ -20,7 +20,7 @@
     },
     "grade": {
       "$ref": "#/$defs/grade",
-      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = verbatim tool/product documentation."
+      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = what an external primary text says (tool/product documentation, papers, official reports; D29), not that it is true."
     },
     "evidence": {
       "type": "array",
@@ -62,7 +62,7 @@
     "grade": {
       "type": "string",
       "enum": ["확인", "도출", "추론", "미확인", "기록됨", "문서"],
-      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = verbatim tool/product documentation."
+      "description": "Evidence grade: 확인 = observed/measured here (needs a re-runnable ref); 도출 = computed from graded inputs; 추론 = judgement; 미확인 = not verified; 기록됨 = recorded by another session; 문서 = what an external primary text says (tool/product documentation, papers, official reports; D29), not that it is true."
     },
     "evidence_item": {
       "type": "object",

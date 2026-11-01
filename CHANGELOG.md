@@ -23,6 +23,17 @@
   - 시험: `tests/test_atlas.py`(변환·스키마·빈틈, 실제 fsmap으로 로컬 전용 작업 종류별), `tests/console/atlas_cases.json` 19건과 변이 7종
   - CI `atlas` 잡: 고정 커밋 fsmap을 빌드해 통합 시험을 돌린다
 - 관제탑 v2 §4a Rust 적용 계획(R1 구현, R2 하네스 게이트 제안, R3 규칙 코어 씨앗)과 결정 D22–D24. 작업공간 지도 §3a 엔진 결정
+- ⑦ 회귀 고정(D25): 런북 `docs/patterns/regression.md`, 스킬 `.claude/skills/aok-regress`, 도구 두 개
+  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함, `--stderr`면 stdout과 stderr를 합쳐서)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)·정규화를 쓸 때 출력에 글자 그대로 있는 `<N>`은 실패. 양쪽의 정규화 횟수가 다르면 `differs`. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
+  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`(낱말 단위로 맞춤, 빈 문자열은 사용 오류)에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬. 읽을 수 없는 입력과 범위 밖 `--timeout`은 종료 코드 2
+  - CI 자기 시험: 변이 목록에 올린 장치를 하나씩 끈 변이 130개(diffcheck 33, vacuity_check 25, build_site 72), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
+- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): HTML 파서로 브라우저가 보이는 대로 읽어, 페이지 본문·title 속성·메타데이터의 날 측정 수치(조사가 붙어도, 엔티티·폭 없는 문자·전각으로 써도)·어떤 꼴로든 손으로 단 [확인] 배지와 등급 범례(범례는 규범 문구로 생성)·cmd·url 근거가 없는 [확인]·셸 문법에 맞지 않거나 자리표시가 든 근거 명령·git에 없는 파일이나 저장소 밖 링크·원자료(git이 추적하는 site/ 밖 파일)와 다른 발췌·근거 없는 터미널 발췌나 측정값이 든 `<pre>`([기록됨] 배지 없는 data-unverified 포함)·렌더된 글자에서도 공개 레포 금지 항목은 빌드 실패. 작성 실수를 막는 가드레일이며 의도적 우회(CSS가 만든 글자, 말로 쓴 숫자, 목록 밖 단위)는 막지 않는다. 게시 URL은 레포에 두지 않는다
+- [문서] 등급 범위(D29): 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. `docs/architecture.md`·`schemas/claim.schema.json`·verifier 정의
+- 시험: `tests/test_regress_tools.py`, `tests/test_site.py`
+- 제안서 `docs/proposals/regression-harness-hub.md`(⑦, ⑧ 작업 레포 하네스 제안 D26, 읽기 허브, 결정 D25–D29, ⑧에 넘기는 요구)
+- 이력: `reports/2026-10-30-verification-rounds.md`(독립 검증 라운드와 이 PR의 ① T2), `reports/2026-10-30-hotspots.md`와 재현 자료·원자료 `logs/`(공개 레포 핫스팟 실측, 2026-11-01 재측정. 측정 스크립트는 쪽별 인스턴스 사본, 측정 중 실패 검사, 입력 판 고정을 갖추고, 공개 로그에는 판정·수치만 남긴다)
+- `docs/patterns/brd.md` §1 ⑦과의 분담, §8 외부 근거(자기 수정, 오류 찾기, 자기 편애, 상관 오류, 아첨)
+- `.gitignore`(허브 빌드 결과, 재현 절차가 만드는 빌드 결과)
 - 관제실 콘솔 v11. 실제 런타임에서 연결이 막히던 문제를 고쳤다.
   - 연결: 내장 `permissions`로 `mcp:Claude Code Remote` 상태 확인 → 필요하면 시작 때 한 번 `request` → `callTool`로 첫 조회 → 그다음 `watchTool`. watch는 동의를 묻지 않기 때문이다
   - 오류 코드별 안내와 버튼: 연결 허용, 권한 설정 열기(`permissions.manage`), 다시 시도
@@ -49,8 +60,17 @@
 
 ### 변경
 
+- 기능 표를 7개로(⑦ 제안). ①은 결정적 비교를 ⑦로 넘긴다(`brd.md` §1, `aok-verify` T0). `brd.md` §5 상관 오류 대응에 "모델을 바꿔도 독립은 아니다"를 더했다
+- `CLAUDE.md` 문서 목록에 `regression.md`(S4: 이 변경의 병합이 사람 확인이다)
 - 관제실 "주의" 섹션을 "운영 경보"(트리·예산·예약 작업·허브 기록)로 좁히고, 세션 단위 신호는 인박스로 옮겼다
 - 판단 축을 협업 효용으로 바꿨다. "24시간 비용" 타일을 없애고 비용은 참고 수치로만 표시한다
+
+### 고침 (이 PR의 독립 검증이 찾은 기존 결함)
+
+- ③ 클린룸의 작업 트리 검사: `git diff --exit-code`는 스테이징·커밋·새 파일·ignore된 파일을 놓친다. HEAD가 시작 sha인지와 `git status --porcelain --ignored`, `git diff --stat <sha>`로 본다(`docs/patterns/cleanroom.md`, `templates/system-prompts/cleanroom.md`)
+- `docs/patterns/brd.md` §6·`aok-verify`: L1+L0+판정자 비용의 [도출] 값이 전제에서 나오지 않았다. 3개 495k–960k 토큰, 벽시계 14–22분으로 고침. 작업 완료 알림에서 온 값은 [기록됨]
+- `README.md`: 커밋 전 스캔에 `--strict`, 검증자·판정자 도구 설명(읽기·실행, 쓰기 없음)
+- `scripts/secret_scan.py`: 공유 링크 형식(`claude.ai/public/artifacts/<id>`)의 Artifact URL도 잡는다
 
 ## [1.0.0] — 2026-10-21
 

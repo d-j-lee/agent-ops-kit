@@ -1,5 +1,5 @@
 # Runs the repo's own checks on every pull request and on main.
-#   checks:  schema/script unit tests and the public-repo hygiene scan (stdlib only)
+#   checks:  schema/script/site unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
 #   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback, fsmap measurements)
 #   atlas:   scripts/atlas_record.py against a real fsmap binary built from a pinned commit (the fsmap/1 contract)
 name: CI
@@ -24,6 +24,17 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Public-repo hygiene scan
         run: python -I scripts/secret_scan.py --strict .
+      - name: Hub builds (registry and figure rules)
+        run: python -I scripts/build_site.py --check
+      - name: Tests are not vacuous (feature ⑦ self-check)
+        # each mutation switches off one documented guard; the test named in its "expect" must fail for every one
+        run: |
+          python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 300 \
+            --test "python -m unittest tests.test_regress_tools.DiffcheckTests" --mutations tests/mutations/diffcheck.json
+          python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 300 \
+            --test "python -m unittest tests.test_regress_tools.VacuityCheckTests" --mutations tests/mutations/vacuity_check.json
+          python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 300 \
+            --test "python -m unittest tests.test_site.BuildCheckTests" --mutations tests/mutations/build_site.json
 
   console:
     # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).
