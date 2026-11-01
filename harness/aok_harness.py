@@ -88,6 +88,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -903,6 +904,29 @@ def strike(root: Path, session: str, state: dict, reason: str) -> int:
                           f"Block {n} of {STRIKES}.{last}"})
 
 
+def fallback_strike(root: Path, session: str, reason: str) -> int:
+    """strike() when the session state cannot be written: the count goes to the temp directory, so the exit after
+    STRIKES blocks still holds. If that fails too, block; Claude Code's own cap on continued turns ends it."""
+    f = Path(tempfile.gettempdir()) / f"aok-harness-{hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]}" \
+        f"-{safe_id(session)}.strikes"
+    try:
+        n = int(f.read_text(encoding="utf-8") or 0) + 1 if f.is_file() else 1
+    except (OSError, ValueError):
+        n = 1
+    try:
+        if n > STRIKES:
+            f.unlink(missing_ok=True)
+            return say({"systemMessage": f"[aok-harness] the gate did NOT pass after {STRIKES} blocked attempts; the "
+                                         f"turn ends so the session can report. Last result:\n{reason}"})
+        f.write_text(str(n), encoding="utf-8")
+    except OSError:
+        n = 0
+    last = " This is the last block: report what still fails and end the turn; that end is let through." \
+        if n == STRIKES else ""
+    return say({"decision": "block", "reason": f"[aok-harness] {reason}. Report this.\n\n" +
+                (f"Block {n} of {STRIKES}.{last}" if n else "The block count cannot be kept either.")})
+
+
 def on_prompt(root: Path, payload: dict, session: str) -> int:
     state = load_state(root, session)
     if state.get("strikes"):
@@ -1179,8 +1203,9 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
     dirty = dirty_paths(root)
     if dirty:
         return deny(f"there are uncommitted changes ({', '.join(dirty[:5])}{', ...' if len(dirty) > 5 else ''}), so the "
-                    "gate would check a different tree than the commit being pushed. Commit them (or remove them, or "
-                    "ignore files a check leaves behind) in one command, then push in another")
+                    "gate would check a different tree than the commit being pushed. Commit them (or remove them; a "
+                    "file a check leaves behind can be ignored, but the gate also sees ignored files the commit lacks, "
+                    "so CI on a clean checkout stays the check of record) in one command, then push in another")
     fp = fingerprint(root, cfg_text)
     if fp is not None and fp == state.get("last_pass"):
         record_passed(root)
@@ -1241,9 +1266,8 @@ def hook(event: str) -> int:
         if event == "stop":
             try:
                 return strike(root, session, load_state(root, session), f"the harness crashed: {e!r:.300}")
-            except Exception as e2:  # noqa: BLE001 — even the strike count is broken: block; Claude Code's cap ends it
-                return say({"decision": "block", "reason": f"[aok-harness] the harness crashed ({e!r:.200}; "
-                                                           f"{e2!r:.200}); the gate did not run. Report this."})
+            except Exception as e2:  # noqa: BLE001 — the state cannot be written: count the blocks elsewhere
+                return fallback_strike(root, session, f"the harness crashed ({e!r:.200}; {e2!r:.200}); the gate did not run")
         return notice(f"{event} hook crashed: {e!r:.300}")
 
 

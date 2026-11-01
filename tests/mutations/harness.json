@@ -359,15 +359,15 @@
  {
   "file": "harness/aok_harness.py",
   "label": "never released",
-  "old": "    if n > STRIKES:",
-  "new": "    if False:",
+  "old": "    if n > STRIKES:\n        state[\"strikes\"] = 0",
+  "new": "    if False:\n        state[\"strikes\"] = 0",
   "expect": "test_three_blocks_then_released_and_prompt_resets"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "released one block early",
-  "old": "    if n > STRIKES:",
-  "new": "    if n >= STRIKES:",
+  "old": "    if n > STRIKES:\n        state[\"strikes\"] = 0",
+  "new": "    if n >= STRIKES:\n        state[\"strikes\"] = 0",
   "expect": "test_three_blocks_then_released_and_prompt_resets"
  },
  {
@@ -683,13 +683,6 @@
   "label": "a crash at stop lets the turn end",
   "old": "                return strike(root, session, load_state(root, session), f\"the harness crashed: {e!r:.300}\")",
   "new": "                return 0",
-  "expect": "test_a_crash_is_reported_not_passed"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "a crash while striking lets the turn end",
-  "old": "                return say({\"decision\": \"block\", \"reason\": f\"[aok-harness] the harness crashed ({e!r:.200}; \"",
-  "new": "                return 0 and say({\"decision\": \"block\", \"reason\": f\"[aok-harness] the harness crashed ({e!r:.200}; \"",
   "expect": "test_a_crash_is_reported_not_passed"
  },
  {
@@ -1531,5 +1524,26 @@
   "old": "      {\"name\": \"clippy\", \"cmd\": [\"cargo\", \"clippy\", \"--all-targets\", \"--quiet\", \"--\", \"-D\", \"warnings\"]},\n      {\"name\": \"test\", \"cmd\": [\"cargo\", \"test\", \"--quiet\"]}\n    ],\n    \"full\"",
   "new": "      {\"name\": \"clippy\", \"cmd\": [\"cargo\", \"clippy\", \"--all-targets\", \"--quiet\"]},\n      {\"name\": \"test\", \"cmd\": [\"cargo\", \"test\", \"--quiet\"]}\n    ],\n    \"full\"",
   "expect": "test_rust_quick_gate_checks_format_and_denies_warnings"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the fallback count is not kept",
+  "old": "        n = int(f.read_text(encoding=\"utf-8\") or 0) + 1 if f.is_file() else 1\n",
+  "new": "        n = 1\n",
+  "expect": "test_a_crash_is_reported_not_passed"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the fallback count never lets go",
+  "old": "        if n > STRIKES:\n            f.unlink(missing_ok=True)\n",
+  "new": "        if False:\n            f.unlink(missing_ok=True)\n",
+  "expect": "test_a_crash_is_reported_not_passed"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a crash while striking lets the turn end",
+  "old": "                return fallback_strike(root, session, f\"the harness crashed ({e!r:.200}; {e2!r:.200}); the gate did not run\")\n",
+  "new": "                return 0\n",
+  "expect": "test_a_crash_is_reported_not_passed"
  }
 ]

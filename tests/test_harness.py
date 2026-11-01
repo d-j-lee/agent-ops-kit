@@ -671,6 +671,12 @@ class StopTests(Harness):
         out = self.stop()
         self.assertTrue(self.blocked(out))
         self.assertIn("the gate did not run", out["reason"])
+        self.assertIn("Block 1 of 3.", out["reason"])  # counted elsewhere, so the exit still comes
+        self.assertIn("Block 2 of 3.", self.stop()["reason"])
+        self.assertIn("This is the last block", self.stop()["reason"])
+        out = self.stop()
+        self.assertNotIn("decision", out)
+        self.assertIn("did NOT pass after 3 blocked attempts", out["systemMessage"])
 
 
 class PreBashTests(Harness):
