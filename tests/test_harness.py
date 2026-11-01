@@ -644,7 +644,14 @@ class StopTests(Harness):
         self.stub("ruff", "exit 0\n")
         self.start()
         self.write("pkg/__init__.py", ADD_OK + "\n")
-        self.assertIsNone(self.hook("stop", {}, extra_env={n: str(self.repo / ".git") for n in names}))
+        # values that name this same repo, so git works whether or not they leak (how git reads a wrong value
+        # differs by version); only the step's view of its environment tells the two apart
+        git_dir = self.repo / ".git"
+        same = {"GIT_DIR": git_dir, "GIT_WORK_TREE": self.repo, "GIT_INDEX_FILE": git_dir / "index",
+                "GIT_OBJECT_DIRECTORY": git_dir / "objects", "GIT_ALTERNATE_OBJECT_DIRECTORIES": git_dir / "objects",
+                "GIT_COMMON_DIR": git_dir, "GIT_NAMESPACE": ""}
+        self.assertEqual(set(same), set(names))
+        self.assertIsNone(self.hook("stop", {}, extra_env={n: str(v) for n, v in same.items()}))
 
     def test_without_git_the_gate_runs_every_time(self):
         self.python_repo(commit=False)
