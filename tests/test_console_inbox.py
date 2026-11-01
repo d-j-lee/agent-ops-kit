@@ -109,6 +109,24 @@ class ConsoleInboxCases(unittest.TestCase):
         self.assertEqual({k: v["kind"] for k, v in full_best.items()}, {k: v["kind"] for k, v in snap_best.items()})
 
 
+    def test_policy_refusal_shows_ledger_todo_not_snapshot(self):
+        res = _run("policy", self.env)
+        self.assertEqual(res["errors"], [])
+        # Connector data is withdrawn on an authorization refusal: no live list, and the viewer's snapshot stays hidden.
+        self.assertEqual(res["sessionRows"], 0)
+        self.assertEqual(res["inbox"], [])
+        self.assertFalse(any("스냅숏" in n for n in res["notices"]), res["notices"])
+        self.assertTrue(any("blocked_by_policy" in n and "PC" in n for n in res["notices"]), res["notices"])
+        # What sessions left for the person in the ledger shows instead: user items high first, then decisions; other owners and bad rows are left out.
+        todo = res["ledgerTodo"]
+        self.assertEqual(len(todo), 3, todo)
+        self.assertIn("high item for the person", todo[0])
+        self.assertIn("low item for the person", todo[1])
+        self.assertIn("D99", todo[2])
+        self.assertFalse(any("any session" in x for x in todo))
+        tile = next(t for t in res["tiles"] if t.startswith("당신 차례"))
+        self.assertTrue(tile.startswith("당신 차례3원장에 남은 사람 몫"), tile)
+
     def test_atlas_measurements(self):
         cases = json.loads(ATLAS_CASES.read_text(encoding="utf-8"))
         res = _run("full", self.env, ATLAS_CASES)
