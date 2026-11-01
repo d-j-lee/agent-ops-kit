@@ -208,19 +208,19 @@
   "claim": "C-brd-pr4"
  },
  "wa.edit": {
-  "text": "-44~-46%",
+  "text": "-43~-47%",
   "claim": "C-wa-hooks"
  },
  "wa.prompt": {
-  "text": "-37~-41%",
+  "text": "-33~-41%",
   "claim": "C-wa-hooks"
  },
  "wa.aa": {
-  "text": "-0.5%",
+  "text": "+0.6%",
   "claim": "C-wa-aa"
  },
  "wa.history.edit": {
-  "text": "-43~-47%",
+  "text": "-42~-47%",
   "claim": "C-wa-history"
  },
  "wa.history.prompt": {
@@ -228,7 +228,7 @@
   "claim": "C-wa-history"
  },
  "wa.abs": {
-  "text": "143~274ms",
+  "text": "143~278ms",
   "claim": "C-wa-abs"
  },
  "wa.build": {
@@ -248,15 +248,15 @@
   "claim": "C-sim-same"
  },
  "sim.proc": {
-  "text": "LANG 242→79ms, ZK 402→176ms",
+  "text": "LANG 197→68ms, ZK 339→166ms",
   "claim": "C-sim-proc"
  },
  "sim.inproc": {
-  "text": "ZK 197→136ms",
+  "text": "ZK 180→128ms",
   "claim": "C-sim-inproc"
  },
  "sim.startup": {
-  "text": "약 165ms(73%)",
+  "text": "약 121ms(70%)",
   "claim": "C-sim-inproc"
  },
  "sim.ulp": {
@@ -304,7 +304,7 @@
   "claim": "C-db-caps"
  },
  "tool.ruff": {
-  "text": "44~62ms",
+  "text": "45~81ms",
   "claim": "C-tool-ruff"
  },
  "tool.ruff.n": {
@@ -336,7 +336,7 @@
   "claim": "C-excluded"
  },
  "self.muts": {
-  "text": "변이 64개",
+  "text": "변이 104개",
   "claim": "C-self-muts"
  }
 }

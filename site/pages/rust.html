@@ -26,19 +26,14 @@ description: AI 에이전트와 Rust를 함께 쓰는 근거, 작업 하네스, 
       <h1>Rust × AI 활용 지도</h1>
       <p class="lede">AI 덕분에 코드를 쓰는 비용은 크게 낮아졌고, 남는 비용은 그 코드가 맞는지 확인하는 쪽으로 옮겨가고 있습니다 <span class="g g-inf">추론</span>. Rust는 그 확인의 큰 부분을 컴파일러가 강제하는 언어입니다. 그래서 둘의 조합은 "Rust 배우기가 쉬워졌다"보다 "검증 비용이 싸지는 개발 방식"으로 볼 때 실익이 큽니다.</p>
       <figure>
-<pre class="term"><span class="dim">$ # 모의 PostToolUse 입력(count.rs 편집)으로 하네스의 편집 직후 훅을 실행</span>
+<pre class="term" data-unverified><span class="dim">$ # 모의 PostToolUse 입력(count.rs 편집)으로 하네스의 편집 직후 훅을 실행</span>
 cargo check failed after editing crates/logq-core/src/count.rs:
 crates/logq-core/src/count.rs:38:40: <span class="err">error[E0277]</span>: cannot add-assign `&amp;str` to `u64`: no implementation for `u64 += &amp;str`
 <span class="dim">exit 2   # Claude Code는 이 stderr를 에이전트에게 그대로 전달한다</span></pre>
         <figcaption>출발점 세션에서 캡처한 출력입니다 <span class="g g-rec">기록됨</span>. 일부러 넣은 타입 오류가 파일·줄 위치와 함께 돌아왔습니다. 하네스 사본이 이 저장소에 없어 원자료와 대조하지는 않습니다. 실제 Claude Code 세션 안에서의 동작은 아직 확인하지 않았습니다.</figcaption>
       </figure>
-      <ul class="legend" aria-label="근거 표기">
-        <li><span class="g g-ok">확인</span> 직접 실행·측정. 다시 실행하거나 조회할 수 있는 근거(ref)가 있다</li>
-        <li><span class="g g-rec">기록됨</span> 출발점 세션(2026-10-28~30)의 기록. 그때의 하네스 사본은 이 저장소에 없다</li>
-        <li><span class="g g-doc">문서</span> 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음</li>
-        <li><span class="g g-inf">추론</span> 판단이 들어감</li>
-        <li><span class="g g-unk">미확인</span> 확인하지 못함</li>
-      </ul>
+      {{legend:all}}
+      <p class="small muted">이 페이지의 [기록됨]은 대부분 출발점 세션(2026-10-28~30)의 기록입니다. 그때의 하네스 사본은 이 저장소에 없습니다.</p>
       <nav class="toc-mobile" aria-label="목차">
         <ol>
           <li><a href="#thesis">핵심 판단</a></li>

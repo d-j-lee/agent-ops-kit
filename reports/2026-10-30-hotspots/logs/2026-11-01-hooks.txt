@@ -1,76 +1,77 @@
-# 2026-11-01T01:13:52Z x86_64 2 vCPU · python 3.13.18 orjson 3.13.0
-# base 10011b6 · cand 49e4fbe · N=21
+# 2026-11-01T02:41:11Z x86_64 2 vCPU · python 3.13.18 orjson 3.13.0
+# base 10011b6 · cand 49e4fbe · N=21 · 쪽별 인스턴스 사본 · diff 머리는 이 로그에서 뺐다
 ## lang edit run 1: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 285 bytes
 cand: exit 0 · 285 bytes
-timing (interleaved, n=21): base median 244.6 ms [216.9–291.9] · cand median 135.1 ms [116.0–155.7] · -44.8%
+timing (interleaved, n=21): base median 240.1 ms [210.0–301.7] · cand median 136.4 ms [113.3–204.3] · -43.2%
 ## lang edit run 2: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 285 bytes
 cand: exit 0 · 285 bytes
-timing (interleaved, n=21): base median 254.5 ms [216.9–308.4] · cand median 137.1 ms [122.4–212.1] · -46.1%
+timing (interleaved, n=21): base median 245.9 ms [216.3–400.2] · cand median 132.0 ms [117.6–205.5] · -46.3%
 ## lang prompt run 1: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 1684 bytes
 cand: exit 0 · 1684 bytes
-timing (interleaved, n=21): base median 453.9 ms [409.0–601.2] · cand median 269.8 ms [251.2–360.7] · -40.6%
+timing (interleaved, n=21): base median 473.5 ms [423.7–755.3] · cand median 297.9 ms [236.5–468.9] · -37.1%
 ## lang prompt run 2: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 1684 bytes
 cand: exit 0 · 1684 bytes
-timing (interleaved, n=21): base median 463.4 ms [420.0–678.9] · cand median 290.3 ms [252.2–410.3] · -37.4%
+timing (interleaved, n=21): base median 451.7 ms [401.4–589.8] · cand median 281.9 ms [235.4–504.6] · -37.6%
 ## zk edit run 1: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 306 bytes
 cand: exit 0 · 306 bytes
-timing (interleaved, n=21): base median 273.7 ms [238.5–417.5] · cand median 153.9 ms [129.6–216.1] · -43.8%
+timing (interleaved, n=21): base median 277.7 ms [222.1–412.8] · cand median 147.3 ms [123.8–220.8] · -47.0%
 ## zk edit run 2: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 306 bytes
 cand: exit 0 · 306 bytes
-timing (interleaved, n=21): base median 254.6 ms [229.3–343.2] · cand median 139.7 ms [120.3–180.6] · -45.1%
+timing (interleaved, n=21): base median 267.7 ms [221.0–363.2] · cand median 146.5 ms [124.1–221.3] · -45.3%
 ## zk prompt run 1: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 2024 bytes
 cand: exit 0 · 2024 bytes
-timing (interleaved, n=21): base median 877.0 ms [778.8–974.3] · cand median 549.2 ms [494.9–739.1] · -37.4%
+timing (interleaved, n=21): base median 844.7 ms [762.0–996.7] · cand median 565.4 ms [490.3–759.9] · -33.1%
 ## zk prompt run 2: diffcheck --determinism --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 2024 bytes
 cand: exit 0 · 2024 bytes
-timing (interleaved, n=21): base median 832.4 ms [763.1–1014.6] · cand median 520.2 ms [482.4–612.3] · -37.5%
-## zk edit A/A (base vs base): noise floor, diffcheck --timing 21
+timing (interleaved, n=21): base median 943.2 ms [795.2–1176.9] · cand median 561.4 ms [510.6–879.8] · -40.5%
+## zk edit A/A (base vs base, separate copies): noise floor, diffcheck --timing 21
 verdict: identical
 compared: exit, stdout
 base: exit 0 · 306 bytes
 cand: exit 0 · 306 bytes
-timing (interleaved, n=21): base median 249.5 ms [206.2–394.5] · cand median 248.3 ms [202.2–333.5] · -0.5%
-## trap: one fixed session id for both sides (no {nonce})
-### run 1
-verdict: empty
+timing (interleaved, n=21): base median 240.5 ms [217.1–340.1] · cand median 241.8 ms [221.7–327.4] · +0.6%
+## trap: one fixed session id (no {nonce}), separate copies per side
+### run 1: diffcheck
+verdict: identical
 compared: exit, stdout
 base: exit 0 · 306 bytes
-cand: exit 0 · 0 bytes
-problem: empty output: cand printed nothing or only whitespace
-  --- base stdout
-  +++ cand stdout
-  @@ -1 +1 @@
-  -{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "[work-atlas] `zookeeper-server/src/main/java/org/apache/zookeeper/server/quorum/Leader.java`\n- 결함 수정이 몰려 온 파일이다(high): 수정 41건/변경 88건. 경계 조건·회귀 테스트를 한 번 더 본다."}}
-  +
-### run 2
+cand: exit 0 · 306 bytes
+### run 2: diffcheck
 verdict: empty
 compared: exit, stdout
 base: exit 0 · 0 bytes
 cand: exit 0 · 0 bytes
 problem: empty output: base printed nothing or only whitespace
 problem: empty output: cand printed nothing or only whitespace
-# done 2026-11-01T01:16:24Z
+### run 3: fresh copies, the same fixed id, diffcheck --determinism
+verdict: nondeterministic
+compared: exit, stdout
+base: exit 0 · 306 bytes
+cand: exit 0 · 306 bytes
+problem: base is nondeterministic (second run differs in stdout)
+problem: cand is nondeterministic (second run differs in stdout)
+# done 2026-11-01T02:43:53Z

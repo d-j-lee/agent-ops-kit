@@ -171,11 +171,11 @@
   "id": "C-res-metr",
   "claim": "METR의 2025년 초 실험(숙련 개발자 16명, 익숙한 대형 저장소)에서 AI를 쓴 작업은 19% 더 오래 걸렸지만 참가자들은 20% 빨라졌다고 느꼈다.",
   "grade": "문서",
-  "scope": "원 연구 2025-07",
+  "scope": "METR 2025-07 발표(원문). 2026-02 후속 발표로 갱신됐다",
   "evidence": [
    {
     "kind": "url",
-    "ref": "https://getdx.com/blog/metr-study-on-how-ai-affects-developer-productivity/"
+    "ref": "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/"
    }
   ]
  },
@@ -365,9 +365,9 @@
  },
  {
   "id": "C-wa-hooks",
-  "claim": "work-atlas 훅 지연 패치(PR #1)로 번갈아 21회 잰 중앙값이 편집 훅 LANG -44.8·-46.1%, ZK -43.8·-45.1%, 프롬프트 훅 LANG -40.6·-37.4%, ZK -37.4·-37.5% 줄었고(두 번 측정), 출력은 바이트 단위로 같고 두 번째 실행에서도 같았다.",
+  "claim": "work-atlas 훅 지연 패치(PR #1)로 번갈아 21회 잰 중앙값이 편집 훅 LANG -43.2·-46.3%, ZK -47.0·-45.3%, 프롬프트 훅 LANG -37.1·-37.6%, ZK -33.1·-40.5% 줄었고(두 번 측정), 출력은 바이트 단위로 같고 두 번째 실행에서도 같았다.",
   "grade": "확인",
-  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, Python 3.13.18, orjson 3.13.0, work-atlas 10011b6 대 49e4fbe, diffcheck --determinism --timing 21",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, Python 3.13.18, orjson 3.13.0, work-atlas 10011b6 대 49e4fbe, diffcheck --determinism --timing 21, 비교마다 쪽별 인스턴스 사본",
   "evidence": [
    {
     "kind": "cmd",
@@ -381,7 +381,7 @@
  },
  {
   "id": "C-wa-aa",
-  "claim": "같은 원본 훅끼리 번갈아 21회 잰 A/A의 중앙값 변화는 -0.5%였다.",
+  "claim": "같은 원본 훅끼리 인스턴스 사본을 따로 주고 번갈아 21회 잰 A/A의 중앙값 변화는 +0.6%였다.",
   "grade": "확인",
   "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK 편집 훅",
   "evidence": [
@@ -397,7 +397,7 @@
  },
  {
   "id": "C-wa-history",
-  "claim": "앞선 측정에서도 편집 훅은 -42.7~-46.8%, 프롬프트 훅은 -38.2~-42.1%였다(10-30 bench-hooks.sh 21회, 10-31 diffcheck 11회 2회).",
+  "claim": "앞선 측정에서도 편집 훅은 -42~-47%, 프롬프트 훅은 -38~-42%였다(10-30 bench-hooks.sh 21회, 10-31 diffcheck 11회 2회).",
   "grade": "기록됨",
   "scope": "2026-10-30~31. 원자료를 남기지 않았거나 일부만 남겼다",
   "evidence": [
@@ -409,9 +409,9 @@
  },
  {
   "id": "C-wa-abs",
-  "claim": "같은 ZK 편집 훅의 원본 쪽 중앙값은 날에 따라 143~274ms로 달랐다.",
-  "grade": "도출",
-  "scope": "10-30 192ms, 10-31 143~153ms(기록됨), 11-01 255~274ms(확인)에서",
+  "claim": "같은 ZK 편집 훅의 원본 쪽 중앙값은 날과 호출 방식에 따라 143~278ms로 달랐다.",
+  "grade": "기록됨",
+  "scope": "10-30 192ms, 10-31 143~153ms(원자료 없음), 11-01 240~278ms(A/A 포함, 원자료 있음). 10-30은 python -c, 이후는 python -I -c",
   "evidence": [
    {
     "kind": "file",
@@ -446,7 +446,7 @@
   "evidence": [
    {
     "kind": "cmd",
-    "ref": "python -m unittest discover -s tests (work-atlas, 패치 적용)"
+    "ref": "cd $WA_CAND && python3 -m unittest discover -s tests  # work-atlas PR #1 판, 변수는 reports/2026-10-30-hotspots/README.md"
    },
    {
     "kind": "url",
@@ -457,9 +457,9 @@
  },
  {
   "id": "C-trap-empty",
-  "claim": "같은 세션 ID로 원본과 패치 편집 훅을 차례로 돌리면 기준 306바이트, 후보 0바이트가 되고, 한 번 더 돌리면 둘 다 0바이트다. diffcheck는 두 번 모두 empty로 실패한다.",
+  "claim": "세션 ID 하나를 고정하고 쪽마다 인스턴스 사본을 따로 주면, 첫 비교는 양쪽 306바이트로 identical이고 다시 비교하면 양쪽 0바이트라 diffcheck가 empty로 실패한다. 새 사본에서 같은 ID로 --determinism을 주면 첫 비교에서 nondeterministic으로 잡힌다.",
   "grade": "확인",
-  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, ZK 편집 훅",
   "evidence": [
    {
     "kind": "cmd",
@@ -529,7 +529,7 @@
  },
  {
   "id": "C-sim-proc",
-  "claim": "질의 1회를 프로세스 단위로 재면 Python(orjson) 대비 Rust가 LANG 242→79ms, ZK 402→176ms였다.",
+  "claim": "질의 1회를 프로세스 단위로 재면 Python(orjson) 대비 Rust가 LANG 197→68ms, ZK 339→166ms였다.",
   "grade": "확인",
   "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 번갈아 11회 중앙값",
   "evidence": [
@@ -545,7 +545,7 @@
  },
  {
   "id": "C-sim-inproc",
-  "claim": "같은 프로세스 안의 색인 읽기와 질의만 비교하면 ZK 197→136ms라서, 프로세스 단위 차이 226ms 중 약 165ms(73%)는 Python 기동과 import다.",
+  "claim": "같은 프로세스 안의 색인 읽기와 질의만 비교하면 ZK 180→128ms라서, 프로세스 단위 차이 173ms 중 약 121ms(70%)는 Python 기동과 import다.",
   "grade": "도출",
   "scope": "C-sim-proc와 같은 실행의 단계별 시간에서 계산",
   "evidence": [
@@ -563,7 +563,7 @@
   "evidence": [
    {
     "kind": "cmd",
-    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node mkcases.mjs && node bench.mjs 1000 2000 4334  # 준비는 reports/2026-10-30-hotspots/README.md"
+    "ref": "cd reports/2026-10-30-hotspots/docbench-diff && node mkcases.mjs && node bench.mjs 1000 2000 4334  # base_all.md 만드는 법(고정 커밋)은 reports/2026-10-30-hotspots/README.md"
    },
    {
     "kind": "file",
@@ -645,13 +645,13 @@
  },
  {
   "id": "C-tool-ruff",
-  "claim": "ruff 0.17.3이 work-atlas 16,738줄을 버그 계열 규칙(F·B·E9·PLE)으로 44~62ms에 검사했고 18건을 냈다.",
+  "claim": "ruff 0.17.3이 work-atlas 16,738줄을 버그 계열 규칙(F·B·E9·PLE)으로 45~81ms(중앙값 57ms)에 검사했고 18건을 냈다.",
   "grade": "확인",
-  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 바이너리 직접 실행 7회(uvx 경유는 80~121ms)",
+  "scope": "x86_64 2 vCPU 샌드박스, 2026-11-01, 실행 파일 직접 21회(uvx 경유는 80~128ms, 중앙값 95ms)",
   "evidence": [
    {
     "kind": "cmd",
-    "ref": "uvx ruff@0.17.3 check --no-cache --select F,B,E9,PLE --statistics atlas tests  # work-atlas 10011b6에서"
+    "ref": "bash reports/2026-10-30-hotspots/tooling/measure-ruff.sh"
    },
    {
     "kind": "file",
@@ -697,9 +697,9 @@
  },
  {
   "id": "C-self-muts",
-  "claim": "⑦ 도구와 허브 빌드에서 문서화한 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 21개, vacuity_check 13개, build_site 30개).",
+  "claim": "⑦ 도구와 허브 빌드에서 변이 목록에 올린 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 28개, vacuity_check 21개, build_site 55개).",
   "grade": "확인",
-  "scope": "이 저장소, CI의 checks 작업과 같은 명령",
+  "scope": "이 저장소, CI의 checks 작업과 같은 명령. 변이 목록은 작성자가 골랐다",
   "evidence": [
    {
     "kind": "cmd",

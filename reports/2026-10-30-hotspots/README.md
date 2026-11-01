@@ -8,7 +8,7 @@
 | `work-atlas/` | 훅 지연 패치(`hook-latency.patch`, 같은 내용이 work-atlas PR #1) · `measure.sh`(훅, ⑦ 도구로) · `measure-build.sh`(전체 빌드) · 처음 쓴 측정 스크립트 `bench-hooks.sh`(이력) |
 | `atlas-sim/` | work-atlas 유사도 질의의 Rust 이식과 Python 기준(`py_sim.py`), 비교 스크립트(`bench-sim.sh`), 저장한 질의(`queries/`) |
 | `docbench-diff/` | docbench `lineDiff`의 Rust 이식(네이티브 + WASM)과 jsdiff 비교 벤치 |
-| `tooling/` | ruff · oxlint · uv 도입 설정과 측정 |
+| `tooling/` | ruff · oxlint · uv 도입 설정과 측정, `measure-ruff.sh` |
 
 ## 공통 준비
 
@@ -18,6 +18,8 @@
 git clone https://github.com/apache/commons-lang.git && git clone https://github.com/apache/zookeeper.git
 git clone https://github.com/d-j-lee/work-atlas.git wa && git -C wa fetch origin pull/1/head:pr1
 git -C wa worktree add --detach ../wa-base 10011b6 && git -C wa worktree add --detach ../wa-cand 49e4fbe
+git clone https://github.com/d-j-lee/docbench.git && git -C docbench checkout --detach 881dd6f       # docbench-diff 입력
+git clone https://github.com/d-j-lee/dj-assis.git && git -C dj-assis checkout --detach 9acecc9       # docbench-diff 입력
 python3 -m venv venv && venv/bin/pip install orjson==3.13.0 pyyaml jsonschema
 export AOK=$PWD/agent-ops-kit PY=$PWD/venv/bin/python3 WA_BASE=$PWD/wa-base WA_CAND=$PWD/wa-cand \
        INST=$PWD/inst REPO_LANG=$PWD/commons-lang REPO_ZK=$PWD/zookeeper OUT=$PWD/logs
@@ -35,7 +37,9 @@ bash $AOK/reports/2026-10-30-hotspots/work-atlas/measure.sh         # → $OUT/h
 bash $AOK/reports/2026-10-30-hotspots/work-atlas/measure-build.sh   # → $OUT/build.txt
 ```
 
-- `measure.sh`는 훅 4종(편집·프롬프트 × LANG·ZK)을 `diffcheck --determinism --timing 21`로 두 번씩 재고, 기준끼리의 A/A 한 번, 같은 세션 ID를 다시 쓰는 함정 두 번을 남긴다. 이벤트의 `session_id`는 `dc-{nonce}`라 실행마다 새 세션이다.
+- `measure.sh`는 훅 4종(편집·프롬프트 × LANG·ZK)을 `diffcheck --determinism --timing 21`로 두 번씩 재고, 기준끼리의 A/A 한 번, 같은 세션 ID를 다시 쓰는 함정 세 번을 남긴다. 이벤트의 `session_id`는 `dc-{nonce}`라 실행마다 새 세션이다.
+- 훅은 인스턴스에 세션 상태와 쓰임 기록을 남긴다. 그래서 비교마다 인스턴스를 쪽별 임시 사본으로 새로 복사해, 원본과 패치(A/A에서는 두 원본)가 상태를 나누지 않게 한다.
+- 공개 로그에는 판정·바이트 수·시간만 남는다. diff 머리(훅 출력 원문)는 `$OUT/hooks-raw.txt`에만 쓰고 레포에 올리지 않는다.
 - 훅 명령은 `$PY -I -c "<atlas.hook main>" <코드 경로> <인스턴스>` 꼴이고, 시작할 때 import한 `atlas`가 그 코드 경로의 것인지 단언한다(설치된 다른 판을 조용히 쓰지 않게).
 - `measure-build.sh`는 인스턴스 사본 두 개를 원본·패치로 같은 `--as-of`에 번갈아 3회 지어 시간과 `data/model/` 파일 5개의 바이트 동일성을 보고, `--as-of` 없이 두 번 지어 `categories.json`이 어느 필드에서 달라지는지 본다. `build.json`(경로·시간)과 `catalog.json`(`built_at`)은 원래 실행마다 다르다. 실패한 빌드는 시간 대신 `FAIL`로 찍힌다.
 
@@ -53,6 +57,7 @@ for i in lang zk; do WORK_ATLAS=$WA_CAND ./bench-sim.sh $INST/$i/data/model/text
 ```bash
 cd $AOK/reports/2026-10-30-hotspots/docbench-diff && npm init -y && npm i diff@9.0.0
 cat $WA_BASE/*.md docbench/*.md docbench/docs/*.md dj-assis/*.md > base_all.md   # 공개 레포 3곳, 4,334줄
+sha256sum base_all.md   # acf740366394… 이어야 로그와 같은 입력이다
 node mkcases.mjs && node bench.mjs 1000 2000 4334            # jsdiff (docbench lineDiff 그대로)
 cargo run --release --bin docdiff-bench -- . 1000 2000 4334  # Rust 네이티브 + 원문 복원 검증
 cargo build --release --lib --target wasm32-unknown-unknown
@@ -60,10 +65,12 @@ node bench-wasm.mjs target/wasm32-unknown-unknown/release/docdiff.wasm 1000 2000
 node split.mjs 4334 && node caps.mjs                          # 시간 구성, jsdiff timeout·maxEditLength
 ```
 
-"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다. 11-01 로그의 `base_all.md`는 10-30에 이어 붙인 파일 그대로다(sha256 앞 12자리가 로그 머리에 있다).
+"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다. 11-01 로그의 `base_all.md`는 10-30에 이어 붙인 파일 그대로다(sha256 앞 12자리가 로그 머리에 있다). 11-01에 위 고정 커밋 세 개로 다시 이어 붙여 같은 해시가 나오는 것을 확인했다.
 
 ## tooling
 
 ```bash
-cd $WA_BASE && uvx ruff@0.17.3 check --no-cache --select F,B,E9,PLE --statistics atlas tests
+bash $AOK/reports/2026-10-30-hotspots/tooling/measure-ruff.sh   # → $OUT/ruff.txt
 ```
+
+`uvx ruff@0.17.3 check --no-cache --select F,B,E9,PLE --statistics atlas tests`를 한 번 돌려 지적 수를 남기고, 같은 명령의 시간(uvx 기동 포함)과 uvx가 받아 둔 같은 판 실행 파일만의 시간을 21회씩 잰다. `PATH`의 다른 판 ruff는 쓰지 않는다.

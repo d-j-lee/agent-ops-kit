@@ -1,3 +1,9 @@
 # 읽기 허브 빌드 결과(scripts/build_site.py). 원본은 site/pages · site/assets · site/*.json
 site/dist/
 __pycache__/
+# 재현 자료(reports/2026-10-30-hotspots)의 README 절차가 만드는 빌드 결과
+reports/*/*/target/
+reports/*/*/node_modules/
+reports/*/docbench-diff/package*.json
+reports/*/docbench-diff/base_all.md
+reports/*/docbench-diff/*_[0-9]*.md

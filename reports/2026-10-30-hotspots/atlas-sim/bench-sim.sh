@@ -20,12 +20,18 @@ else echo "OUTPUT DIFFERS"; diff "$tmp/py.orjson" "$tmp/rs" | head -6; fi
 
 stage() { awk '{for(i=1;i<=NF;i++){split($i,a,"=");v[a[1]]=a[2]}} END{printf "%.0f", v["load_ms"]+v["postings_ms"]+v["query_ms"]}'; }
 med() { printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'; }
+fail() { { echo "FAILED during timing: $1"; printf '%s\n' "$2" | tail -5; } >&2; exit 1; }
+timed() { # timed <명령…>: W=전체 ms, I=단계 합 ms. 실패하거나 단계 시간이 없으면 짧은 시간으로 기록하지 않고 멈춘다
+  local s e
+  s=$(date +%s%N); e=$("$@" < "$q" 2>&1 >/dev/null) || fail "$*" "$e"
+  W=$(( ($(date +%s%N) - s) / 1000000 ))
+  [[ $e == *load_ms=* && $e == *postings_ms=* && $e == *query_ms=* ]] || fail "$*" "no stage times: $e"
+  I=$(stage <<<"$e")
+}
 pw=() pi=() rw=() ri=()
 for _ in $(seq 1 "$N"); do
-  s=$(date +%s%N); e=$("$PY" "$here/py_sim.py" "$idx" "$ex" 200 orjson < "$q" 2>&1 >/dev/null)
-  pw+=($(( ($(date +%s%N) - s) / 1000000 ))); pi+=("$(stage <<<"$e")")
-  s=$(date +%s%N); e=$("$RS" "$idx" "$ex" 200 < "$q" 2>&1 >/dev/null)
-  rw+=($(( ($(date +%s%N) - s) / 1000000 ))); ri+=("$(stage <<<"$e")")
+  timed "$PY" "$here/py_sim.py" "$idx" "$ex" 200 orjson; pw+=("$W"); pi+=("$I")
+  timed "$RS" "$idx" "$ex" 200;                          rw+=("$W"); ri+=("$I")
 done
 printf 'whole process  python(orjson) %4sms · rust %4sms   (N=%s, interleaved, median)\n' "$(med "${pw[@]}")" "$(med "${rw[@]}")" "$N"
 printf 'in process     python(orjson) %4sms · rust %4sms   (load + postings + query)\n' "$(med "${pi[@]}")" "$(med "${ri[@]}")"
