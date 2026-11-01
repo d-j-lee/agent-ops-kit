@@ -1,13 +1,18 @@
 """Tests for the regression-pinning tools of feature ⑦ (stdlib unittest only).
 
-scripts/diffcheck.py      differential check: empty, failed, nondeterministic, differs, identical
-scripts/vacuity_check.py  proves a test fails when the code it guards is mutated (on a copy)
+scripts/diffcheck.py      differential check: failed, empty, nondeterministic, differs, identical
+scripts/vacuity_check.py  shows a test fails when the code it guards is mutated (on a copy)
+
+Each guard the tools document has a test that fails when the guard is removed;
+tests/mutations/regress_tools.json lists those removals and CI runs them through
+vacuity_check.py itself.
 
 Run from the repo root:  python3 -m unittest discover -s tests -v
 """
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -29,12 +34,24 @@ def run_script(name: str, *args: str, timeout: int = 120):
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def py(code: str) -> str:
+def py(code: str, *extra: str) -> str:
     """A command string that runs `code` with this interpreter (for --base/--cand/--test)."""
-    return shlex.join([PY, "-I", "-c", code])
+    return shlex.join([PY, "-I", "-c", code, *extra])
+
+
+# A command that exits 0 on its first call and 1 on every later call (state in a counter file).
+FLAKY = "import pathlib, sys; p = pathlib.Path(sys.argv[1]); n = int(p.read_text() or 0) if p.exists() else 0; " \
+        "p.write_text(str(n + 1)); print('out'); sys.exit(0 if n == 0 else 1)"
 
 
 class DiffcheckTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
     def diff(self, *args):
         code, out, err = run_script("diffcheck", *args, "--json")
         report = json.loads(out) if out.strip().startswith("{") else None
@@ -44,12 +61,24 @@ class DiffcheckTests(unittest.TestCase):
         code, r, _ = self.diff("--base", py("print('a')"), "--cand", py("print('a')"))
         self.assertEqual((code, r["verdict"]), (0, "identical"))
         self.assertEqual(r["base"]["bytes"], 2)
+        self.assertEqual(r["compared"], ["exit", "stdout"])
 
     def test_differs_shows_diff_head(self):
         code, r, _ = self.diff("--base", py("print('a')"), "--cand", py("print('b')"))
         self.assertEqual((code, r["verdict"]), (1, "differs"))
         self.assertIn("-a", r["diff_head"])
         self.assertIn("+b", r["diff_head"])
+
+    def test_bytes_not_decoded_text(self):
+        # two different invalid UTF-8 bytes must not collapse into one replacement character
+        w = "import sys; sys.stdout.buffer.write(bytes([int(sys.argv[1])]) + b'\\n')"
+        code, r, _ = self.diff("--base", py(w, "255"), "--cand", py(w, "254"))
+        self.assertEqual((code, r["verdict"]), (1, "differs"))
+        self.assertIn("-\\xff", r["diff_head"])
+        # and line endings are compared as written
+        crlf = "import sys; sys.stdout.buffer.write(b'a' + sys.argv[1].encode().replace(b'N', b'\\n').replace(b'R', b'\\r'))"
+        code, r, _ = self.diff("--base", py(crlf, "RN"), "--cand", py(crlf, "N"))
+        self.assertEqual(r["verdict"], "differs")
 
     def test_empty_outputs_are_not_identical(self):
         # the trap that motivated ⑦: both sides silent, a naive compare says "same"
@@ -58,18 +87,55 @@ class DiffcheckTests(unittest.TestCase):
         code, r, _ = self.diff("--base", py("pass"), "--cand", py("pass"), "--allow-empty")
         self.assertEqual((code, r["verdict"]), (0, "identical"))
 
+    def test_whitespace_only_is_empty(self):
+        code, r, _ = self.diff("--base", py("print()"), "--cand", py("print('  ')"))
+        self.assertEqual((code, r["verdict"]), (1, "empty"))
+        self.assertEqual(r["problems"], [f"empty output: {s} printed nothing or only whitespace" for s in ("base", "cand")])
+
     def test_one_side_empty(self):
         code, r, _ = self.diff("--base", py("print('x')"), "--cand", py("pass"))
         self.assertEqual(r["verdict"], "empty")
-        self.assertTrue(any("cand" in p for p in r["problems"]))
+        self.assertEqual(r["problems"], ["empty output: cand printed nothing or only whitespace"])
+
+    def test_normalizing_everything_is_empty(self):
+        # a regex that eats the whole output must not turn 'apple' vs 'banana' into "identical"
+        code, r, _ = self.diff("--base", py("print('apple')"), "--cand", py("print('banana')"),
+                               "--normalize", "(?s).+")
+        self.assertEqual((code, r["verdict"]), (1, "empty"))
+        self.assertIn("nothing left after normalization", r["problems"][0])
+        # only placeholders left counts too: nothing real was compared
+        code, r, _ = self.diff("--base", py("print('a1 a2')"), "--cand", py("print('b1 b2')"), "--normalize", "\\w+")
+        self.assertEqual(r["verdict"], "empty")
 
     def test_failed_exit_code(self):
         code, r, _ = self.diff("--base", py("print('a'); raise SystemExit(3)"), "--cand", py("print('a')"))
         self.assertEqual((code, r["verdict"]), (1, "failed"))
         self.assertEqual(r["base"]["exit"], 3)
+        self.assertEqual(r["problems"], ["base exited 3"])
+
+    def test_allow_fail_still_compares_exit_codes(self):
         code, r, _ = self.diff("--base", py("print('a'); raise SystemExit(3)"), "--cand", py("print('a')"),
                                "--allow-fail")
+        self.assertEqual((code, r["verdict"]), (1, "differs"))
+        self.assertIn("exit code: base 3 · cand 0", r["diff_head"])
+        both = py("print('a'); raise SystemExit(3)")
+        code, r, _ = self.diff("--base", both, "--cand", both, "--allow-fail")
+        self.assertEqual((code, r["verdict"]), (0, "identical"))
+
+    def test_stderr_compared_only_on_request(self):
+        warn = py("import sys; print('a'); print('warning', file=sys.stderr)")
+        code, r, _ = self.diff("--base", py("print('a')"), "--cand", warn)
         self.assertEqual(r["verdict"], "identical")
+        self.assertEqual(r["cand"]["stderr_bytes"], 8)
+        code, r, _ = self.diff("--base", py("print('a')"), "--cand", warn, "--stderr")
+        self.assertEqual((code, r["verdict"]), (1, "differs"))
+        self.assertEqual(r["compared"], ["exit", "stdout", "stderr"])
+
+    def test_timeout_always_fails(self):
+        slow = py("import time; time.sleep(5)")
+        code, r, _ = self.diff("--base", slow, "--cand", slow, "--timeout", "0.5", "--allow-fail", "--allow-empty")
+        self.assertEqual((code, r["verdict"]), (1, "failed"))
+        self.assertTrue(r["base"]["timeout"] and r["cand"]["timeout"])
 
     def test_nondeterminism_detected_and_normalized(self):
         rnd = py("import secrets; print('id', secrets.token_hex(4))")
@@ -79,41 +145,98 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual((code, r["verdict"]), (0, "identical"))
         self.assertEqual(r["base"]["normalized_counts"], [1])
 
-    def test_normalizing_everything_is_visible(self):
-        # a regex that eats the whole output still "matches"; the counts make that visible
-        code, r, _ = self.diff("--base", py("print('a')"), "--cand", py("print('b')"), "--normalize", "[ab]")
-        self.assertEqual(r["verdict"], "identical")
-        self.assertEqual((r["base"]["normalized_counts"], r["cand"]["normalized_counts"]), ([1], [1]))
+    def test_candidate_side_nondeterminism_beats_differs(self):
+        rnd = py("import secrets; print(secrets.token_hex(4))")
+        code, r, _ = self.diff("--base", py("print('fixed')"), "--cand", rnd, "--determinism")
+        self.assertEqual((code, r["verdict"]), (1, "nondeterministic"))
+        self.assertEqual([p.split()[0] for p in r["problems"]], ["cand"])
+
+    def test_determinism_compares_exit_codes(self):
+        flaky = py(FLAKY, str(self.tmp / "count"))
+        code, r, _ = self.diff("--base", py("print('out')"), "--cand", flaky, "--determinism")
+        self.assertEqual((code, r["verdict"]), (1, "nondeterministic"))
+        self.assertIn("exit code", r["problems"][0])
+
+    def test_normalize_counts_every_match(self):
+        three = py("print('ids t1 t2 t3')")
+        code, r, _ = self.diff("--base", three, "--cand", py("print('ids t9 t8 t7')"), "--normalize", "t[0-9]")
+        self.assertEqual((code, r["verdict"]), (0, "identical"))
+        self.assertEqual((r["base"]["normalized_counts"], r["cand"]["normalized_counts"]), ([3], [3]))
 
     def test_nonce_is_fresh_per_invocation(self):
-        echo = py("import sys; print(sys.argv[1])") + " {nonce}"
+        echo = py("import sys; print('id', sys.argv[1])", "{nonce}")
         code, r, _ = self.diff("--base", echo, "--cand", echo)
         self.assertEqual(r["verdict"], "differs")  # each invocation got its own token
         code, r, _ = self.diff("--base", echo, "--cand", echo, "--normalize", "[0-9a-f]{16}")
         self.assertEqual(r["verdict"], "identical")
 
-    def test_stdin_with_nonce(self):
-        with tempfile.TemporaryDirectory() as d:
-            f = Path(d) / "in.txt"
-            f.write_text("hello {nonce}\n", encoding="utf-8")
-            cat = py("import sys; print(sys.stdin.read().split()[0])")
-            code, r, _ = self.diff("--base", cat, "--cand", cat, "--stdin", str(f))
-            self.assertEqual((code, r["verdict"]), (0, "identical"))
+    def test_same_nonce_shares_the_token_within_a_pair(self):
+        echo = py("import sys; print('id', sys.argv[1])", "{nonce}")
+        code, r, _ = self.diff("--base", echo, "--cand", echo, "--same-nonce", "--determinism")
+        # same token on both sides of a pair, but a new one for the second pair: base varies between runs
+        self.assertEqual(r["verdict"], "nondeterministic")
+        code, r, _ = self.diff("--base", echo, "--cand", echo, "--same-nonce")
+        self.assertEqual((code, r["verdict"]), (0, "identical"))
+
+    def test_stdin_nonce_is_substituted(self):
+        f = self.tmp / "in.txt"
+        f.write_text("hello {nonce}\n", encoding="utf-8")
+        # the marker is split so that diffcheck does not substitute it inside this probe's own code
+        probe = py("import sys; s = sys.stdin.read(); print('raw' if '{' + 'nonce}' in s else 'fresh', len(s.split()[1]))")
+        code, r, _ = self.diff("--base", probe, "--cand", py("print('fresh 16')"), "--stdin", f)
+        self.assertEqual((code, r["verdict"]), (0, "identical"))
+        cat = py("import sys; print(sys.stdin.read())")
+        code, r, _ = self.diff("--base", cat, "--cand", cat, "--stdin", f, "--determinism")
+        self.assertEqual(r["verdict"], "nondeterministic")  # every run saw a new token
+
+    def test_stdin_is_bytes(self):
+        f = self.tmp / "in.bin"
+        f.write_bytes(b"\xff\xfe {nonce}\n")
+        size = py("import sys; print(len(sys.stdin.buffer.read()))")
+        code, r, err = self.diff("--base", size, "--cand", size, "--stdin", f)
+        self.assertEqual((code, r["verdict"]), (0, "identical"), err)
 
     def test_timing_is_interleaved(self):
-        code, r, _ = self.diff("--base", py("print(1)"), "--cand", py("print(1)"), "--timing", "3")
+        log = self.tmp / "order.log"
+        mark = "import sys; open(sys.argv[1], 'a').write(sys.argv[2]); print(1)"
+        code, r, _ = self.diff("--base", py(mark, str(log), "b"), "--cand", py(mark, str(log), "c"), "--timing", "3")
         self.assertEqual(r["verdict"], "identical")
+        # one comparison run per side, then base, cand, base, cand, ...
+        self.assertEqual(log.read_text(), "bc" + "bc" * 3)
         t = r["timing"]
-        self.assertTrue(t["interleaved"])
         self.assertEqual((t["base"]["n"], t["cand"]["n"]), (3, 3))
         self.assertLessEqual(t["base"]["min_ms"], t["base"]["median_ms"])
-        self.assertIn("median_change_pct", t)
+        self.assertLessEqual(t["base"]["median_ms"], t["base"]["max_ms"])
+
+    def test_timing_change_sign(self):
+        code, r, _ = self.diff("--base", py("import time; time.sleep(0.3); print(1)"), "--cand", py("print(1)"),
+                               "--timing", "3")
+        self.assertLess(r["timing"]["median_change_pct"], -50)  # candidate is faster: negative change
+
+    def test_failure_during_timing_fails(self):
+        flaky = py(FLAKY, str(self.tmp / "count"))
+        code, r, _ = self.diff("--base", py("print('out')"), "--cand", flaky, "--timing", "2")
+        self.assertEqual((code, r["verdict"]), (1, "failed"))
+        self.assertIn("cand exited 1 during timing", r["problems"])
 
     def test_human_output(self):
         code, out, _ = run_script("diffcheck", "--base", py("print('a')"), "--cand", py("print('a')"))
         self.assertEqual(code, 0)
-        self.assertTrue(out.startswith("verdict: identical"))
+        self.assertTrue(out.startswith("verdict: identical\ncompared: exit, stdout\n"))
         self.assertIn("base: exit 0 · 2 bytes", out)
+
+    def test_tool_errors_exit_2(self):
+        ok = py("print(1)")
+        notexec = self.tmp / "notexec.sh"
+        notexec.write_text("#!/bin/sh\necho x\n", encoding="utf-8")
+        os.chmod(notexec, 0o644)
+        code, _, err = run_script("diffcheck", "--base", str(notexec), "--cand", ok)
+        self.assertEqual(code, 2)
+        self.assertIn("cannot run", err)
+        for cwd in (notexec, self.tmp / "none"):  # a file, a missing dir: say so instead of "command not found"
+            code, _, err = run_script("diffcheck", "--base", ok, "--cand", ok, "--cwd", str(cwd))
+            self.assertEqual(code, 2)
+            self.assertIn("--cwd is not a directory", err)
 
     def test_usage_errors(self):
         ok = py("print(1)")
@@ -122,6 +245,7 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual(run_script("diffcheck", "--base", "no-such-command-xyz", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", "", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timing", "-1")[0], 2)
+        self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "0")[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", "'unclosed", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck")[0], 2)
 
@@ -140,7 +264,7 @@ CALC = textwrap.dedent('''\
 TEST_GUARD = textwrap.dedent('''\
     from calc import safe_div
     assert safe_div(4, 2) == 2
-    assert safe_div(1, 0) is None
+    assert safe_div(1, 0) is None, "zero guard"
     print("ok")
     ''')
 TEST_VACUOUS = textwrap.dedent('''\
@@ -148,12 +272,21 @@ TEST_VACUOUS = textwrap.dedent('''\
     assert safe_div(4, 2) == 2
     print("ok")
     ''')
+TEST_NOFLAG = textwrap.dedent('''\
+    import pathlib, sys
+    sys.exit(1 if pathlib.Path("skipme/flag.txt").exists() else 0)
+    ''')
+TEST_BYTES = textwrap.dedent('''\
+    import pathlib, sys
+    sys.exit(0 if b"value=1" in pathlib.Path("data.bin").read_bytes() else 1)
+    ''')
 
 
 class VacuityCheckTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.repo = Path(self._tmp.name) / "repo"
+        self.tmp = Path(self._tmp.name)
+        self.repo = self.tmp / "repo"
         self.repo.mkdir()
         (self.repo / "calc.py").write_text(CALC, encoding="utf-8")
         (self.repo / "test_guard.py").write_text(TEST_GUARD, encoding="utf-8")
@@ -168,6 +301,11 @@ class VacuityCheckTests(unittest.TestCase):
         code, out, err = run_script("vacuity_check", "--repo", self.repo, "--test",
                                     shlex.join([PY, test_file]), *mut_args, "--json")
         return code, (json.loads(out) if out.strip().startswith("{") else None), err
+
+    def muts_file(self, muts: list[dict]) -> Path:
+        mf = self.tmp / "muts.json"
+        mf.write_text(json.dumps(muts), encoding="utf-8")
+        return mf
 
     def test_guarded(self):
         code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "")
@@ -199,12 +337,83 @@ class VacuityCheckTests(unittest.TestCase):
         self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "")
         self.assertEqual((self.repo / "calc.py").read_text(encoding="utf-8"), before)
 
+    def test_symlink_out_of_the_copy_is_not_written(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (outside / "calc.py").write_text(CALC, encoding="utf-8")
+        (self.repo / "lib").symlink_to(outside.resolve(), target_is_directory=True)  # absolute link
+        code, r, _ = self.vac("test_guard.py", "--mutate", "lib/calc.py", self.guard_old, "")
+        self.assertEqual((code, r["verdict"]), (1, "mutation_error"))
+        self.assertEqual(r["mutations"][0]["status"], "unsafe")
+        self.assertEqual((outside / "calc.py").read_text(encoding="utf-8"), CALC)
+
+    def test_symlink_inside_the_copy_is_fine(self):
+        (self.repo / "alias.py").symlink_to("calc.py")  # relative link, stays in the copy
+        code, r, _ = self.vac("test_guard.py", "--mutate", "alias.py", self.guard_old, "")
+        self.assertEqual((code, r["verdict"]), (0, "guarded"))
+        self.assertEqual((self.repo / "calc.py").read_text(encoding="utf-8"), CALC)
+
+    def test_syntax_breaking_mutation_is_invalid_not_guarded(self):
+        # breaks the file, so even the vacuous test "fails": that must not count
+        code, r, _ = self.vac("test_vacuous.py", "--mutate", "calc.py", "return None", "return None)")
+        self.assertEqual((code, r["verdict"]), (1, "mutation_error"))
+        self.assertEqual(r["mutations"][0]["status"], "invalid")
+
+    def test_timeout_is_inconclusive(self):
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", "    return a / b", "    while True: pass",
+                              "--timeout", "3")
+        self.assertEqual((code, r["verdict"]), (1, "inconclusive"))
+        self.assertEqual(r["mutations"][0]["status"], "timeout")
+
+    def test_expect_separates_the_right_failure(self):
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "", "--expect", "zero guard")
+        self.assertEqual((code, r["verdict"]), (0, "guarded"))
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "", "--expect", "other test")
+        self.assertEqual((code, r["verdict"]), (1, "inconclusive"))
+        self.assertEqual(r["mutations"][0]["status"], "other_failure")
+
+    def test_verdict_precedence(self):
+        guard = {"file": "calc.py", "old": self.guard_old, "new": "", "label": "drop zero guard"}
+        floor = {"file": "calc.py", "old": "return a / b", "new": "return a // b", "label": "floor div"}
+        broken = {"file": "calc.py", "old": "return None", "new": "return None)", "label": "syntax"}
+        hang = {"file": "calc.py", "old": "    return a / b", "new": "    while True: pass", "label": "hang"}
+        cases = [([guard, floor], "vacuous", ["guarded", "vacuous"]),
+                 ([floor, broken], "mutation_error", ["vacuous", "invalid"]),
+                 ([hang, floor], "vacuous", ["timeout", "vacuous"]),
+                 ([guard, hang], "inconclusive", ["guarded", "timeout"])]
+        for muts, verdict, statuses in cases:
+            code, r, _ = self.vac("test_guard.py", "--mutations", self.muts_file(muts), "--timeout", "3")
+            self.assertEqual((code, r["verdict"]), (1, verdict), statuses)
+            self.assertEqual([m["status"] for m in r["mutations"]], statuses)
+        self.assertEqual(r["mutations"][1]["label"], "hang")
+
+    def test_jobs_keep_input_order(self):
+        guard = {"file": "calc.py", "old": self.guard_old, "new": "", "label": "drop zero guard"}
+        floor = {"file": "calc.py", "old": "return a / b", "new": "return a // b", "label": "floor div"}
+        code, r, _ = self.vac("test_guard.py", "--mutations", self.muts_file([guard, guard, floor]), "--jobs", "3")
+        self.assertEqual([m["status"] for m in r["mutations"]], ["guarded", "guarded", "vacuous"])
+        self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", "true", "--mutate", "calc.py",
+                                    "a", "b", "--jobs", "0")[0], 2)
+
+    def test_ignore_is_honoured(self):
+        (self.repo / "skipme").mkdir()
+        (self.repo / "skipme" / "flag.txt").write_text("x", encoding="utf-8")
+        (self.repo / "test_noflag.py").write_text(TEST_NOFLAG, encoding="utf-8")
+        code, r, _ = self.vac("test_noflag.py", "--mutate", "calc.py", self.guard_old, "")
+        self.assertEqual(r["verdict"], "baseline_fails")  # skipme/ is copied by default
+        code, r, _ = self.vac("test_noflag.py", "--mutate", "calc.py", self.guard_old, "", "--ignore", "skipme")
+        self.assertEqual(r["verdict"], "vacuous")  # copied without it, and the test guards nothing in calc.py
+
+    def test_any_file_encoding(self):
+        (self.repo / "data.bin").write_bytes(b"\xff\xfe value=1\n")
+        (self.repo / "test_bytes.py").write_text(TEST_BYTES, encoding="utf-8")
+        code, r, err = self.vac("test_bytes.py", "--mutate", "data.bin", "value=1", "value=2")
+        self.assertEqual((code, r["verdict"]), (0, "guarded"), err)
+
     def test_mutations_file_mixed_results(self):
         muts = [{"file": "calc.py", "old": self.guard_old, "new": "", "label": "drop zero guard"},
                 {"file": "calc.py", "old": "return a / b", "new": "return a // b", "label": "floor div"}]
-        mf = Path(self._tmp.name) / "muts.json"
-        mf.write_text(json.dumps(muts), encoding="utf-8")
-        code, r, _ = self.vac("test_guard.py", "--mutations", mf)
+        code, r, _ = self.vac("test_guard.py", "--mutations", self.muts_file(muts))
         # 4 // 2 == 2 too, so the second mutation is not caught: the report must say so
         self.assertEqual((code, r["verdict"]), (1, "vacuous"))
         self.assertEqual([m["status"] for m in r["mutations"]], ["guarded", "vacuous"])
@@ -217,6 +426,15 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertIn("verdict: guarded", out)
         self.assertIn("baseline: exit 0 (pass)", out)
 
+    def test_tool_errors_exit_2(self):
+        notexec = self.repo / "run.sh"
+        notexec.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        os.chmod(notexec, 0o644)
+        code, _, err = run_script("vacuity_check", "--repo", self.repo, "--test", "./run.sh",
+                                  "--mutate", "calc.py", self.guard_old, "")
+        self.assertEqual(code, 2)
+        self.assertIn("cannot run", err)
+
     def test_usage_errors(self):
         t = shlex.join([PY, "test_guard.py"])
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t)[0], 2)
@@ -228,7 +446,7 @@ class VacuityCheckTests(unittest.TestCase):
                                     "--mutate", "../x.py", "a", "b")[0], 2)
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t,
                                     "--mutate", "calc.py", "", "b")[0], 2)
-        bad = Path(self._tmp.name) / "bad.json"
+        bad = self.tmp / "bad.json"
         bad.write_text('{"not": "a list"}', encoding="utf-8")
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutations", bad)[0], 2)
 

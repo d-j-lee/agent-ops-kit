@@ -1,0 +1,149 @@
+[
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "drop the empty-output guard",
+  "old": "    if not args.allow_empty:\n",
+  "new": "    if False:\n",
+  "expect": "test_empty_outputs_are_not_identical"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "whitespace-only output is not empty",
+  "old": "            if not raw[name][\"out\"].strip():",
+  "new": "            if not raw[name][\"out\"]:",
+  "expect": "test_whitespace_only_is_empty"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "drop the empty-after-normalization guard",
+  "old": "            elif not sides[name][\"out\"].replace(\"<N>\", \"\").strip():",
+  "new": "            elif False:",
+  "expect": "test_normalizing_everything_is_empty"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "decode lossily before comparing",
+  "old": "    text = data.decode(\"utf-8\", errors=\"surrogateescape\")",
+  "new": "    text = data.decode(\"utf-8\", errors=\"replace\")",
+  "expect": "test_bytes_not_decoded_text"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "ignore non-zero exits",
+  "old": "        elif r[\"exit\"] != 0 and not args.allow_fail:",
+  "new": "        elif False:",
+  "expect": "test_failed_exit_code"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "--allow-fail stops comparing exit codes",
+  "old": "    if b[\"exit\"] != c[\"exit\"] or b[\"timeout\"] != c[\"timeout\"]:",
+  "new": "    if False:",
+  "expect": "test_allow_fail_still_compares_exit_codes"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "never compare stderr",
+  "old": "    for label, key in ((\"stdout\", \"out\"), (\"stderr\", \"err\")):",
+  "new": "    for label, key in ((\"stdout\", \"out\"),):",
+  "expect": "test_stderr_compared_only_on_request"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "report a timeout as exit 0",
+  "old": "        return {\"out\": b\"\", \"err\": b\"\", \"exit\": None, \"timeout\": True,",
+  "new": "        return {\"out\": b\"\", \"err\": b\"\", \"exit\": 0, \"timeout\": False,",
+  "expect": "test_timeout_always_fails"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "drop the determinism check",
+  "old": "    if args.determinism:\n",
+  "new": "    if False:\n",
+  "expect": "test_nondeterminism_detected_and_normalized"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "determinism checks the base side only",
+  "old": "        for name, argv, nonce in ((\"base\", base_argv, nb), (\"cand\", cand_argv, nc)):\n            again",
+  "new": "        for name, argv, nonce in ((\"base\", base_argv, nb),):\n            again",
+  "expect": "test_candidate_side_nondeterminism_beats_differs"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "determinism compares stdout only",
+  "old": "    return (a[\"exit\"], a[\"timeout\"], a[\"out\"], a.get(\"err\")) == (b[\"exit\"], b[\"timeout\"], b[\"out\"], b.get(\"err\"))",
+  "new": "    return a[\"out\"] == b[\"out\"]",
+  "expect": "test_determinism_compares_exit_codes"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "differs takes precedence over nondeterministic",
+  "old": "    elif nondet:\n        verdict = \"nondeterministic\"\n    elif not same:\n        verdict = \"differs\"",
+  "new": "    elif not same:\n        verdict = \"differs\"\n    elif nondet:\n        verdict = \"nondeterministic\"",
+  "expect": "test_candidate_side_nondeterminism_beats_differs"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "normalization count always 1",
+  "old": "        counts.append(n)",
+  "new": "        counts.append(1)",
+  "expect": "test_normalize_counts_every_match"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "stop substituting {nonce} in arguments",
+  "old": "    real_argv = [a.replace(NONCE, nonce) for a in argv]",
+  "new": "    real_argv = list(argv)",
+  "expect": "test_nonce_is_fresh_per_invocation"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "stop substituting {nonce} on stdin",
+  "old": "    data = stdin_data.replace(NONCE.encode(), nonce.encode()) if stdin_data is not None else None",
+  "new": "    data = stdin_data",
+  "expect": "test_stdin_nonce_is_substituted"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "--same-nonce ignored",
+  "old": "        if args.same_nonce:",
+  "new": "        if False:",
+  "expect": "test_same_nonce_shares_the_token_within_a_pair"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "timing runs each side back to back",
+  "old": "        for _ in range(args.timing):\n            nb, nc = pair_nonces()\n            for name, argv, bucket, nonce in ((\"base\", base_argv, tb, nb), (\"cand\", cand_argv, tc, nc)):\n",
+  "new": "        nb, nc = pair_nonces()\n        for name, argv, bucket, nonce in ((\"base\", base_argv, tb, nb), (\"cand\", cand_argv, tc, nc)):\n            for _ in range(args.timing):\n",
+  "expect": "test_timing_is_interleaved"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "flip the sign of the median change",
+  "old": "round((mc - mb) * 100 / mb, 1)",
+  "new": "round((mb - mc) * 100 / mb, 1)",
+  "expect": "test_timing_change_sign"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "ignore failures during timing",
+  "old": "                if r[\"timeout\"] or (r[\"exit\"] != 0 and not args.allow_fail):",
+  "new": "                if False:",
+  "expect": "test_failure_during_timing_fails"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "an unrunnable command is not a tool error",
+  "old": "    except OSError as e:  # not executable, bad interpreter line, ...\n        raise UsageError(f\"cannot run {real_argv[0]}: {e.strerror or e}\") from e\n",
+  "new": "",
+  "expect": "test_tool_errors_exit_2"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "no --cwd check",
+  "old": "    if args.cwd and not Path(args.cwd).is_dir():",
+  "new": "    if False:",
+  "expect": "test_tool_errors_exit_2"
+ }
+]
