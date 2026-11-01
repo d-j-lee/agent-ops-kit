@@ -41,7 +41,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
     <section id="when">
       <h2>언제 무엇이 도나</h2>
       <div class="table-scroll">
-        <table class="when">
+        <table class="when hooks">
           <thead><tr><th scope="col">순간</th><th scope="col">훅</th><th scope="col">하는 일</th></tr></thead>
           <tbody>
             <tr><th scope="row">세션 시작</th><td><code>SessionStart</code></td><td>새 세션이거나 쓸 수 있는 상태가 없을 때 기준(HEAD, 이미 바뀐 파일과 하네스 파일의 해시)을 기록하고, 어댑터와 실제 도구 판을 알린다. 상태 없이 이어받은 세션은 이미 바뀐 파일도 자기 것으로 센다. 하네스를 쓸 수 없으면 "OFF"와 이유를 사용자에게 보인다</td></tr>
