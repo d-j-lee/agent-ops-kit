@@ -3,9 +3,9 @@
 scripts/diffcheck.py      differential check: failed, empty, nondeterministic, differs, identical
 scripts/vacuity_check.py  shows a test fails when the code it guards is mutated (on a copy)
 
-Each guard the tools document has a test that fails when the guard is removed;
-tests/mutations/regress_tools.json lists those removals and CI runs them through
-vacuity_check.py itself.
+The guards listed in tests/mutations/diffcheck.json and vacuity_check.json each have a
+test here that fails when the guard is removed; CI runs those removals through
+vacuity_check.py itself, with the catching test named in "expect".
 
 Run from the repo root:  python3 -m unittest discover -s tests -v
 """
@@ -157,6 +157,12 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual((code, r["verdict"]), (1, "nondeterministic"))
         self.assertIn("exit code", r["problems"][0])
 
+    def test_determinism_compares_stderr_under_stderr(self):
+        noisy = py("import secrets, sys; print('same'); print(secrets.token_hex(4), file=sys.stderr)")
+        code, r, _ = self.diff("--base", noisy, "--cand", noisy, "--stderr", "--determinism")
+        self.assertEqual((code, r["verdict"]), (1, "nondeterministic"))
+        self.assertIn("second run differs in stderr", r["problems"][0])
+
     def test_normalize_counts_every_match(self):
         three = py("print('ids t1 t2 t3')")
         code, r, _ = self.diff("--base", three, "--cand", py("print('ids t9 t8 t7')"), "--normalize", "t[0-9]")
@@ -177,6 +183,13 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual(r["verdict"], "nondeterministic")
         code, r, _ = self.diff("--base", echo, "--cand", echo, "--same-nonce")
         self.assertEqual((code, r["verdict"]), (0, "identical"))
+
+    def test_same_nonce_with_determinism_is_noted(self):
+        echo = py("print('ok')")
+        code, r, _ = self.diff("--base", echo, "--cand", echo, "--same-nonce", "--determinism")
+        self.assertIn("--same-nonce with --determinism", r["notes"][0])
+        code, r, _ = self.diff("--base", echo, "--cand", echo, "--same-nonce")
+        self.assertNotIn("notes", r)
 
     def test_stdin_nonce_is_substituted(self):
         f = self.tmp / "in.txt"
@@ -219,6 +232,36 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual((code, r["verdict"]), (1, "failed"))
         self.assertIn("cand exited 1 during timing", r["problems"])
 
+    def test_stderr_normalized_away_is_empty(self):
+        e1 = py("import sys; print('a'); print('warn 1', file=sys.stderr)")
+        e2 = py("import sys; print('a'); print('other 2', file=sys.stderr)")
+        code, r, _ = self.diff("--base", e1, "--cand", e2, "--stderr", "--normalize", "(?s).+")
+        self.assertEqual((code, r["verdict"]), (1, "empty"))
+        self.assertIn("stderr has nothing left", " ".join(r["problems"]))
+
+    def test_normalization_counts_must_match(self):
+        code, r, _ = self.diff("--base", py("print('x=12345')"), "--cand", py("print('x=<N>')"), "--normalize", "[0-9]+")
+        self.assertEqual((code, r["verdict"]), (1, "differs"))
+        self.assertIn("normalization counts: base [1] · cand [0]", r["diff_head"])
+
+    def test_timing_uses_a_fresh_nonce_each_run(self):
+        seen = self.tmp / "seen"
+        once = py("import pathlib, sys; p = pathlib.Path(sys.argv[1]); s = p.read_text().split() if p.exists() else []; "
+                  "p.write_text(' '.join(s + [sys.argv[2]])); print('ok'); sys.exit(1 if sys.argv[2] in s else 0)",
+                  str(seen), "{nonce}")
+        code, r, _ = self.diff("--base", once, "--cand", once, "--timing", "3")
+        self.assertEqual((code, r["verdict"]), (0, "identical"), r["problems"])
+        self.assertEqual(len(seen.read_text().split()), 8)  # 2 comparison runs + 3 timed pairs, all different
+
+    def test_timeout_during_timing_fails_even_with_allow_fail(self):
+        count = self.tmp / "n"
+        slow_later = py("import pathlib, sys, time; p = pathlib.Path(sys.argv[1]); n = int(p.read_text() or 0) if p.exists() else 0; "
+                        "p.write_text(str(n + 1)); print('x'); time.sleep(5 if n else 0)", str(count))
+        code, r, _ = self.diff("--base", py("print('x')"), "--cand", slow_later, "--timing", "1", "--timeout", "1.5",
+                               "--allow-fail")
+        self.assertEqual((code, r["verdict"]), (1, "failed"))
+        self.assertIn("cand timed out during timing", r["problems"])
+
     def test_human_output(self):
         code, out, _ = run_script("diffcheck", "--base", py("print('a')"), "--cand", py("print('a')"))
         self.assertEqual(code, 0)
@@ -246,6 +289,7 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual(run_script("diffcheck", "--base", "", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timing", "-1")[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "0")[0], 2)
+        self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "nan")[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", "'unclosed", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck")[0], 2)
 
@@ -332,6 +376,12 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertEqual(r["verdict"], "mutation_error")
         self.assertIn("2 times", r["mutations"][0]["detail"])
 
+    def test_overlapping_matches_count(self):
+        (self.repo / "calc.py").write_text(CALC + "# aaa\n", encoding="utf-8")
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", "aa", "x")
+        self.assertEqual(r["verdict"], "mutation_error")
+        self.assertIn("2 times", r["mutations"][0]["detail"])
+
     def test_original_untouched(self):
         before = (self.repo / "calc.py").read_text(encoding="utf-8")
         self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "")
@@ -365,6 +415,30 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertEqual((code, r["verdict"]), (1, "inconclusive"))
         self.assertEqual(r["mutations"][0]["status"], "timeout")
 
+    def test_expect_is_a_whole_word(self):
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "", "--expect", "zero")
+        self.assertEqual(r["verdict"], "guarded")
+        code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "", "--expect", "zer")
+        self.assertEqual(r["mutations"][0]["status"], "other_failure")  # a prefix of a word is not a match
+
+    def test_global_expect_applies_to_a_mutations_file(self):
+        mf = self.muts_file([{"file": "calc.py", "old": self.guard_old, "new": "", "label": "drop zero guard"}])
+        code, r, _ = self.vac("test_guard.py", "--mutations", mf, "--expect", "not_in_the_output")
+        self.assertEqual(r["mutations"][0]["status"], "other_failure")
+
+    def test_baseline_timeout_is_baseline_fails(self):
+        (self.repo / "test_slow.py").write_text("import time\ntime.sleep(10)\n", encoding="utf-8")
+        code, r, _ = self.vac("test_slow.py", "--mutate", "calc.py", self.guard_old, "", "--timeout", "1")
+        self.assertEqual((code, r["verdict"]), (1, "baseline_fails"))
+        self.assertTrue(r["baseline"]["timeout"])
+
+    def test_uncopyable_repository_is_a_tool_error(self):
+        os.mkfifo(self.repo / "pipe")
+        code, _, err = run_script("vacuity_check", "--repo", self.repo, "--test", shlex.join([PY, "test_guard.py"]),
+                                  "--mutate", "calc.py", self.guard_old, "", timeout=60)
+        self.assertEqual(code, 2)
+        self.assertIn("cannot copy", err)
+
     def test_expect_separates_the_right_failure(self):
         code, r, _ = self.vac("test_guard.py", "--mutate", "calc.py", self.guard_old, "", "--expect", "zero guard")
         self.assertEqual((code, r["verdict"]), (0, "guarded"))
@@ -395,14 +469,21 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", "true", "--mutate", "calc.py",
                                     "a", "b", "--jobs", "0")[0], 2)
 
-    def test_ignore_is_honoured(self):
-        (self.repo / "skipme").mkdir()
-        (self.repo / "skipme" / "flag.txt").write_text("x", encoding="utf-8")
-        (self.repo / "test_noflag.py").write_text(TEST_NOFLAG, encoding="utf-8")
-        code, r, _ = self.vac("test_noflag.py", "--mutate", "calc.py", self.guard_old, "")
-        self.assertEqual(r["verdict"], "baseline_fails")  # skipme/ is copied by default
-        code, r, _ = self.vac("test_noflag.py", "--mutate", "calc.py", self.guard_old, "", "--ignore", "skipme")
-        self.assertEqual(r["verdict"], "vacuous")  # copied without it, and the test guards nothing in calc.py
+    def test_ignore_adds_to_the_defaults(self):
+        for d in ("skipme", "node_modules"):
+            (self.repo / d).mkdir()
+            (self.repo / d / "flag.txt").write_text("x", encoding="utf-8")
+        (self.repo / "test_noflag.py").write_text(TEST_NOFLAG.replace('"skipme/flag.txt"', "sys.argv[1]"), encoding="utf-8")
+
+        def verdict(flag, *extra):
+            _, out, err = run_script("vacuity_check", "--repo", self.repo, "--test", shlex.join([PY, "test_noflag.py", flag]),
+                                     "--mutate", "calc.py", self.guard_old, "", *extra, "--json")
+            return json.loads(out)["verdict"]
+        self.assertEqual(verdict("skipme/flag.txt"), "baseline_fails")  # copied by default
+        self.assertEqual(verdict("node_modules/flag.txt"), "vacuous")  # skipped by default
+        self.assertEqual(verdict("skipme/flag.txt", "--ignore", "skipme"), "vacuous")
+        self.assertEqual(verdict("node_modules/flag.txt", "--ignore", "skipme"), "vacuous")  # the defaults stay
+        self.assertEqual(verdict("node_modules/flag.txt", "--ignore", "none"), "baseline_fails")
 
     def test_any_file_encoding(self):
         (self.repo / "data.bin").write_bytes(b"\xff\xfe value=1\n")
@@ -449,6 +530,14 @@ class VacuityCheckTests(unittest.TestCase):
         bad = self.tmp / "bad.json"
         bad.write_text('{"not": "a list"}', encoding="utf-8")
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutations", bad)[0], 2)
+        self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutate", "calc.py", "a", "b",
+                                    "--timeout", "nan")[0], 2)
+        for entry, message in (({"file": "calc.py", "old": 5, "new": "x"}, "needs string fields"),
+                               ({"file": "calc.py", "old": "a", "new": "b", "expect": 5}, "expect must be a string")):
+            bad.write_text(json.dumps([entry]), encoding="utf-8")
+            code, _, err = run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutations", bad)
+            self.assertEqual(code, 2, err)
+            self.assertIn(message, err)
 
     def test_help(self):
         code, out, _ = run_script("vacuity_check", "--help")

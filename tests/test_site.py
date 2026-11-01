@@ -79,6 +79,16 @@ class RealSiteTests(unittest.TestCase):
                 if p.name != "index.html":
                     self.assertTrue(p.read_text(encoding="utf-8").startswith("<!doctype html>"), p.name)
 
+    def test_legend_words_match_the_norm(self):
+        import re as _re
+        src = (ROOT / "scripts" / "build_site.py").read_text(encoding="utf-8")
+        block = src[src.index("GRADE_DEF = {"):src.index("}", src.index("GRADE_DEF = {"))]
+        norm = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+        words = _re.findall(r'"(\S+)": "([^"]+)"', block)
+        self.assertEqual(len(words), 6)
+        for grade, text in words:
+            self.assertIn(f"[{grade}] {text}", norm, grade)
+
     def test_built_pages_have_no_placeholders_or_secrets(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(run_build("--out", Path(d) / "dist")[0], 0)
@@ -138,6 +148,7 @@ class BuildCheckTests(unittest.TestCase):
     def refused(self, *expected: str):
         code, _, err = self.build()
         self.assertEqual(code, 1, err)
+        self.assertNotIn("Traceback", err, "a refusal is a reported error, not a crash")
         for e in expected:
             self.assertIn(e, err)
         self.assertFalse((self.root / "out").exists(), "nothing is written when a check fails")
@@ -221,19 +232,104 @@ class BuildCheckTests(unittest.TestCase):
         self.write()
         self.refused("grade '실측'", "fields outside the claim schema")
 
+    def test_registry_entries_need_their_fields(self):
+        self.claims.append({"id": "C2", "claim": "", "grade": "추론"})
+        self.write()
+        self.refused("claim without id or sentence")
+        self.claims.pop()
+        self.figures["f1"]["text"] = ""
+        self.write()
+        self.refused("figure f1: needs a text")
+        self.figures["f1"]["text"] = "1"
+        self.claims[0].update(grade="기록됨", evidence="echo 1")
+        self.write()
+        self.refused("claim C1: evidence must be a list")
+        self.claims[0]["evidence"] = ["echo 1"]
+        self.write()
+        self.refused("claim C1: evidence item needs kind")
+
+    def test_order_must_be_an_integer(self):
+        self.pages["index.html"] = PAGE.replace("order: 1", "order: first").replace("BODY", "")
+        self.write()
+        self.refused("order must be an integer")
+
     def test_typed_confirmed_badge(self):
-        self.body('<span class="g g-ok">확인</span>')
-        self.refused("a [확인] badge is typed into the page")
+        for badge in ('<span class="g g-ok">확인</span>', '<span class="g-ok g">확인</span>',
+                      "<span class='g g-ok'>확인</span>", '<b class="g g-ok">확인</b>'):
+            self.body(badge)
+            self.refused("a [확인] badge is typed into the page")
 
     def test_grade_placeholder_and_legend(self):
-        self.body('{{grade:C1}} <ul class="legend"><li><span class="g g-ok">확인</span> 정의</li></ul>')
+        self.body("{{grade:C1}} {{legend:all}}")
         code, _, err = self.build()
         self.assertEqual(code, 0, err)
-        self.assertIn('class="g g-ok" href="#ev-C1"', (self.root / "out" / "index.html").read_text(encoding="utf-8"))
+        html = (self.root / "out" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('class="g g-ok" href="#ev-C1"', html)
+        self.assertIn("외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음", html)
+        shutil.rmtree(self.root / "out")
+        self.body('<ul class="legend"><li>확인: 파일 하나로 충분</li></ul>')
+        self.refused("a grade legend is typed into the page")
+
+    def test_terminal_excerpt_needs_a_log(self):
+        self.body('<pre class="term">$ bench\nmedian 101 ms (-46.8%)</pre>')
+        self.refused("needs data-log")
+        self.body('<pre class="term" data-unverified>$ cargo check\nerror</pre>')
+        self.ok()
+        self.body('<pre data-log="logs/run.txt"><span class="dim"># 99% faster</span>verdict: identical</pre>')
+        self.refused("measured quantity(ies) outside the registry: 99%")
+
+    def test_cmd_must_be_valid_shell(self):
+        self.claims[0]["evidence"] = [{"kind": "cmd", "ref": "python -m unittest discover -s tests (other repo, patched)"}]
+        self.write()
+        self.refused("cmd ref is not a valid shell command")
+
+    def test_evidence_fields_and_scope_type(self):
+        self.claims[0]["evidence"][0]["note"] = "x"
+        self.claims[0]["scope"] = 3
+        self.write()
+        self.refused("evidence item has fields outside the claim schema", "scope must be a string")
+
+    def test_own_repo_url_variants(self):
+        for url in ("https://github.com/D-J-Lee/agent-ops-kit/blob/main/README.md", "https://github.com/d-j-lee/agent-ops-kit/pull/4",
+                    "https://raw.githubusercontent.com/d-j-lee/agent-ops-kit/main/README.md"):
+            self.body(f'<a href="{url}">x</a>')
+            self.refused("a link to this repository is typed as a URL")
+
+    def test_allow_marker_does_not_exempt_pages(self):
+        self.body("claude.ai/" + "public/artifacts/" + "abcdef12-3456-7890 <!-- secret-scan: allow -->")
+        self.refused("public-repo rule")
+
+    def test_git_tracked_links(self):
+        for args in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "x"]):
+            subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True)
+        (self.root / "notes.md").write_text("untracked\n", encoding="utf-8")
+        self.body("{{doc:notes.md}}")
+        self.refused("doc link to a file git does not track")
+        self.body("")
+        self.claims.append({"id": "C2", "claim": "기록.", "grade": "기록됨", "evidence": [{"kind": "file", "ref": "README.md@0000000"}]})
+        self.figures["f2"] = {"text": "2", "claim": "C2"}
+        self.body("{{fig:f2}}")
+        self.refused("file ref not in git at 0000000")
+
+    def test_check_writes_no_bytecode(self):
+        cache = ROOT / "scripts" / "__pycache__"
+        for old in cache.glob("secret_scan*.pyc") if cache.is_dir() else []:
+            old.unlink()
+        self.assertEqual(run_build("--root", self.root, "--check")[0], 0)
+        self.assertEqual(list(cache.glob("secret_scan*.pyc")) if cache.is_dir() else [], [])
 
     def test_measured_quantity_outside_registry(self):
         self.body("<p>훅이 -46% 빨라졌고 2.2초 걸렸다</p>")
         self.refused("2 measured quantity(ies) outside the registry: -46%, 2.2초")
+
+    def test_measured_quantity_with_particles_and_other_units(self):
+        self.body("<p>30%가 줄었고 190ms에서 101ms로, 약3배, 9.5× 빨라졌다. 1~3분기 자료.</p>"
+                  "<p>53분에서 3시간으로, 2.5초, 40µs, 7밀리초, 1.2s, 16KB·3MB·2GB였다.</p>")
+        err = self.refused("measured quantity(ies) outside the registry")
+        for q in ("30%", "190ms", "101ms", "3배", "9.5×", "53분", "3시간", "2.5초", "40µs", "7밀리초", "1.2s",
+                  "16KB", "3MB", "2GB"):
+            self.assertIn(q, err)
+        self.assertIn(": 14 measured quantity", err, "1~3분기 is a quarter, not a duration")
 
     def test_context_and_code_numbers_are_exempt(self):
         self.body('<p><span class="ctx">2 vCPU, 4,334줄, 16KB</span> <code>--timeout 30s</code> 1~3분기</p>'
@@ -306,6 +402,12 @@ class BuildCheckTests(unittest.TestCase):
         self.assertEqual(self.build()[0], 0)
         self.assertEqual(self.build()[0], 0, "a directory the build made is replaced")
         self.assertEqual(run_build("--root", self.root, "--out", self.root)[0], 2)
+        link = self.root / "linked-out"
+        link.symlink_to(self.root / "out")
+        code, _, err = run_build("--root", self.root, "--out", link)
+        self.assertEqual(code, 2)
+        self.assertIn("must not be a symbolic link", err)  # refused up front, not by rmtree failing later
+        self.assertTrue((self.root / "out" / "index.html").exists())
 
     def test_usage_errors(self):
         self.assertEqual(run_build("--root", "/no/such/dir")[0], 2)

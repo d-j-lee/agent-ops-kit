@@ -15,7 +15,9 @@ fools itself:
   nondeterministic a side did something different on a second run
                    (--determinism). Pin the clock, seed or session state, or
                    --normalize it.
-  differs          the compared parts differ; a unified diff head is printed.
+  differs          the compared parts differ, or normalization replaced a
+                   different number of matches on each side; a unified diff
+                   head is printed.
 
 What is compared is stated in the report ("compared"): always the exit code
 and stdout, plus stderr with --stderr. Output is compared byte for byte (no
@@ -31,7 +33,13 @@ a comparison can't silently become "identical after deleting everything".
 random token for every single invocation, so tools that remember state per
 key (sessions, caches) see a new key each time. With --same-nonce the two
 sides of one comparison share a token (still fresh for every pair), for tools
-that branch on the key itself, e.g. a holdout group chosen by hashing it.
+that branch on the key itself, e.g. a holdout group chosen by hashing it. The
+--determinism rerun is a new pair with a new key, so such a branch can still
+differ between the two runs (the report says so).
+
+A tool that reports "nothing" as a fixed value ({} or "ok") can be checked for
+emptiness by normalizing that value away: what is left is only <N>, so the
+empty-output check fails it.
 
 --timing N runs the two sides alternately N times (base, cand, base, ...) so
 that drift over time (other load, CPU clock) lands on both sides, and reports
@@ -59,6 +67,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import math
 import re
 import secrets
 import shlex
@@ -167,6 +176,10 @@ def check(args) -> dict:
 
     compared = ["exit", "stdout"] + (["stderr"] if args.stderr else [])
     report: dict = {"verdict": None, "compared": compared, "problems": [], "normalize": args.normalize}
+    if args.same_nonce and args.determinism:
+        report["notes"] = ["--same-nonce with --determinism: the second run gets a new key, so a tool that branches "
+                           "on the key itself can look nondeterministic; normalize that branch or check determinism "
+                           "separately with a fixed key"]
     sides: dict[str, dict] = {}
     raw: dict[str, dict] = {}
     nb, nc = pair_nonces()
@@ -200,6 +213,9 @@ def check(args) -> dict:
             elif not sides[name]["out"].replace("<N>", "").strip():
                 report["problems"].append(f"empty output: {name} has nothing left after normalization (only <N>)")
                 empty = True
+            if args.stderr and raw[name]["err"].strip() and not sides[name]["err"].replace("<N>", "").strip():
+                report["problems"].append(f"empty output: {name} stderr has nothing left after normalization (only <N>)")
+                empty = True
 
     if args.determinism:
         nb, nc = pair_nonces()
@@ -217,6 +233,9 @@ def check(args) -> dict:
     diff_lines: list[str] = []
     if b["exit"] != c["exit"] or b["timeout"] != c["timeout"]:
         diff_lines.append(f"exit code: base {b['exit']} · cand {c['exit']}")
+    if b["counts"] != c["counts"] or b.get("err_counts") != c.get("err_counts"):
+        # the same text after normalization but a different number of replacements is a different output
+        diff_lines.append(f"normalization counts: base {b['counts']} · cand {c['counts']}")
     for label, key in (("stdout", "out"), ("stderr", "err")):
         if key in b and b[key] != c[key]:
             diff_lines += [show(d) for d in difflib.unified_diff(
@@ -265,6 +284,8 @@ def render(report: dict) -> str:
         lines.append(f"{name}: {status} · {s['bytes']} bytes{norm}")
     for p in report["problems"]:
         lines.append(f"problem: {p}")
+    for n in report.get("notes", []):
+        lines.append(f"note: {n}")
     for d in report.get("diff_head", []):
         lines.append(f"  {d}")
     t = report.get("timing")
@@ -298,8 +319,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.timing < 0:
         print("error: --timing must be >= 0", file=sys.stderr)
         return 2
-    if args.timeout <= 0:
-        print("error: --timeout must be > 0", file=sys.stderr)
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        print("error: --timeout must be a finite number > 0", file=sys.stderr)
         return 2
     try:
         report = check(args)

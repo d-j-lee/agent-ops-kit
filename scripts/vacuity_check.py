@@ -18,9 +18,11 @@ A non-zero exit only says the test run failed, not why. So:
   - a mutated .py file must still compile; a mutation that breaks the syntax
     proves nothing about the test and is reported as "invalid"
   - a run that times out under a mutation is "timeout", not "guarded"
-  - "expect" (per mutation in the JSON file, or --expect for all) is text the
-    failing run's output must contain, typically the name of the test that is
-    supposed to catch it; a failure without it is "other_failure"
+  - "expect" (per mutation in the JSON file, or --expect for all) is a word the
+    failing run's output must contain as a whole word (test_a does not match
+    test_ab), typically the name of the test that is supposed to catch it; a
+    failure without it is "other_failure". A mutation that crashes the code
+    at run time still fails the named test: keep mutations runnable
 Mutate the code under test, not the tests themselves, and keep mutations valid
 code: for languages other than Python the tool cannot tell a crash from a
 caught regression unless you give "expect".
@@ -39,9 +41,9 @@ Usage:
                    [--expect TEXT] [--ignore NAME ...] [--timeout SEC] [--jobs N] [--json]
 
 The test command is split with shlex (no shell) and runs with the copy as its
-working directory. --ignore skips top-level-or-nested names while copying
-(default: .git target node_modules .venv __pycache__); pass --ignore none to
-copy everything. --jobs N runs N mutations at once (each has its own copy;
+working directory. Copies skip .git target node_modules .venv __pycache__;
+--ignore NAME skips more names (top level or nested), --ignore none copies
+everything. --jobs N runs N mutations at once (each has its own copy;
 timing-sensitive tests may need a longer --timeout).
 
 Verdict (worst first): baseline_fails, mutation_error (a mutation did not
@@ -59,6 +61,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import shlex
 import shutil
 import subprocess
@@ -111,7 +115,10 @@ def load_mutations(args) -> list[dict]:
 def copy_repo(src: Path, dst: Path, ignore: list[str]) -> None:
     # symlinks are copied as links (not followed): a link can point anywhere, so
     # mutations check where their target really is before writing (see mutate)
-    shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(*ignore) if ignore else None)
+    try:
+        shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(*ignore) if ignore else None)
+    except (shutil.Error, OSError) as e:  # a socket or named pipe, an unreadable file: the check cannot run
+        raise UsageError(f"cannot copy the repository: {str(e)[:300]}") from e
 
 
 def run_test(argv: list[str], cwd: Path, timeout: float) -> dict:
@@ -138,7 +145,7 @@ def mutate(work: Path, m: dict) -> tuple[str, str] | None:
         return "no_match", "file not found in copy"
     data = real.read_bytes()
     old, new = m["old"].encode("utf-8"), m["new"].encode("utf-8")
-    n = data.count(old)
+    n = len(re.findall(b"(?=" + re.escape(old) + b")", data))  # overlapping matches count too
     if n != 1:
         return "no_match", f"OLD occurs {n} times (must be exactly 1)"
     mutated = data.replace(old, new, 1)
@@ -162,7 +169,7 @@ def check(args) -> dict:
     if not argv:
         raise UsageError("empty test command")
     muts = load_mutations(args)
-    ignore = [] if args.ignore == ["none"] else (args.ignore or DEFAULT_IGNORE)
+    ignore = [] if args.ignore == ["none"] else DEFAULT_IGNORE + (args.ignore or [])
 
     report: dict = {"baseline": None, "mutations": [], "verdict": None}
     with tempfile.TemporaryDirectory(prefix="vacuity-") as tmp:
@@ -189,7 +196,7 @@ def check(args) -> dict:
                     row.update(status="timeout", detail=f"no result within {args.timeout:g}s")
                 elif r["exit"] == 0:
                     row.update(status="vacuous", tail=r["output"][-400:])
-                elif m.get("expect") and m["expect"] not in r["output"]:
+                elif m.get("expect") and not re.search(r"(?<![\w.])" + re.escape(m["expect"]) + r"(?![\w])", r["output"]):
                     row.update(status="other_failure", detail=f"failed without {m['expect']!r} in the output",
                                tail=r["output"][-400:])
                 else:
@@ -235,14 +242,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect", metavar="TEXT",
                     help="text a failing run must print to count as guarded (default for every mutation)")
     ap.add_argument("--ignore", action="append", metavar="NAME",
-                    help=f"names to skip when copying (default: {' '.join(DEFAULT_IGNORE)}; 'none' copies all)")
+                    help=f"more names to skip when copying (always skipped: {' '.join(DEFAULT_IGNORE)}; 'none' copies all)")
     ap.add_argument("--timeout", type=float, default=600.0, help="seconds per test run (default 600)")
     ap.add_argument("--jobs", type=int, default=1, metavar="N",
                     help="mutations to run at the same time, each on its own copy (default 1)")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     args = ap.parse_args(argv)
-    if args.timeout <= 0 or args.jobs < 1:
-        print("error: --timeout must be > 0 and --jobs >= 1", file=sys.stderr)
+    if not math.isfinite(args.timeout) or args.timeout <= 0 or args.jobs < 1:
+        print("error: --timeout must be a finite number > 0 and --jobs >= 1", file=sys.stderr)
         return 2
     try:
         report = check(args)

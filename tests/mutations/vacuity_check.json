@@ -44,9 +44,44 @@
  {
   "file": "scripts/vacuity_check.py",
   "label": "ignore expect",
-  "old": "                elif m.get(\"expect\") and m[\"expect\"] not in r[\"output\"]:",
-  "new": "                elif False:",
+  "old": "                elif m.get(\"expect\") and not re.search(",
+  "new": "                elif False and not re.search(",
   "expect": "test_expect_separates_the_right_failure"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "expect matched as a substring",
+  "old": "r\"(?<![\\w.])\" + re.escape(m[\"expect\"]) + r\"(?![\\w])\"",
+  "new": "re.escape(m[\"expect\"])",
+  "expect": "test_expect_is_a_whole_word"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "global expect not applied to a mutations file",
+  "old": "                         \"expect\": m.get(\"expect\", args.expect)})",
+  "new": "                         \"expect\": m.get(\"expect\")})",
+  "expect": "test_global_expect_applies_to_a_mutations_file"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "overlapping matches not counted",
+  "old": "    n = len(re.findall(b\"(?=\" + re.escape(old) + b\")\", data))",
+  "new": "    n = data.count(old)",
+  "expect": "test_overlapping_matches_count"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "copy errors are crashes",
+  "old": "    except (shutil.Error, OSError) as e:  # a socket or named pipe",
+  "new": "    except KeyError as e:  # a socket or named pipe",
+  "expect": "test_uncopyable_repository_is_a_tool_error"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "non-finite timeout accepted",
+  "old": "    if not math.isfinite(args.timeout) or args.timeout <= 0 or args.jobs < 1:",
+  "new": "    if args.timeout <= 0 or args.jobs < 1:",
+  "expect": "test_usage_errors"
  },
  {
   "file": "scripts/vacuity_check.py",
@@ -65,9 +100,16 @@
  {
   "file": "scripts/vacuity_check.py",
   "label": "--ignore not honoured",
-  "old": "    ignore = [] if args.ignore == [\"none\"] else (args.ignore or DEFAULT_IGNORE)",
+  "old": "    ignore = [] if args.ignore == [\"none\"] else DEFAULT_IGNORE + (args.ignore or [])",
   "new": "    ignore = DEFAULT_IGNORE",
-  "expect": "test_ignore_is_honoured"
+  "expect": "test_ignore_adds_to_the_defaults"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "--ignore replaces the defaults",
+  "old": "    ignore = [] if args.ignore == [\"none\"] else DEFAULT_IGNORE + (args.ignore or [])",
+  "new": "    ignore = [] if args.ignore == [\"none\"] else (args.ignore or DEFAULT_IGNORE)",
+  "expect": "test_ignore_adds_to_the_defaults"
  },
  {
   "file": "scripts/vacuity_check.py",
@@ -89,5 +131,19 @@
   "old": "            report[\"mutations\"] = list(pool.map(one, range(len(muts)), muts))",
   "new": "            futures = [pool.submit(one, i, m) for i, m in enumerate(muts)]\n            report[\"mutations\"] = [f.result() for f in reversed(futures)]",
   "expect": "test_jobs_keep_input_order"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "mutation fields not type-checked",
+  "old": "            if not isinstance(m, dict) or not all(isinstance(m.get(k), str) for k in (\"file\", \"old\", \"new\")):\n                raise UsageError(f\"mutation #{i} needs string fields file, old, new\")\n",
+  "new": "",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "expect type not checked",
+  "old": "            if \"expect\" in m and not isinstance(m[\"expect\"], str):\n                raise UsageError(f\"mutation #{i}: expect must be a string\")\n",
+  "new": "",
+  "expect": "test_usage_errors"
  }
 ]

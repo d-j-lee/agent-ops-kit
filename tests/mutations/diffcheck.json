@@ -145,5 +145,54 @@
   "old": "    if args.cwd and not Path(args.cwd).is_dir():",
   "new": "    if False:",
   "expect": "test_tool_errors_exit_2"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "stderr normalized away is not empty",
+  "old": "            if args.stderr and raw[name][\"err\"].strip() and not sides[name][\"err\"].replace(\"<N>\", \"\").strip():",
+  "new": "            if False:",
+  "expect": "test_stderr_normalized_away_is_empty"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "normalization counts not compared",
+  "old": "    if b[\"counts\"] != c[\"counts\"] or b.get(\"err_counts\") != c.get(\"err_counts\"):",
+  "new": "    if False:",
+  "expect": "test_normalization_counts_must_match"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "timing reuses one nonce",
+  "old": "        for _ in range(args.timing):\n            nb, nc = pair_nonces()\n",
+  "new": "        nb = nc = new_nonce()\n        for _ in range(args.timing):\n",
+  "expect": "test_timing_uses_a_fresh_nonce_each_run"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "timeout during timing allowed with --allow-fail",
+  "old": "                if r[\"timeout\"] or (r[\"exit\"] != 0 and not args.allow_fail):",
+  "new": "                if r[\"exit\"] != 0 and r[\"exit\"] is not None and not args.allow_fail:",
+  "expect": "test_timeout_during_timing_fails_even_with_allow_fail"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "same-nonce with determinism not noted",
+  "old": "    if args.same_nonce and args.determinism:",
+  "new": "    if False:",
+  "expect": "test_same_nonce_with_determinism_is_noted"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "non-finite timeout accepted",
+  "old": "    if not math.isfinite(args.timeout) or args.timeout <= 0:",
+  "new": "    if args.timeout <= 0:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "determinism ignores stderr",
+  "old": "    return (a[\"exit\"], a[\"timeout\"], a[\"out\"], a.get(\"err\")) == (b[\"exit\"], b[\"timeout\"], b[\"out\"], b.get(\"err\"))",
+  "new": "    return (a[\"exit\"], a[\"timeout\"], a[\"out\"]) == (b[\"exit\"], b[\"timeout\"], b[\"out\"])",
+  "expect": "test_determinism_compares_stderr_under_stderr"
  }
 ]

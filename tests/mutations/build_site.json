@@ -71,10 +71,38 @@
  },
  {
   "file": "scripts/build_site.py",
+  "label": "evidence extra fields allowed",
+  "old": "            if set(e) - EVIDENCE_KEYS:",
+  "new": "            if False:",
+  "expect": "test_evidence_fields_and_scope_type"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "scope type not checked",
+  "old": "        if \"scope\" in c and not isinstance(c[\"scope\"], str):\n            errors.append",
+  "new": "        if False:\n            errors.append",
+  "expect": "test_evidence_fields_and_scope_type"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs outside the repo allowed",
+  "old": "            if e[\"kind\"] == \"file\" and not inside(root, path):",
+  "new": "            if False:",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
   "label": "file refs not checked for existence",
-  "old": "            elif e[\"kind\"] == \"file\" and not (root / ref.split(\"@\", 1)[0]).exists():",
+  "old": "            elif e[\"kind\"] == \"file\" and not (root / path).exists():",
   "new": "            elif False:",
   "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs at a missing sha allowed",
+  "old": "            elif e[\"kind\"] == \"file\" and git_tracked(root, path, sha) is False:",
+  "new": "            elif False:",
+  "expect": "test_git_tracked_links"
  },
  {
   "file": "scripts/build_site.py",
@@ -92,9 +120,16 @@
  },
  {
   "file": "scripts/build_site.py",
-  "label": "file refs ignore @sha",
-  "old": "                path, _, sha = e[\"ref\"].partition(\"@\")",
-  "new": "                path, sha = e[\"ref\"].partition(\"@\")[0], \"\"",
+  "label": "cmd syntax not checked",
+  "old": "            elif e[\"kind\"] == \"cmd\":\n                bad = bash_syntax_error(ref)",
+  "new": "            elif False:\n                bad = bash_syntax_error(ref)",
+  "expect": "test_cmd_must_be_valid_shell"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs ignore @sha in links",
+  "old": "                path, _, sha = e[\"ref\"].partition(\"@\")\n                refs.append",
+  "new": "                path, sha = e[\"ref\"].partition(\"@\")[0], \"\"\n                refs.append",
   "expect": "test_file_ref_at_sha_links_that_sha"
  },
  {
@@ -107,15 +142,22 @@
  {
   "file": "scripts/build_site.py",
   "label": "typed [확인] badges allowed",
-  "old": "    if CONFIRMED_BADGE.search(text):",
-  "new": "    if False:",
+  "old": "        if {\"g\", \"g-ok\"} <= set((m.group(1) or m.group(2) or m.group(3) or \"\").split()):",
+  "new": "        if False:",
   "expect": "test_typed_confirmed_badge"
  },
  {
   "file": "scripts/build_site.py",
-  "label": "legend not exempt",
-  "old": "    r'<span class=\"ctx\">.*?</span>', r'<ul class=\"legend\".*?</ul>')]",
-  "new": "    r'<span class=\"ctx\">.*?</span>')]",
+  "label": "typed legends allowed",
+  "old": "    if re.search(r'<ul\\b[^>]*\\bclass\\s*=\\s*[\"\\']?[^\"\\'>]*\\blegend\\b', text):",
+  "new": "    if False:",
+  "expect": "test_grade_placeholder_and_legend"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "legend placeholder not rendered",
+  "old": "            if kind == \"legend\":",
+  "new": "            if False:",
   "expect": "test_grade_placeholder_and_legend"
  },
  {
@@ -127,10 +169,31 @@
  },
  {
   "file": "scripts/build_site.py",
+  "label": "Korean particles stop the number rule",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])\")",
+  "new": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?!\\w)\")",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
   "label": "ctx spans not exempt",
-  "old": "    r'<span class=\"ctx\">.*?</span>', ",
-  "new": "",
+  "old": "    r'<span class=\"ctx\">.*?</span>')]",
+  "new": "    )]",
   "expect": "test_context_and_code_numbers_are_exempt"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "terminal excerpts without a log allowed",
+  "old": "        if not DATA_LOG.search(m.group(1)) and \"data-unverified\" not in m.group(1) and \"term\" in m.group(1):",
+  "new": "        if False:",
+  "expect": "test_terminal_excerpt_needs_a_log"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "log annotations not linted",
+  "old": "    dims = \" \".join(DIM.findall(\" \".join(m.group(2) for m in PRE.finditer(body))))",
+  "new": "    dims = \"\"",
+  "expect": "test_terminal_excerpt_needs_a_log"
  },
  {
   "file": "scripts/build_site.py",
@@ -141,10 +204,24 @@
  },
  {
   "file": "scripts/build_site.py",
+  "label": "own-repo URL rule only for lowercase blob/tree",
+  "old": "OWN_LINK = re.compile(r\"(?:github\\.com|raw\\.githubusercontent\\.com)/d-j-lee/agent-ops-kit\\b\", re.I)",
+  "new": "OWN_LINK = re.compile(r\"github\\.com/d-j-lee/agent-ops-kit/(?:blob|tree)/\")",
+  "expect": "test_own_repo_url_variants"
+ },
+ {
+  "file": "scripts/build_site.py",
   "label": "doc paths outside the repo allowed",
   "old": "            if not inside(root, arg):\n                errors.append(f\"{name}: doc link outside the repository {arg}\")\n            elif",
   "new": "            if False:\n                pass\n            elif",
   "expect": "test_doc_outside_repo"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "untracked doc links allowed",
+  "old": "            elif git_tracked(root, arg) is False:",
+  "new": "            elif False:",
+  "expect": "test_git_tracked_links"
  },
  {
   "file": "scripts/build_site.py",
@@ -163,23 +240,23 @@
  {
   "file": "scripts/build_site.py",
   "label": "public-repo scan skipped",
-  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)})",
+  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page.replace(scanner.ALLOW_MARKER, \"\"))})",
   "new": "        hits = []",
   "expect": "test_public_repo_rule"
  },
  {
   "file": "scripts/build_site.py",
   "label": "public-repo scan only on index",
-  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)})",
+  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page.replace(scanner.ALLOW_MARKER, \"\"))})",
   "new": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)}) if name == \"index.html\" else []",
   "expect": "test_public_repo_rule_covers_supporting_pages"
  },
  {
   "file": "scripts/build_site.py",
-  "label": "file refs outside the repo allowed",
-  "old": "            if e[\"kind\"] == \"file\" and not inside(root, ref.split(\"@\", 1)[0]):",
-  "new": "            if False:",
-  "expect": "test_evidence_items_are_checked"
+  "label": "allow marker honoured on pages",
+  "old": "scanner.scan_text(page.replace(scanner.ALLOW_MARKER, \"\"))",
+  "new": "scanner.scan_text(page)",
+  "expect": "test_allow_marker_does_not_exempt_pages"
  },
  {
   "file": "scripts/build_site.py",
@@ -204,9 +281,107 @@
  },
  {
   "file": "scripts/build_site.py",
+  "label": "--out symlink allowed",
+  "old": "    if out is not None and out.is_symlink():",
+  "new": "    if False:",
+  "expect": "test_out_dir_not_made_by_the_build_is_kept"
+ },
+ {
+  "file": "scripts/build_site.py",
   "label": "--check writes",
   "old": "    out = None if args.check else Path(args.out) if args.out else root / \"site\" / \"dist\"",
   "new": "    out = Path(args.out) if args.out else root / \"site\" / \"dist\"",
   "expect": "test_check_mode_writes_nothing"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "page order not checked",
+  "old": "        meta[\"order\"] = int(meta[\"order\"])",
+  "new": "        meta[\"order\"] = int(meta[\"order\"]) if meta[\"order\"].isdigit() else 0",
+  "expect": "test_order_must_be_an_integer"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "claim without a sentence accepted",
+  "old": "        if not cid or not isinstance(c.get(\"claim\"), str) or not c[\"claim\"]:",
+  "new": "        if not cid:",
+  "expect": "test_registry_entries_need_their_fields"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "figure without text accepted",
+  "old": "        if not isinstance(f, dict) or not isinstance(f.get(\"text\"), str) or not f.get(\"text\"):",
+  "new": "        if not isinstance(f, dict):",
+  "expect": "test_registry_entries_need_their_fields"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "evidence not a list accepted",
+  "old": "            errors.append(f\"claim {cid}: evidence must be a list\")\n",
+  "new": "",
+  "expect": "test_registry_entries_need_their_fields"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "bad evidence items reach rendering",
+  "old": "        claims[cid] = {**c, \"evidence\": good}",
+  "new": "        claims[cid] = c",
+  "expect": "test_registry_entries_need_their_fields"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unit 배 not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unit × not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "units KB/MB/GB not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "units 초/분/시간 not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|×|ms|µs|밀리초|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unit µs/밀리초 not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|×|ms|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unit s not measured",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "분기 counted as minutes",
+  "old": "(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "new": "(?:%p|%|배|×|ms|µs|밀리초|초|분|시간|s|KB|MB|GB)(?![A-Za-z0-9_])",
+  "expect": "test_measured_quantity_with_particles_and_other_units"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "--check writes bytecode",
+  "old": "sys.dont_write_bytecode = True  # --check writes nothing",
+  "new": "sys.dont_write_bytecode = False  # --check writes nothing",
+  "expect": "test_check_writes_no_bytecode"
  }
 ]

@@ -73,8 +73,11 @@ import importlib.util
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True  # --check writes nothing, not even secret_scan's bytecode
 
 GRADES = ["확인", "도출", "추론", "미확인", "기록됨", "문서"]
 GRADE_CLASS = {"확인": "g-ok", "도출": "g-der", "추론": "g-inf", "미확인": "g-unk", "기록됨": "g-rec", "문서": "g-doc"}
@@ -83,13 +86,26 @@ MARKER = ".aok-site-build"
 PLACEHOLDER = re.compile(r"\{\{(\w+):([^{}]+)\}\}")
 META = re.compile(r"\A\s*<!--page\s*\n(.*?)\n-->\s*\n", re.S)
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
-OWN_LINK = re.compile(re.escape(REPO_URL.split("//", 1)[1]) + r"/(?:blob|tree)/")
-CONFIRMED_BADGE = re.compile(r'<(?:span|a)\b[^>]*\bclass="g g-ok"')
-MEASURE = re.compile(r"(?<![\w.])[-+−~]?\d[\d,.]*\s*(?:%p|%|배|ms|초|분|시간|s|KB|MB|GB)(?!\w)")
+OWN_LINK = re.compile(r"(?:github\.com|raw\.githubusercontent\.com)/d-j-lee/agent-ops-kit\b", re.I)
+CLASS_ATTR = re.compile(r"""<\w+\b[^>]*?\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""", re.I)
+# a number with a unit of measure; Korean particles may follow (30%가, 190ms에서), 분기 (quarter) is not a unit
+MEASURE = re.compile(r"(?<![A-Za-z0-9_.])[-+−~]?\d[\d,.]*\s*(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])")
 EXEMPT = [re.compile(p, re.S | re.I) for p in (
     r"<!--.*?-->", r"<pre\b.*?</pre>", r"<code\b.*?</code>", r"<script\b.*?</script>", r"<style\b.*?</style>",
-    r'<span class="ctx">.*?</span>', r'<ul class="legend".*?</ul>')]
-PRE_LOG = re.compile(r'<pre\b([^>]*)\bdata-log="([^"]+)"([^>]*)>(.*?)</pre>', re.S)
+    r'<span class="ctx">.*?</span>')]
+PRE = re.compile(r"<pre\b([^>]*)>(.*?)</pre>", re.S | re.I)
+DATA_LOG = re.compile(r'\bdata-log="([^"]+)"')
+DIM = re.compile(r'<span class="dim">(.*?)</span>', re.S)
+EVIDENCE_KEYS = {"kind", "ref", "excerpt"}
+# the grade legend every page shows through {{legend:all}}; the same words as docs/architecture.md (a test checks)
+GRADE_DEF = {
+    "확인": "직접 실행·측정. 다시 실행하거나 조회할 수 있는 ref가 있다",
+    "도출": "확인된 값에서 계산",
+    "추론": "판단이 들어감",
+    "미확인": "확인하지 못함",
+    "기록됨": "다른 세션·에이전트의 기록, 다시 돌릴 수 없는 기록",
+    "문서": "외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. 내용이 맞다는 확인은 아니다",
+}
 TAG = re.compile(r"<[^>]+>")
 
 
@@ -103,6 +119,31 @@ def load_secret_scan():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def git_tracked(root: Path, rel: str, sha: str = "") -> bool | None:
+    """Whether rel (at sha, or in the index) is in git. None when root is not a git work tree."""
+    def git(*args):
+        try:
+            return subprocess.run(["git", *args], cwd=root, capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    probe = git("rev-parse", "--is-inside-work-tree")
+    if probe is None or probe.returncode != 0:
+        return None
+    if sha:
+        r = git("cat-file", "-e", f"{sha}:{rel}")
+        return r is not None and r.returncode == 0
+    r = git("ls-files", "--", rel)
+    return r is not None and r.returncode == 0 and bool(r.stdout.strip())
+
+
+def bash_syntax_error(cmd: str) -> str | None:
+    bash = shutil.which("bash")
+    if not bash:
+        return "bash not found, cannot check the command's syntax"
+    r = subprocess.run([bash, "-n", "-c", cmd], capture_output=True, text=True, timeout=30)
+    return (r.stderr.strip().splitlines() or ["syntax error"])[-1] if r.returncode != 0 else None
 
 
 def inside(root: Path, rel: str) -> Path | None:
@@ -135,30 +176,44 @@ def load_registry(root: Path, site: Path) -> tuple[dict, dict, list[str]]:
             errors.append(f"claim {cid}: fields outside the claim schema: {sorted(extra)}")
         if c.get("grade") not in GRADES:
             errors.append(f"claim {cid}: grade {c.get('grade')!r} is not one of {GRADES}")
+        if "scope" in c and not isinstance(c["scope"], str):
+            errors.append(f"claim {cid}: scope must be a string")
+            c = {**c, "scope": str(c["scope"])}  # keep rendering so every error is reported in one run
         ev = c.get("evidence", [])
         if not isinstance(ev, list):
             errors.append(f"claim {cid}: evidence must be a list")
             ev = []
         kinds = set()
+        good = []  # only well-formed items reach rendering, so one run reports every error without a traceback
         for e in ev:
             if not isinstance(e, dict) or e.get("kind") not in ("cmd", "event", "file", "url") \
                     or not isinstance(e.get("ref"), str) or not e["ref"].strip():
                 errors.append(f"claim {cid}: evidence item needs kind in cmd|event|file|url and a ref")
                 continue
+            good.append(e)
             kinds.add(e["kind"])
             ref = e["ref"]
-            if e["kind"] == "file" and not inside(root, ref.split("@", 1)[0]):
+            if set(e) - EVIDENCE_KEYS:
+                errors.append(f"claim {cid}: evidence item has fields outside the claim schema: {sorted(set(e) - EVIDENCE_KEYS)}")
+            path, _, sha = ref.partition("@")
+            if e["kind"] == "file" and not inside(root, path):
                 errors.append(f"claim {cid}: file ref outside the repository: {ref}")
-            elif e["kind"] == "file" and not (root / ref.split("@", 1)[0]).exists():
+            elif e["kind"] == "file" and not (root / path).exists():
                 errors.append(f"claim {cid}: file ref to a missing file: {ref}")
+            elif e["kind"] == "file" and git_tracked(root, path, sha) is False:
+                errors.append(f"claim {cid}: file ref not in git{' at ' + sha if sha else ''} (the GitHub link would 404): {ref}")
             if e["kind"] == "url" and not ref.startswith("https://"):
                 errors.append(f"claim {cid}: url ref must start with https://: {ref[:60]}")
             if e["kind"] == "cmd" and re.search(r"<[^<>\s][^<>]*>", ref):
                 errors.append(f"claim {cid}: cmd ref has a <placeholder>; name inputs as $VARS from a procedure: {ref[:80]}")
+            elif e["kind"] == "cmd":
+                bad = bash_syntax_error(ref)
+                if bad:
+                    errors.append(f"claim {cid}: cmd ref is not a valid shell command ({bad}): {ref[:80]}")
         if c.get("grade") == "확인" and not kinds & {"cmd", "url"}:
             errors.append(f"claim {cid}: [확인] needs a cmd or url evidence item to re-run or re-query "
                           "(claim.schema rule 1; a file pointer alone is a record)")
-        claims[cid] = c
+        claims[cid] = {**c, "evidence": good}
     for fid, f in figures.items():
         if not isinstance(f, dict) or not isinstance(f.get("text"), str) or not f.get("text"):
             errors.append(f"figure {fid}: needs a text")
@@ -196,10 +251,19 @@ def lint_source(name: str, body: str) -> list[str]:
     text = PLACEHOLDER.sub(" ", body)
     for rx in EXEMPT:
         text = rx.sub(" ", text)
-    if CONFIRMED_BADGE.search(text):
-        errors.append(f"{name}: a [확인] badge is typed into the page; use {{{{grade:ID}}}} or {{{{claim:ID}}}} "
-                      "so it carries evidence")
-    plain = html.unescape(TAG.sub(" ", text))
+    for m in CLASS_ATTR.finditer(text):
+        if {"g", "g-ok"} <= set((m.group(1) or m.group(2) or m.group(3) or "").split()):
+            errors.append(f"{name}: a [확인] badge is typed into the page; use {{{{grade:ID}}}} or {{{{claim:ID}}}} "
+                          "so it carries evidence")
+            break
+    if re.search(r'<ul\b[^>]*\bclass\s*=\s*["\']?[^"\'>]*\blegend\b', text):
+        errors.append(f"{name}: a grade legend is typed into the page; use {{{{legend:all}}}} (the norm's words)")
+    for m in PRE.finditer(body):
+        if not DATA_LOG.search(m.group(1)) and "data-unverified" not in m.group(1) and "term" in m.group(1):
+            errors.append(f"{name}: a terminal excerpt (<pre class=\"term\">) needs data-log=\"PATH\" to be checked "
+                          "against the raw log, or data-unverified with a [기록됨] grade beside it")
+    dims = " ".join(DIM.findall(" ".join(m.group(2) for m in PRE.finditer(body))))
+    plain = html.unescape(TAG.sub(" ", text + " " + dims))
     found = MEASURE.findall(plain)
     if found:
         shown = ", ".join(dict.fromkeys(f.strip() for f in found))
@@ -212,8 +276,11 @@ def lint_source(name: str, body: str) -> list[str]:
 
 def check_logs(name: str, body: str, root: Path) -> list[str]:
     errors = []
-    for m in PRE_LOG.finditer(body):
-        rel, content = m.group(2), m.group(4)
+    for m in PRE.finditer(body):
+        dl = DATA_LOG.search(m.group(1))
+        if not dl:
+            continue
+        rel, content = dl.group(1), m.group(2)
         path = inside(root, rel)
         if not path or not path.is_file():
             errors.append(f"{name}: data-log points at a missing file {rel}")
@@ -305,6 +372,8 @@ def build(root: Path, out: Path | None, ref: str) -> list[str]:
                 errors.append(f"{name}: doc link outside the repository {arg}")
             elif not (root / arg).exists():
                 errors.append(f"{name}: doc link to missing file {arg}")
+            elif git_tracked(root, arg) is False:
+                errors.append(f"{name}: doc link to a file git does not track (the GitHub link would 404): {arg}")
             return f"{REPO_URL}/blob/{ref}/{html.escape(arg)}"
 
         def repl(m: re.Match) -> str:
@@ -333,6 +402,10 @@ def build(root: Path, out: Path | None, ref: str) -> list[str]:
                 return f'<a href="{doc_url(arg)}" target="_blank" rel="noopener"><code>{html.escape(arg)}</code></a>'
             if kind == "docurl":
                 return doc_url(arg)
+            if kind == "legend":
+                return ('<ul class="legend" aria-label="근거 등급 (AOK §2.1)">' + "".join(
+                    f'<li><span class="g {GRADE_CLASS[g]}">{g}</span> {html.escape(GRADE_DEF[g])}</li>' for g in GRADES)
+                    + "</ul>")
             errors.append(f"{name}: unknown placeholder kind {kind!r}")
             return ""
 
@@ -374,7 +447,8 @@ def build(root: Path, out: Path | None, ref: str) -> list[str]:
             page = ('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
                     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
                     + head + '</head>\n<body>\n' + page[len(head):] + '</body>\n</html>\n')
-        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)})
+        # the scanner's per-line "secret-scan: allow" escape does not apply to published pages
+        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page.replace(scanner.ALLOW_MARKER, ""))})
         if UUID.search(page):
             hits.append("uuid")
         for rule in hits:
@@ -416,11 +490,17 @@ def main(argv: list[str] | None = None) -> int:
     if out is not None and (out.resolve() == root.resolve() or out.resolve() in root.resolve().parents):
         print(f"error: --out must not be the repository or one of its parents: {out}", file=sys.stderr)
         return 2
+    if out is not None and out.is_symlink():
+        print(f"error: --out must not be a symbolic link: {out}", file=sys.stderr)
+        return 2
     try:
         errors = build(root, out, args.ref)
     except BuildError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    except OSError as e:  # the output could not be written: the build did not run to the end
+        print(f"error: cannot write the site: {e}", file=sys.stderr)
+        return 2
     if errors:
         for e in errors:
             print(f"error: {e}", file=sys.stderr)

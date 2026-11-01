@@ -73,7 +73,7 @@ RULES: list[tuple[str, str, re.Pattern, int]] = [
     ("claude_environment_id", WARN, re.compile(r"\benv_[0-9A-Za-z]{20,}\b"), 4),
     ("claude_container_id", WARN, re.compile(r"\bcontainer_0[0-9A-Za-z]{16,}\b"), 10),
     ("claude_artifact_url", WARN, re.compile(
-        r"\bclaude\.ai/(?:code/|public/)?artifacts?/[0-9A-Za-z][0-9A-Za-z\-]{7,}"), 0),
+        r"\bclaude\.ai/(?:code/|public/)?artifacts?/[0-9A-Za-z][0-9A-Za-z\-]{7,}", re.I), 0),
 ]
 
 PLACEHOLDER_WORDS = ("example", "placeholder", "redacted", "dummy")
