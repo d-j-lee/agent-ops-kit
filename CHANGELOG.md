@@ -11,11 +11,13 @@
   - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`(낱말 단위로 맞춤, 빈 문자열은 사용 오류)에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬. 읽을 수 없는 입력과 범위 밖 `--timeout`은 종료 코드 2
   - CI 자기 시험: 변이 목록에 올린 장치를 하나씩 끈 변이 130개(diffcheck 33, vacuity_check 25, build_site 72), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
 - ⑧ 작업 레포 하네스(D26): 런북 `docs/patterns/harness.md`, 스킬 `.claude/skills/aok-harness`, 코드 `harness/`
-  - `harness/aok_harness.py`: 언어 중립 코어. Claude Code 훅 다섯 개(세션 시작 기준 기록, 편집 직후 검사, 턴 종료 게이트, 사용자 입력 시 막힘 횟수 초기화, 푸시 전 게이트), 단일 진입점 `verify`(종료 0/1/2, `--base`로 기준 커밋의 정의), `install`(`--yes` 없이는 계획만, S4). 게이트 정의는 세션이 시작된 커밋에서 읽고, 실행 불가·하네스 오류는 통과로 치지 않으며, 3번 막히면 놓아 주고 알린다. 통과 때 약해진 검사와 하네스 변경을 보고한다
-  - 어댑터 `harness/adapters/{python,rust}.json`(데이터). Rust는 fsmap(1회차 구현)이 있으면 모두 위임
-  - 작업 레포 리뷰어 `harness/agents/aok-reviewer.md`: 사본에서만 실험, 푸시 없음
-  - 시험 `tests/test_harness.py`, 변이 51개(`tests/mutations/harness.json`), CI 자기 시험. Rust 위임은 고정 커밋(74b7ffb)으로 빌드한 실제 fsmap으로도 CI가 시험한다
-  - 시험 T7(원격 자식에서 프로젝트 훅이 도는지, 미실시), dev 템플릿에 하네스 아래에서 일하는 법
+  - `harness/aok_harness.py`: 언어 중립 코어. Claude Code 훅 다섯 개(세션 시작 기준 기록, 편집 직후 검사, 턴 종료 게이트, 사용자 입력 시 막힘 횟수 초기화, 셸 명령 검사), 단일 진입점 `verify`(종료 0/1/2, `--base`로 기준 커밋의 정의와 어댑터), `install`(`--yes` 없이는 계획만, S4. 모양이 다른 설정·다른 어댑터는 쓰기 전에 거부, PreToolUse에 `onFailure: "block"`)
+  - 게이트 정의와 어댑터 사본은 세션이 시작된 커밋에서 읽고(기준 커밋에 없는 정의는 쓰지 않음), 실행 불가·손상되거나 없는 세션 상태·fsmap의 0·2 아닌 종료·하네스 오류는 통과로 치지 않는다. 연달아 3번 막고 세 번째에 마지막임을 알린 뒤 놓아 준다. 게시는 체크아웃한 브랜치만, 같은 명령의 HEAD 이동 없이, 하네스·설정·리뷰어·CI를 바꾸지 않은 세션에서만 허용하고, git 훅을 끄는 명령은 거부한다(래퍼·`$(…)`·`sh -c`·줄바꿈 안의 호출도 찾음). 통과 때(푸시 전 게이트가 먼저 통과했어도) 약해진 검사와 하네스 변경을 보고한다
+  - 어댑터 `harness/adapters/{python,rust}.json`(데이터). Rust는 fsmap(1회차 구현)이 있으면 훅 다섯 개와 `verify`를 위임
+  - 작업 레포 리뷰어 `harness/agents/aok-reviewer.md`: 작업 트리째 사본에서 원격을 지우고 실험, 푸시 없음
+  - 시험 `tests/test_harness.py`(66개, 실제 fsmap 1개는 `AOK_FSMAP`이 있을 때), 변이 137개(`tests/mutations/harness.json`), CI 자기 시험. Rust 위임은 고정 커밋(74b7ffb)으로 빌드한 실제 fsmap으로도 CI가 시험한다
+  - 런북의 CI 예시는 기준 브랜치에서 꺼낸 코어로 돈다. 시험 T7(원격 자식에서 프로젝트 훅이 도는지, 미실시), dev 템플릿에 하네스 아래에서 일하는 법
+  - 2회차 검증(독립 검증자 둘 + 판정자)과 그 반영: `reports/2026-10-30-verification-rounds.md` §7
 - 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): HTML 파서로 브라우저가 보이는 대로 읽어, 페이지 본문·title 속성·메타데이터의 날 측정 수치(조사가 붙어도, 엔티티·폭 없는 문자·전각으로 써도)·어떤 꼴로든 손으로 단 [확인] 배지와 등급 범례(범례는 규범 문구로 생성)·cmd·url 근거가 없는 [확인]·셸 문법에 맞지 않거나 자리표시가 든 근거 명령·git에 없는 파일이나 저장소 밖 링크·원자료(git이 추적하는 site/ 밖 파일)와 다른 발췌·근거 없는 터미널 발췌나 측정값이 든 `<pre>`([기록됨] 배지 없는 data-unverified 포함)·렌더된 글자에서도 공개 레포 금지 항목은 빌드 실패. 작성 실수를 막는 가드레일이며 의도적 우회(CSS가 만든 글자, 말로 쓴 숫자, 목록 밖 단위)는 막지 않는다. 게시 URL은 레포에 두지 않는다
 - [문서] 등급 범위(D29): 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. `docs/architecture.md`·`schemas/claim.schema.json`·verifier 정의
 - 시험: `tests/test_regress_tools.py`, `tests/test_site.py`
