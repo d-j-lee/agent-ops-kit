@@ -55,6 +55,7 @@ register_repo_root(owner="d-j-lee", repo="agent-ops-kit", directory="<clone 경�
 | `/aok-cleanroom` | README·설정을 바꾼 PR, 병합 직후, 릴리스 전 |
 | `/aok-loop` | 왕복이 3회 이상 예상되는 PR |
 | `/aok-garden` | 주 1회, 또는 끝난 세션이 20개 쌓였을 때 |
+| `/aok-atlas` | 산출물을 만든 턴을 끝내기 전, 보관·인계 전. 자기 컨테이너를 fsmap으로 재서 원장 `atlas/`에 올린다 |
 | `/aok-regress` | 버그 수정·리팩터링·이식·최적화 PR, ④의 각 라운드, 수치를 바꾼 문서 |
 
 ## 이어받기 (어느 세션이든)
@@ -80,12 +81,12 @@ agent-ops-kit/
 │  ├─ patterns/{brd,watchdog,cleanroom,loop,curator,budget,regression,harness}.md   # 기능별 런북
 │  ├─ rollout.md                   # 단계, 시험 T1–T7, KPI, 결정 D1–D9·D25–D29
 │  ├─ dashboard.md                 # 관제실 콘솔
-│  └─ proposals/{control-tower-v2,workspace-atlas,regression-harness-hub}.md   # 제안: 중간관리자·비서, 작업공간 지도, 회귀 고정·작업 레포 하네스·읽기 허브
+│  └─ proposals/{control-tower-v2,workspace-atlas,regression-harness-hub}.md   # 제안: 중간관리자·비서(Rust 적용 §4a), 작업공간 지도(측정은 구현), 회귀 고정·작업 레포 하네스·읽기 허브
 ├─ schemas/{aok1,tree,ledger,claim,card,seed,cleanroom-report}.schema.json
-├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden,regress,harness}/SKILL.md
+├─ .claude/skills/aok-{delegate,verify,cleanroom,loop,watch,garden,atlas,regress,harness}/SKILL.md
 ├─ .claude/agents/{verifier,adjudicator}.md                      # 읽기·실행 도구(쓰기·편집 없음)
 ├─ templates/system-prompts/{child-base,dev,reviewer,cleanroom,repro-l2,watchdog,curator}.md
-├─ scripts/{sanitize_packet,harvest_events,secret_scan}.py
+├─ scripts/{sanitize_packet,harvest_events,secret_scan,atlas_record}.py   # atlas_record: fsmap 스냅숏 → 원장 atlas 레코드
 ├─ scripts/{diffcheck,vacuity_check}.py      # ⑦ 전후 비교, 공허한 테스트 검사
 ├─ scripts/build_site.py           # 읽기 허브 빌드(site/ → site/dist/)
 ├─ harness/                        # ⑧ 작업 레포 하네스: aok_harness.py(코어), adapters/*.json, agents/aok-reviewer.md
@@ -94,7 +95,7 @@ agent-ops-kit/
 ├─ site/                           # 읽기 허브 원본: pages, assets, 수치 레지스트리 claims.json
 ├─ knowledge/                      # 카드·씨앗 형식과 템플릿만
 ├─ tests/                          # 단위 시험, 콘솔 인박스 시험(tests/console/), 하네스 시험, 변이 목록(tests/mutations/)
-├─ .github/workflows/ci.yml        # PR·main에서 시험과 공개 레포 스캔
+├─ .github/workflows/ci.yml        # PR·main에서 시험, 공개 레포 스캔, 변이 자기 시험(⑦·⑧), 콘솔 브라우저 시험, 고정 커밋 fsmap 시험(계약·위임)
 └─ reports/                        # 이력: 실측, 검증 기록
 ```
 
@@ -105,8 +106,8 @@ agent-ops-kit/
 | 버전 | v1.0.0 ([CHANGELOG](CHANGELOG.md)) |
 | 단계 | 1단계(기반 + 실현성 시험). **T1–T7 미실시** — 결과 전까지 ②B, ③ 야간, ⑤ 예약은 꺼 두고, ⑧은 원격 자식에서 훅이 도는지(T7) 확인 전에는 사람이 여는 세션에만 쓴다 |
 | 결정 | D1(키트 위치 = 이 레포), D25–D29(회귀 고정, 작업 레포 하네스, 읽기 허브, 수치 규칙, [문서] 등급 범위)가 확정. D2–D9는 [rollout.md §4](docs/rollout.md#4-결정-사항) |
-| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). MVP-1.2 인박스는 콘솔에 들어갔고, 나머지는 결정 D10–D18을 받은 뒤 진행한다 |
-| 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md) |
+| 다음 | 관제탑 v2 [제안](docs/proposals/control-tower-v2.md). 인박스(MVP-1.3)와 작업공간 측정(Rust 적용 R1, fsmap)은 콘솔에 들어갔다. 나머지는 결정 D10–D18·D22–D24를 받은 뒤 진행한다 |
+| 근거 | [실측 기록](reports/2026-10-20-field-test.md), [검증 기록](reports/2026-10-20-plan-review.md), [v2 설계 대조](reports/2026-10-21-v2-design-crosscheck.md), [콘솔 v11 런타임](reports/2026-10-30-console-v11-runtime.md), [fsmap 통합](reports/2026-10-30-atlas-fsmap.md) |
 
 ## 공개 레포 주의
 
