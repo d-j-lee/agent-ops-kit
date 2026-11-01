@@ -15,19 +15,22 @@
 아래 변수 이름을 각 절의 명령과 허브 레지스트리의 근거 명령이 그대로 쓴다.
 
 ```bash
-git clone https://github.com/apache/commons-lang.git && git clone https://github.com/apache/zookeeper.git
+git clone https://github.com/d-j-lee/agent-ops-kit.git                                              # 이 저장소($AOK)
+git clone https://github.com/apache/commons-lang.git && git -C commons-lang checkout --detach 5ebe419f3   # 수집 때의 판
+git clone https://github.com/apache/zookeeper.git && git -C zookeeper checkout --detach 858c8d770
 git clone https://github.com/d-j-lee/work-atlas.git wa && git -C wa fetch origin pull/1/head:pr1
 git -C wa worktree add --detach ../wa-base 10011b6 && git -C wa worktree add --detach ../wa-cand 49e4fbe
 git clone https://github.com/d-j-lee/docbench.git && git -C docbench checkout --detach 881dd6f       # docbench-diff 입력
 git clone https://github.com/d-j-lee/dj-assis.git && git -C dj-assis checkout --detach 9acecc9       # docbench-diff 입력
 python3 -m venv venv && venv/bin/pip install orjson==3.13.0 pyyaml jsonschema
-export AOK=$PWD/agent-ops-kit PY=$PWD/venv/bin/python3 WA_BASE=$PWD/wa-base WA_CAND=$PWD/wa-cand \
+export SRC=$PWD AOK=$PWD/agent-ops-kit PY=$PWD/venv/bin/python3 WA_BASE=$PWD/wa-base WA_CAND=$PWD/wa-cand \
        INST=$PWD/inst REPO_LANG=$PWD/commons-lang REPO_ZK=$PWD/zookeeper OUT=$PWD/logs
-# 인스턴스 inst/lang, inst/zk 의 atlas.toml 은 work-atlas EVALUATION.md "재현" 절의 형식 그대로
+# 인스턴스 inst/lang, inst/zk 의 atlas.toml 은 work-atlas EVALUATION.md "재현" 절의 형식 그대로(저장소 경로는 위 클론).
+# collect 는 Apache Jira 전체 이력을 받는다. 2026-10-29 수집본이라 다시 받으면 이슈 수가 달라질 수 있다
 for i in lang zk; do $PY -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from atlas.__main__ import main; raise SystemExit(main(sys.argv[2:]))' \
   $WA_BASE collect all --root $INST/$i; done
 for i in lang zk; do $PY -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from atlas.__main__ import main; raise SystemExit(main(sys.argv[2:]))' \
-  $WA_BASE build --root $INST/$i --as-of 2026-10-29T00:00:00+00:00 --no-llm; done   # 기준 시각을 고정해야 바이트 비교가 된다
+  $WA_BASE build --root $INST/$i --as-of 2026-10-29T00:00:00+00:00 --no-llm; done   # 기준 시각을 고정해야 바이트 비교가 된다(같은 atlas.toml끼리: 모델의 generation 값이 설정을 해시한다)
 ```
 
 ## work-atlas
@@ -47,7 +50,9 @@ bash $AOK/reports/2026-10-30-hotspots/work-atlas/measure-build.sh   # → $OUT/b
 
 ```bash
 cd $AOK/reports/2026-10-30-hotspots/atlas-sim && cargo build --release
-for i in lang zk; do WORK_ATLAS=$WA_CAND ./bench-sim.sh $INST/$i/data/model/text_index.json - queries/$i.txt 11; done   # → logs/…-sim.txt
+{ echo "# $(date -u +%FT%TZ) $(nproc) vCPU · WORK_ATLAS=work-atlas@$(git -C $WA_CAND rev-parse --short HEAD) · $($PY -c 'import sys,orjson; print("python", sys.version.split()[0], "orjson", orjson.__version__)') · atlas-sim release build · load1 $(cut -d' ' -f1 /proc/loadavg)"
+  for i in lang zk; do echo "## $i: bench-sim.sh \$INST/$i/data/model/text_index.json - queries/$i.txt 11"
+    WORK_ATLAS=$WA_CAND ./bench-sim.sh $INST/$i/data/model/text_index.json - queries/$i.txt 11; done; } | tee $OUT/sim.txt
 ```
 
 첫 줄은 Python(표준 json · orjson)과 Rust의 상위 200개가 같은지, 다음 두 줄은 프로세스 전체와 프로세스 안(색인 읽기 + postings + 질의) 시간의 중앙값이다. 두 시간의 차이가 Python 기동·import 몫이다. 점수는 Python `round(x, 4)`와 같은 방식(정확한 10진 반올림)으로, JSON 실수는 serde_json `float_roundtrip`으로 읽는다. `WORK_ATLAS`가 없거나 틀리면 설치된 다른 판을 쓰지 않고 멈춘다. 10-30의 합성 다국어 질의 13종과 반올림 경계 값 색인은 남기지 않았다.
@@ -55,17 +60,21 @@ for i in lang zk; do WORK_ATLAS=$WA_CAND ./bench-sim.sh $INST/$i/data/model/text
 ## docbench-diff
 
 ```bash
+```bash
 cd $AOK/reports/2026-10-30-hotspots/docbench-diff && npm init -y && npm i diff@9.0.0
-cat $WA_BASE/*.md docbench/*.md docbench/docs/*.md dj-assis/*.md > base_all.md   # 공개 레포 3곳, 4,334줄
+(export LC_ALL=C; cat $WA_BASE/*.md $SRC/docbench/*.md $SRC/docbench/docs/*.md $SRC/dj-assis/*.md > base_all.md)   # 공개 레포 3곳, 4,334줄. 글롭은 C 로캘 순서로
 sha256sum base_all.md   # acf740366394… 이어야 로그와 같은 입력이다
-node mkcases.mjs && node bench.mjs 1000 2000 4334            # jsdiff (docbench lineDiff 그대로)
-cargo run --release --bin docdiff-bench -- . 1000 2000 4334  # Rust 네이티브 + 원문 복원 검증
 cargo build --release --lib --target wasm32-unknown-unknown
-node bench-wasm.mjs target/wasm32-unknown-unknown/release/docdiff.wasm 1000 2000 4334
-node split.mjs 4334 && node caps.mjs                          # 시간 구성, jsdiff timeout·maxEditLength
+W=target/wasm32-unknown-unknown/release/docdiff.wasm
+{ echo "# $(date -u +%FT%TZ) $(nproc) vCPU · node $(node --version) · diff@9.0.0 · base_all.md $(wc -l < base_all.md) newlines · sha256 $(sha256sum base_all.md | cut -c1-12)"
+  echo "## node mkcases.mjs && node bench.mjs 1000 2000 4334"; node mkcases.mjs && node bench.mjs 1000 2000 4334   # jsdiff (docbench lineDiff 그대로)
+  echo "## node bench-wasm.mjs docdiff.wasm 1000 2000 4334 (wasm $(wc -c < $W) bytes)"; node bench-wasm.mjs $W 1000 2000 4334
+  echo "## node caps.mjs"; node caps.mjs; } | tee $OUT/docbench.txt                                            # jsdiff timeout·maxEditLength
+cargo run --release --bin docdiff-bench -- . 1000 2000 4334  # Rust 네이티브 + 원문 복원 검증(로그에는 남기지 않았다)
+node split.mjs 4334                                          # 시간 구성(로그에는 남기지 않았다)
 ```
 
-"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다. 11-01 로그의 `base_all.md`는 10-30에 이어 붙인 파일 그대로다(sha256 앞 12자리가 로그 머리에 있다). 11-01에 위 고정 커밋 세 개로 다시 이어 붙여 같은 해시가 나오는 것을 확인했다.
+"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다. 11-01 로그의 `base_all.md`는 10-30에 이어 붙인 파일 그대로다(sha256 앞 12자리가 로그 머리에 있다). 11-01에 위 고정 커밋 세 개로 다시 이어 붙여 같은 해시가 나오는 것을 확인했다. 로그 머리 줄은 위 묶음의 `echo`가 쓴다. 가벼운 수정의 jsdiff 시간은 실행마다 두 값(약 19ms, 약 35ms) 사이를 오가 그 배수는 측정마다 크게 다르다(3회차 검증자 재현: WASM/jsdiff 0.96~1.83배).
 
 ## tooling
 
