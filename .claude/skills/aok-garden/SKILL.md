@@ -105,7 +105,7 @@ description: AOK v1 큐레이터(정원사, §3⑤) 수동 실행 런북(/aok-ga
 
 - `procedure` 카드이고 등급 `확인`이며 2회 이상 다시 확인됐다(`hits ≥ 3`) → PR 본문 "스킬 승격 제안" 절에 바꿀 SKILL.md와 문장안을 적는다.
 - `추론` 카드는 스킬로 올리지 않는다.
-- 사용자가 승인하면 별도 작업으로 agent-ops-kit에 스킬 변경 PR을 만든다: 문장은 일반화하고 ID·프로젝트명·사람 이름을 넣지 않으며, `secret_scan.py`의 `warn`(이메일, `session_…`·`trig_…` ID, Artifact 링크)까지 0으로 만든 뒤 올린다.
+- 사용자가 승인하면 별도 작업으로 agent-ops-kit에 스킬 변경 PR을 만든다: 문장은 일반화하고 ID·프로젝트명·사람 이름을 넣지 않으며, `python3 -I <KIT>/scripts/secret_scan.py --strict <바꾼 파일…>`이 0으로 끝나게(`warn` — 이메일, `session_…`·`trig_…` ID, Artifact 링크 — 까지 0) 만든 뒤 올린다.
 
 ## 8. 기록
 

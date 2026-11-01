@@ -7,16 +7,16 @@
 ### 추가
 
 - ⑦ 회귀 고정(D25): 런북 `docs/patterns/regression.md`, 스킬 `.claude/skills/aok-regress`, 도구 두 개
-  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)는 실패. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
-  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬
-  - CI 자기 시험: 문서화한 장치를 하나씩 끈 변이 64개(diffcheck 21, vacuity_check 13, build_site 30), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
-- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): 페이지 본문의 날 측정 수치·손으로 단 [확인] 배지·근거 없이 다시 돌릴 수 없는 [확인]·자리표시가 든 근거 명령·없는 파일·저장소 밖 링크·원자료와 다른 터미널 발췌·공개 레포 금지 항목은 빌드 실패. 게시 URL은 레포에 두지 않는다
+  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함, `--stderr`면 stderr도)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)는 실패. 양쪽의 정규화 횟수가 다르면 `differs`. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
+  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`(낱말 단위로 맞춤)에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬
+  - CI 자기 시험: 변이 목록에 올린 장치를 하나씩 끈 변이 104개(diffcheck 28, vacuity_check 21, build_site 55), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
+- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): 페이지 본문의 날 측정 수치(조사가 붙어도)·손으로 단 [확인] 배지·손으로 쓴 등급 범례(규범 문구로 생성)·cmd·url 근거가 없는 [확인]·셸 문법에 맞지 않는 근거 명령·git에 없는 파일이나 저장소 밖 링크·원자료(data-log)와 다른 터미널 발췌와 data-log 없는 터미널 발췌·공개 레포 금지 항목은 빌드 실패. 게시 URL은 레포에 두지 않는다
 - [문서] 등급 범위(D29): 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. `docs/architecture.md`·`schemas/claim.schema.json`·verifier 정의
 - 시험: `tests/test_regress_tools.py`, `tests/test_site.py`
 - 제안서 `docs/proposals/regression-harness-hub.md`(⑦, ⑧ 작업 레포 하네스 제안 D26, 읽기 허브, 결정 D25–D29, ⑧에 넘기는 요구)
-- 이력: `reports/2026-10-30-verification-rounds.md`(독립 검증 라운드와 이 PR의 ① T2), `reports/2026-10-30-hotspots.md`와 재현 자료·원자료 `logs/`(공개 레포 핫스팟 실측, 2026-11-01 재측정)
+- 이력: `reports/2026-10-30-verification-rounds.md`(독립 검증 라운드와 이 PR의 ① T2), `reports/2026-10-30-hotspots.md`와 재현 자료·원자료 `logs/`(공개 레포 핫스팟 실측, 2026-11-01 재측정. 측정 스크립트는 쪽별 인스턴스 사본, 측정 중 실패 검사, 입력 판 고정을 갖추고, 공개 로그에는 판정·수치만 남긴다)
 - `docs/patterns/brd.md` §1 ⑦과의 분담, §8 외부 근거(자기 수정, 오류 찾기, 자기 편애, 상관 오류, 아첨)
-- `.gitignore`(허브 빌드 결과)
+- `.gitignore`(허브 빌드 결과, 재현 절차가 만드는 빌드 결과)
 
 - 관제실 콘솔 v11. 실제 런타임에서 연결이 막히던 문제를 고쳤다.
   - 연결: 내장 `permissions`로 `mcp:Claude Code Remote` 상태 확인 → 필요하면 시작 때 한 번 `request` → `callTool`로 첫 조회 → 그다음 `watchTool`. watch는 동의를 묻지 않기 때문이다

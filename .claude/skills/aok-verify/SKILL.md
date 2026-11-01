@@ -110,6 +110,7 @@ echo "exit=$?"
 
 - T1: L1 1–2개(예: `l1-a` redesign + `l1-b` counterexample). T2: + `l0-a` claim.
 - 상관 오류를 줄이려면 렌즈를 다르게 하고, 필요하면 둘째 검증자의 `model`을 바꾼다.
+- 병렬 검증자는 같은 머신을 쓴다. 시간을 재는 주장은 한 검증자에게만 재게 하거나, 잴 때 다른 무거운 작업이 없는지(`uptime`의 부하) 함께 적게 한다. 동시에 잰 시간끼리는 비교하지 않는다.
 
 ```
 Agent(subagent_type="verifier", description="BRD <run_id> l1-a",
@@ -174,7 +175,7 @@ ArtifactData(action="set", url="{{LEDGER_URL}}", collection="verifications", doc
         "note":"<한국어 한 줄 결과, 예: 일치 9 · 반박 1(확정 오류 1) · 미검증 2>"})
 ```
 
-- `level`은 `L1`, `L1+L0`, `L1+L0+L2` 형식이다. `cost`는 USD 숫자나 `null`만 쓴다(객체로 쓰지 않는다). 토큰은 `tokens`에 둔다. 스키마 밖 필드는 쓰지 않는다.
+- `level`은 `L1`, `L1+L0`, `L1+L0+L2` 형식이다. `cost`는 USD 숫자나 `null`만 쓴다(객체로 쓰지 않는다). 토큰은 `tokens`에 둔다. 스키마 밖 필드는 쓰지 않는다. 완료 알림의 토큰 수가 누적인지 마지막 맥락 크기인지는 확인하지 못했다 [미확인]. 대략의 비용으로만 쓰고 라운드끼리 비교하지 않는다.
 - 감사 기록 `verify_run`(target = run_id, detail = `tier=T2 agree=9 refuted=1 verifier_only=2 unverified=2 escalate=0 wall_min=10`).
 - 비율(확정 오류율 등)은 실행이 10회 이상 쌓인 뒤에만 쓴다. 그 전에는 건수만.
 
