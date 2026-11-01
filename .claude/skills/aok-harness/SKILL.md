@@ -33,6 +33,7 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 | 턴 종료 block(quick 게이트 실패) | 실패한 단계의 출력을 보고 코드를 고친다. 억제 주석, 건너뛴 시험, 지운 단언, `.aok/`·settings 편집으로 통과시키지 않는다. 통과 때 그런 변경이 사용자에게 보고된다. 건드리지 않은 코드에 원래 있던 실패면 고치지 말고 사용자에게 말한다 |
 | 턴 종료 block(실행 불가: 필수 도구 없음, 시간 초과, 설정 오류, 세션 상태 손상·없음, fsmap 실패) | 통과가 아니다. 도구를 설치하거나 원인을 보고한다. 상태가 손상됐거나 없으면 새 세션이 새 기준을 잡는다 |
 | 세 번째 block("This is the last block") | 지금 고칠 수 없으면 더 돌지 말고 그 턴 안에 AOK/1 `blocked`로 실패 단계와 출력 첫 줄을 부모에게 보내고 턴을 끝낸다. 그 종료는 놓아 준다(사용자에게 "게이트가 통과하지 않았다"가 간다) |
+| git이 푸시를 거부("[aok-harness] push refused") | pre-push 훅이 보낸 커밋 중 게이트가 통과시키지 않은 것을 찾았다. 그 커밋을 체크아웃해 게이트를 통과시킨 뒤 푸시한다. 다른 브랜치나 옮겨 둔 ref를 보내려 하지 않는다 |
 | `git push`·`gh pr create` 거부 | 이유를 읽는다. 커밋하지 않은 변경이면 커밋하고 다음 명령에서 푸시한다(한 명령에 묶으면 거부된다). 게이트가 남긴 파일이면 `.gitignore`에 넣는다. 체크아웃한 브랜치만 푸시한다. 하네스·settings·CI 워크플로를 바꾼 세션이면 푸시하지 말고 사람에게 넘긴다 |
 | git 명령 거부("hooks off") | `--no-verify`·`commit -n`·`core.hooksPath` 없이 다시 낸다 |
 | 사람·CI와 같은 판정이 필요할 때 | `python3 -I .aok/harness/aok_harness.py verify --mode quick --json` (종료 0 통과 · 1 실패 · 2 실행 불가) |
@@ -43,6 +44,7 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 - **게이트가 매 턴 너무 오래 걸림**: `.aok/harness.json`의 `gate.quick`을 줄이고 full은 CI에 둔다. 정의 변경은 PR로(사람 확인).
 - **선택 도구가 없음**(예: ruff): 그 단계는 건너뛰고 세션에 한 번 알린다. 필수 도구가 없으면 실행 불가로 막는다.
 - **상태**: `<git-dir>/aok-harness/session-<id>.json`(기준, 막힘 횟수, 마지막 통과·보고 지문), `log.jsonl`. git이 없으면 XDG 상태 디렉터리. 손상되거나 없으면 턴 종료를 막고 푸시를 거부한다.
+- **pre-push 훅**: 세션 시작 때 git 디렉터리의 `hooks/pre-push`에 깔린다(작업 트리 밖). Claude Code 안에서만(`CLAUDECODE`) 통과한 커밋만 보낸다. 통과한 커밋 목록은 `<git-dir>/aok-harness/passed.json`. core.hooksPath가 있거나 남의 pre-push 훅이 있으면 깔지 않고 세션 시작 때 알린다.
 - **Rust**: `fsmap`이 `PATH`에 있고 `fsmap hook --help`가 되면 훅 다섯 개와 verify를 fsmap(1회차 구현)에 넘긴다. fsmap이 0·2가 아닌 코드로 끝나거나 시작하지 못하면 닫힌 실패다. 그때는 fsmap이 git `pre-push` 훅을 설치하고, 게이트 정의를 작업 트리에서 읽어 무결성 단계로 본다(`--base`는 어댑터 선택에만 쓰인다). 없으면 기본 cargo 단계로 돌고 세션 시작 때 그 차이를 알린다.
 
 ## 4. 새 언어 어댑터

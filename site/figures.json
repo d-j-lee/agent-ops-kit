@@ -340,11 +340,11 @@
   "claim": "C-self-muts"
  },
  "h8.tests": {
-  "text": "시험 67개",
+  "text": "시험 89개",
   "claim": "C-h8-tests"
  },
  "h8.muts": {
-  "text": "변이 136개",
+  "text": "변이 219개",
   "claim": "C-h8-muts"
  },
  "hook.timeout": {

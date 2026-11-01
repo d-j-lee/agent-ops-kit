@@ -48,6 +48,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
             <tr><th scope="row">편집 직후</th><td><code>PostToolUse</code></td><td>어댑터가 맡는 파일이면 그 파일에 편집 검사(Python: 컴파일·ruff, Rust: <code>cargo check</code>). 실패와 실행 불가는 Claude에게 돌아간다</td></tr>
             <tr><th scope="row">턴 종료</th><td><code>Stop</code></td><td>이 세션이 트리를 바꿨고 이미 통과·보고한 트리가 아니면 quick 게이트. 실패, 실행 불가, 손상되거나 없는 세션 상태 모두 막는다. 연달아 최대 3번 막고, 세 번째에 "마지막"이라고 알린 뒤 그다음 종료는 놓아 주며 "통과하지 않았다"고 사용자에게 알린다. 통과하면(푸시 전 게이트가 먼저 통과했어도) 이 세션이 약하게 만든 검사와 하네스 파일의 변경을 보고한다. 백그라운드 에이전트가 돌면 진짜 끝으로 미룬다</td></tr>
             <tr><th scope="row">사용자 입력</th><td><code>UserPromptSubmit</code></td><td>막힌 횟수를 0으로. 위임 중이면 fsmap에도 넘긴다</td></tr>
+            <tr><th scope="row">푸시</th><td>git <code>pre-push</code></td><td>Claude Code 안에서 보내는 커밋이 게이트가 깨끗한 트리에서 통과시킨 것인지 본다. 명령을 어떻게 썼든 git이 실제로 보내는 커밋으로 판정한다. 사람이 터미널에서 하는 푸시는 막지 않는다</td></tr>
             <tr><th scope="row">셸 명령</th><td><code>PreToolUse</code></td><td>git 훅을 끄는 명령(<code>--no-verify</code>, <code>commit -n</code>, <code>core.hooksPath</code>)을 거부한다. <code>git push</code>·<code>gh pr create</code>는 체크아웃한 브랜치가 아닌 게시, 같은 명령 안의 HEAD 이동, 이 세션의 하네스·설정·CI 변경, 커밋하지 않은 변경, quick 게이트 실패나 실행 불가에서 거부한다</td></tr>
           </tbody>
         </table>
@@ -64,6 +65,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
             <li>게이트 정의와 레포에 복사된 어댑터는 세션이 시작된 커밋의 것을 쓴다. 작업 트리에서 바꾼 정의는 쓰이지 않고 보고된다. 기준 커밋에 없던 정의는 커밋한 뒤의 세션부터 쓴다</li>
             <li>하네스 파일, <code>.claude/settings*.json</code>의 훅·환경 키, 리뷰어, CI 워크플로를 바꾼 세션의 푸시는 막고 사람에게 넘긴다</li>
             <li>CI는 기준 브랜치의 코어·어댑터·정의로 돈다. 코어를 기준 브랜치에서 꺼내 <code>verify --base origin/main</code>으로 돌린다</li>
+            <li>게시는 명령의 글자가 아니라 보내는 커밋으로 판정한다. 명령 읽기는 빠른 안내이고, 결정은 git pre-push 훅이 한다</li>
           </ul>
         </div>
         <div class="box">
@@ -112,8 +114,8 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
       <h2>한계</h2>
       <div class="anti">
         <div><b>가드레일이지 보안 경계가 아니다</b><span>에이전트는 코어 파일, 상태 디렉터리, 로컬 설정을 고칠 수 있습니다. 손상되거나 지워진 상태는 막지만 꾸민 상태는 알아보지 못합니다. <code>ask</code> 규칙, 푸시 거부, 통과 보고가 그런 변경을 사람 앞에 드러내고, 기준 브랜치의 코어로 도는 CI가 정본 게이트입니다.</span></div>
-        <div><b>게시 명령 읽기는 휴리스틱</b><span>명령을 셸 단어로 나눠 <code>git … push</code>와 <code>gh … pr create</code>를 찾습니다. 별칭, 스크립트 파일, <code>gh api</code>·MCP 도구로 하는 게시는 보지 못합니다. git 자체의 pre-push 훅으로 보는 방식은 fsmap(1회차)에 있습니다.</span></div>
-        <div><b>무엇이 세션의 것인가</b><span>리베이스로 올라온 남의 커밋, 세션이 건드린 파일에 원래 있던 커밋 안 된 억제 주석은 세션의 것으로 보고될 수 있습니다. 시험 첫 줄의 <code>return</code>처럼 정규식으로 잡을 수 없는 약화는 보지 못합니다.</span></div>
+        <div><b>게시 판정의 범위</b><span>pre-push 훅은 git push를 거치는 게시를 봅니다. <code>gh api</code>·MCP 도구처럼 git을 거치지 않는 게시, core.hooksPath나 남의 pre-push 훅이 이미 있는 레포, 사람이 터미널에서 하는 푸시는 보지 않습니다. 그런 레포에서는 명령 읽기만 남고, 세션 시작 때 그렇다고 알립니다.</span></div>
+        <div><b>무엇이 세션의 것인가</b><span>세션 시작 때의 ref에 없던 커밋은 세션의 것입니다. 그래서 세션 중에 받아 와 병합한 남의 커밋, 리베이스로 올라온 커밋, 세션이 건드린 파일에 원래 있던 커밋 안 된 억제 주석은 세션의 것으로 보고될 수 있습니다. 게이트는 작업 트리를 보므로 커밋에 없는 무시된 파일 덕에 통과할 수도 있습니다(깨끗한 체크아웃의 CI가 잡습니다). 시험 첫 줄의 <code>return</code>처럼 정규식으로 잡을 수 없는 약화는 보지 못합니다.</span></div>
         <div><b>원격 자식에서 도는지</b><span>레포의 훅은 레포 하나로 연 클라우드 세션에서 적용된다고 문서에 적혀 있습니다 <span class="g g-doc">문서</span>. 원격 자식 세션에서 실제로 도는지는 아직 시험하지 않았습니다 <span class="g g-unk">미확인</span>. 그 전에는 사람이 여는 세션에 먼저 씁니다.</span></div>
         <div><b>백그라운드 작업</b><span>Stop 입력의 <code>background_tasks</code>는 문서에 있는 필드입니다 <span class="g g-doc">문서</span>. 그중 에이전트 유형이 돌 때만 게이트를 미루고, 백그라운드 셸은 미루는 이유가 아닙니다. 에이전트가 끝난 뒤 그 턴에 Stop이 다시 오는지는 확인하지 않았습니다 <span class="g g-unk">미확인</span>. 푸시 전 게이트는 미루지 않습니다.</span></div>
         <div><b>레포 코드를 실행한다</b><span>시험과 빌드 스크립트가 돕니다. 믿지 않는 레포에는 켜지 않습니다.</span></div>
