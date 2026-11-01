@@ -158,7 +158,7 @@
   "label": "stderr alone decides emptiness",
   "old": "            keys = [\"out\", \"err\"] if args.stderr else [\"out\"]",
   "new": "            keys = [\"err\"] if args.stderr else [\"out\"]",
-  "expect": "test_stderr_normalized_away_is_empty"
+  "expect": "test_stderr_counts_as_output_under_stderr"
  },
  {
   "file": "scripts/diffcheck.py",

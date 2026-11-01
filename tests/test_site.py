@@ -311,8 +311,9 @@ class BuildCheckTests(unittest.TestCase):
             self.refused("a link to this repository is typed as a URL")
 
     def test_allow_marker_does_not_exempt_pages(self):
-        self.body("claude.ai/" + "public/artifacts/" + "abcdef12-3456-7890 <!-- secret-scan: allow -->")
-        self.refused("public-repo rule")
+        for marker in ("<!-- secret-scan: allow -->", "secret-scan: allow"):  # in a comment, and as visible text
+            self.body("claude.ai/" + "public/artifacts/" + "abcdef12-3456-7890 " + marker)
+            self.refused("public-repo rule")
 
     def test_git_tracked_links(self):
         for args in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "x"]):
@@ -351,11 +352,11 @@ class BuildCheckTests(unittest.TestCase):
 
     def test_measured_quantity_in_hidden_forms(self):
         self.pages["index.html"] = PAGE.replace("nav: 시험", "nav: 3배 빠름").replace(
-            "BODY", '<p>46&#8203;%, ４６％, 9.5x, 16kB, 2 min, 1.5 sec, 40us, 5 ns, 190μs, 306바이트, 1.28M 토큰, 46 퍼센트, '
+            "BODY", '<p>47&#8203;%, ４６％, 9.5x, 16kB, 2 min, 1.5 sec, 40us, 5 ns, 190μs, 306바이트, 1.28M 토큰, 46 퍼센트, '
                     '<abbr title="101 ms">x</abbr></p>')
         self.write()
         err = self.refused("measured quantity(ies) outside the registry")
-        for q in ("46%", "9.5x", "16kB", "2 min", "1.5 sec", "40us", "5 ns", "190μs", "306바이트", "1.28M 토큰",
+        for q in ("47%", "46%", "9.5x", "16kB", "2 min", "1.5 sec", "40us", "5 ns", "190μs", "306바이트", "1.28M 토큰",
                   "46 퍼센트", "101 ms", "3배"):
             self.assertIn(q, err)
         self.assertNotIn("0x1F", self.refused_text('<p>0x1F, 3 x 4 행렬</p>'))
