@@ -1361,6 +1361,28 @@ class WorktreeTests(Harness):
         out = self.stop()
         self.assertIn(str(made.resolve()), out["reason"])
 
+    def test_a_worktree_a_command_names_a_path_in_is_remembered(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        bad = self.tmp / "bad.py"
+        bad.write_text(ADD_BAD)
+        for i, cmd in enumerate(("sed -i s/+/-/ {wt}/pkg/__init__.py", "cp {bad} {wt}/pkg/__init__.py",
+                                 "cat {bad} >{wt}/pkg/__init__.py", "ln -s {wt} lk && cd lk && sh fix.sh",
+                                 "git --git-dir={wt}/.git --work-tree={wt} status")):
+            wt = self.worktree(f"b{i}", path=self.tmp / f"wt{i}")
+            cmd = cmd.format(wt=wt, bad=bad)
+            self.assertIsNone(self.bash(cmd), cmd)  # from the project directory, without cd or git -C
+            (wt / "pkg" / "__init__.py").write_text(ADD_BAD)  # what the command did there
+            out = self.stop()
+            self.assertTrue(self.blocked(out), cmd)
+            self.assertIn(str(wt.resolve()), out["reason"], cmd)
+            (wt / "pkg" / "__init__.py").write_text(ADD_OK)
+            self.hook("prompt")
+            self.assertIsNone(self.stop(), cmd)
+        self.assertIsNone(self.bash(f"cat {bad} README.md"))  # naming a path outside any worktree records nothing
+        self.assertEqual(len(json.loads(self.state_file().read_text())["trees"]), 5)
+
     def edit_at(self, path, tool="Edit"):
         return self.hook("post-edit", {"tool_name": tool, "tool_input": {"file_path": str(path)}})
 

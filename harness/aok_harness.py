@@ -80,12 +80,12 @@ Worktrees: Claude Code keeps CLAUDE_PROJECT_DIR where the session started and
 passes the current directory as the hook input's cwd. The session keeps one state,
 in the project directory, and judges the project directory and every other
 worktree of the repository it worked in, wherever the turn ends: one a command
-entered (`cd X`, `git -C X`, read before the command runs) or created (`git
-worktree add`), one a file was edited in, and the one the turn ends in. A
-worktree's HEAD is judged against its HEAD at the session's start (or, for one
-made later, against the refs then); its files against what was changed when the
-session first looked. A push is gated in the tree it runs from. Another
-repository is not this harness's.
+entered (`cd X`, `git -C X`) or named a path in (`sed -i X/f`, `> X/f`), read
+before the command runs, or created (`git worktree add`), one a file was edited
+in, and the one the turn ends in. A worktree's HEAD is judged against its HEAD
+at the session's start (or, for one made later, against the refs then); its
+files against what was changed when the session first looked. A push is gated in
+the tree it runs from. Another repository is not this harness's.
 
 The gate definition (.aok/harness.json) and the adapters copied into
 .aok/harness/adapters are read from the commit the session started on, not from
@@ -1019,14 +1019,23 @@ def worktree_add_path(args: list[str]) -> str | None:
     return None
 
 
-def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tuple[Path, Path]]]:
+def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tuple[Path, Path]], list[Path]]:
     """Where a command works, read from its words like the rest: the directories it enters (`cd X`, `pushd X`) or
     points git at (`git -C X`), the directories its publishing invocations run in (git push, send-pack, an alias,
-    gh pr create), and (where git runs, the path) for each `git worktree add`. A `cd` inside ( ) or a script is not
-    followed exactly; there the pre-push hook is what holds."""
-    dirs, publishing, created, cur = [], [], [], cwd
-    for seg in simple_commands(cmd) or []:
-        seg = drop_redirections(seg)
+    gh pr create), (where git runs, the path) for each `git worktree add`, and every path it names (an argument, a
+    redirection's target, the value of `--opt=value`), as seen from where it stands. A `cd` inside ( ) or a script is
+    not followed exactly; there the pre-push hook is what holds."""
+    dirs, publishing, created, named, cur = [], [], [], [], cwd
+    for raw in simple_commands(cmd) or []:
+        for w in raw[:200]:
+            m = REDIRECT.match(w)
+            for v in {m.group(1) if m else w, w.split("=", 1)[-1]}:
+                if v and not v.startswith("-"):
+                    try:
+                        named.append(word_path(cur, v))
+                    except (OSError, ValueError, RuntimeError):
+                        pass
+        seg = drop_redirections(raw)
         if not seg:
             continue
         if seg[0] in ("cd", "pushd"):
@@ -1058,18 +1067,23 @@ def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tupl
                 if target:
                     created.append((at, word_path(at, target)))
             break
-    return dirs, publishing, created
+    return dirs, publishing, created, named
 
 
 def remember_trees(root: Path, session: str, state: dict, cmd: str, cwd: Path) -> list[Path]:
-    """Before a command runs: remember each worktree it works in (seen as it is now) and each it creates (all its
-    changes the session's). Returns where its publishing invocations run."""
-    dirs, publishing, created = command_dirs(cmd, cwd)
+    """Before a command runs: remember each worktree it works in or names a path in (seen as it is now: `sed -i
+    WT/f`, `cp x WT/`, `> WT/f`, `ln -s WT link`) and each it creates (all its changes the session's). Returns where
+    its publishing invocations run."""
+    dirs, publishing, created, named = command_dirs(cmd, cwd)
     if state.get("baseline") is not None and not state.get("damaged"):
         new = False
         for d in [cwd, *dirs]:
             t = tree_of(root, d)
             if t is not None and t != root:
+                new |= touch_tree(root, state, t, seen=True)
+        others = [Path(t) for t in worktree_heads(root)] if named else []
+        for t in others:
+            if any(q == t or t in q.parents for q in named):
                 new |= touch_tree(root, state, t, seen=True)
         for at, path in created:
             if tree_of(root, at) is not None and path.resolve() != root.resolve():

@@ -2189,5 +2189,26 @@
   "old": "_HV = r\"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)\"\n",
   "new": "_HV = r\"(?:CLAUDECODE)\"\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a path a command names is not followed",
+  "old": "        others = [Path(t) for t in worktree_heads(root)] if named else []\n",
+  "new": "        others = []\n",
+  "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a redirection's target is not read as a path",
+  "old": "            for v in {m.group(1) if m else w, w.split(\"=\", 1)[-1]}:\n",
+  "new": "            for v in {w, w.split(\"=\", 1)[-1]}:\n",
+  "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the value of --opt=value is not read as a path",
+  "old": "            for v in {m.group(1) if m else w, w.split(\"=\", 1)[-1]}:\n",
+  "new": "            for v in {m.group(1) if m else w}:\n",
+  "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
  }
 ]
