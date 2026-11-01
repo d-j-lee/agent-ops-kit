@@ -16,9 +16,9 @@ Commands
                         commit: CI passes the base branch). Exit 0 passed, 1 a step failed,
                         2 the gate could not run (a required tool missing, a
                         step timed out, the configuration unreadable)
-  git-pre-push          git's pre-push hook (session-start installs it): inside Claude
-                        Code, refuse to push any commit the gate has not passed on a
-                        clean tree
+  git-pre-push          git's pre-push hook (session-start installs it): in what Claude
+                        Code spawns (CLAUDE_CODE_CHILD_SESSION), refuse to push a ref
+                        whose tip the gate has not passed on a clean tree
   install --repo DIR --adapter NAME [--yes]
                         copy the harness into DIR/.aok/harness and add the hooks
                         to DIR/.claude/settings.json. Without --yes it only
@@ -58,8 +58,9 @@ What the hooks do
   prompt         The user wrote: reset the strike count.
   pre-bash       Every command: deny one that switches git hooks off (--no-verify
                  and its abbreviations, commit -n, core.hooksPath; unsetting it is
-                 let through) or changes what the pre-push hook sees (CLAUDECODE,
-                 env -i, GIT_CONFIG_*, files under .git/hooks, a shell alias), and
+                 let through) or changes what the pre-push hook sees
+                 (CLAUDE_CODE_CHILD_SESSION, CLAUDECODE, env -i, GIT_CONFIG_*, files
+                 under .git/hooks, a shell alias), and
                  put a changed pre-push hook back first. For a command that
                  publishes (git push or an alias of it, gh pr create; send-pack is
                  refused outright): deny it when it publishes anything but the
@@ -70,6 +71,11 @@ What the hooks do
                  what is pushed, or when the quick gate fails or cannot run. A pass
                  records the commit for the pre-push hook, which then judges the
                  tip of each ref git actually sends.
+
+The tree judged is the one Claude works in: Claude Code keeps CLAUDE_PROJECT_DIR
+where the session started and passes the current directory as the hook input's
+cwd, so a session that moves into another worktree of the same repository is
+judged there, with the baseline it started with.
 
 The gate definition (.aok/harness.json) and the adapters copied into
 .aok/harness/adapters are read from the commit the session started on, not from
@@ -142,11 +148,14 @@ GIT_BUILTINS = {"status", "log", "diff", "show", "add", "commit", "push", "pull"
                 "send-pack", "http-push", "filter-branch", "replace", "help", "version", "var", "archive",
                 "range-diff", "sparse-checkout", "maintenance", "check-ignore", "hash-object", "merge-base",
                 "ls-remote", "show-ref", "whatchanged", "difftool", "mergetool", "citool", "gui", "request-pull"}
-# what an environment change in a command can do to the pre-push hook (it only judges when CLAUDECODE is set) or to
+# what an environment change in a command can do to the pre-push hook (it judges only when CLAUDE_CODE_CHILD_SESSION,
+# which Claude Code sets in what it spawns, is set; CLAUDECODE is kept as well, for tools that read it) or to
 # git's configuration (hooks switched off, aliases defined where the command reading cannot see them)
-CLAUDECODE_CHANGE = re.compile(r"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?CLAUDECODE=|"
-                               r"\bunset\b[^;&|\n]*\bCLAUDECODE\b|(?:^|\s)(?:-u\s*|--unset[=\s])CLAUDECODE\b|"
-                               r"\bexport\s+-n\b[^;&|\n]*\bCLAUDECODE\b")
+HOOK_VARS = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")
+_HV = r"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)"
+CLAUDECODE_CHANGE = re.compile(rf"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?{_HV}=|"
+                               rf"\bunset\b[^;&|\n]*\b{_HV}\b|(?:^|\s)(?:-u\s*|--unset[=\s]){_HV}\b|"
+                               rf"\bexport\s+-n\b[^;&|\n]*\b{_HV}\b")
 CLEAR_ENV = re.compile(r"\benv(?:\s+(?:-u\s*\S+|--unset=\S+|-[^\s]+))*?\s+(?:-i|--ignore-environment|-)(?=\s|$)")
 GIT_CONFIG_ENV = re.compile(r"\bGIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=|--config-env\b")
 GIT_HOOK_FILES = re.compile(r"\.git/hooks\b|\bhooks/pre-push\b")
@@ -372,8 +381,8 @@ def hooks_dir(root: Path) -> Path | None:
 def pre_push_script(core: str | None = None) -> str:
     return ("#!/bin/sh\n"
             f"{HOOK_MARK}: inside Claude Code, only commits the AOK harness gate passed may be pushed.\n"
-            "# Outside Claude Code (a person in a terminal) it does nothing.\n"
-            '[ -n "$CLAUDECODE" ] || exit 0\n'
+            "# Outside Claude Code's own subprocesses (a person in a terminal, or in an IDE's terminal) it does nothing.\n"
+            '[ -n "$CLAUDE_CODE_CHILD_SESSION" ] || exit 0\n'
             f'exec python3 -I {shlex.quote(core or str(Path(__file__).resolve()))} git-pre-push "$@"\n')
 
 
@@ -838,11 +847,58 @@ def context(event: str, text: str) -> dict:
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
 
 
-def project_root(payload: dict) -> Path:
-    p = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
-    root = Path(p)
-    top = git(root, "rev-parse", "--show-toplevel")
-    return Path(top) if top else root
+def toplevel(p) -> Path | None:
+    if not isinstance(p, str) or not p or not Path(p).is_dir():
+        return None
+    top = git(Path(p), "rev-parse", "--show-toplevel")
+    return Path(top) if top else None
+
+
+def common_dir(root: Path) -> Path | None:
+    c = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(c).resolve() if c else None
+
+
+def project_roots(payload: dict) -> tuple[Path, Path]:
+    """(the tree to judge, the session's project directory). Claude Code keeps CLAUDE_PROJECT_DIR where the session
+    started and passes the directory Claude works in as the input's cwd, after `cd` and after entering a worktree
+    (hooks docs). A cwd in another worktree of the same repository is judged there; a subdirectory, another
+    repository or no repository leaves the project directory."""
+    start = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
+    proj = toplevel(start) or Path(start)
+    here = toplevel(payload.get("cwd"))
+    if here is not None and here.resolve() != proj.resolve():
+        mine = common_dir(here)
+        if mine is not None and mine == common_dir(proj):
+            return here, proj
+    return proj, proj
+
+
+def inherit_session(root: Path, proj: Path, session: str) -> None:
+    """The session moved from its project directory into another worktree of the same repository. Start that
+    worktree's state from the session's baseline: its base commit and the refs at its start (so commits made before
+    the session stay out), every file changed there counted as the session's, and the HEAD found there now, so a
+    worktree the session has not touched is not judged. The pre-push hook's marker comes along (one hooks directory)."""
+    if load_state(root, session) or not is_repo(root):
+        return
+    src = load_state(proj, session)
+    b = src.get("baseline")
+    if src.get("damaged") or not isinstance(b, dict):
+        return  # nothing to carry over: session_base refuses there, as for any session without a usable baseline
+    state = {"baseline": {"head": b.get("head"), "at": time.time(), "pending": {}, "protected": protected_hashes(root),
+                          "refs": start_refs(src), "seen_head": head(root), "from": str(proj)},
+             "strikes": 0, "last_pass": None}
+    save_state(root, session, state)
+    marker = state_dir(proj) / "pre-push.installed"
+    if marker.is_file():
+        (state_dir(root) / "pre-push.installed").write_text(marker.read_text(encoding="utf-8"), encoding="utf-8")
+    log(root, "inherit", source=str(proj))
+
+
+def start_head(state: dict, base: str | None) -> str | None:
+    """HEAD when the session started here: the base commit, or for a worktree it moved into, the HEAD found there."""
+    seen = (state.get("baseline") or {}).get("seen_head")
+    return seen if isinstance(seen, str) else base
 
 
 def versions(adapter: dict) -> list[str]:
@@ -963,7 +1019,8 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
         cfg, cfg_text, notes = read_config(root, base)
         adapter = load_adapter(root, cfg, base, notes)
     except HarnessError as e:
-        if is_repo(root) and head(root) == base and not changed_since(root, base, pending, start_refs(state)):
+        if is_repo(root) and head(root) == start_head(state, base) \
+                and not changed_since(root, base, pending, start_refs(state)):
             log(root, "stop", result="skip-no-session-change", error=str(e)[:200])
             return 0
         return strike(root, session, state, f"the gate cannot run: {e}")
@@ -982,7 +1039,7 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
             log(root, "stop", result="skip-unchanged")
             return notice(restored) if restored else 0
         mine = changed_since(root, base, pending, start_refs(state))
-        if not mine and fp != state.get("last_pass") and head(root) == base:  # HEAD moved (a merge): judge the tree
+        if not mine and fp != state.get("last_pass") and head(root) == start_head(state, base):  # HEAD moved: judge
             log(root, "stop", result="skip-no-session-change")
             return notice(restored) if restored else 0
     if fp is None or fp != state.get("last_pass"):  # passed before a push in this turn: only its review is due
@@ -1253,10 +1310,10 @@ def hooks_off(cmd: str) -> str | None:
     return None
 
 
-CLAUDECODE_MSG = ("this command changes CLAUDECODE, which the git pre-push hook reads (it judges only inside Claude "
-                  "Code); run it without that")
-CLEAR_ENV_MSG = ("this command clears the environment (env -i / exec -c), which hides CLAUDECODE from the git pre-push "
-                 "hook; pass the variables you need instead")
+CLAUDECODE_MSG = ("this command changes CLAUDECODE or CLAUDE_CODE_CHILD_SESSION, which the git pre-push hook reads (it "
+                  "judges only what Claude Code runs); run it without that")
+CLEAR_ENV_MSG = ("this command clears the environment (env -i / exec -c), which hides CLAUDE_CODE_CHILD_SESSION from the git "
+                 "pre-push hook; pass the variables you need instead")
 GIT_CONFIG_MSG = ("this command points git at other configuration (GIT_CONFIG_* / --config-env), where hooks can be "
                   "switched off and aliases defined out of the harness's sight; use the repository's configuration")
 GIT_HOOKS_MSG = "the harness owns the git hooks (.git/hooks); leave them alone, or ask the user"
@@ -1278,8 +1335,8 @@ def tamper_problem(cmd: str) -> str | None:
         return None
     for seg in cmds:
         for k, w in enumerate(seg):
-            if w.startswith("CLAUDECODE=") or w in ("-uCLAUDECODE", "--unset=CLAUDECODE") or (
-                    w == "CLAUDECODE" and k and (seg[k - 1] in ("-u", "--unset") or "unset" in seg[:k]
+            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") for v in HOOK_VARS) or (
+                    w in HOOK_VARS and k and (seg[k - 1] in ("-u", "--unset") or "unset" in seg[:k]
                                                  or ("export" in seg[:k] and "-n" in seg[:k]))):
                 return CLAUDECODE_MSG
             if ASSIGN_GIT_CONFIG.match(w) or w == "--config-env" or w.startswith("--config-env="):
@@ -1441,8 +1498,9 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
         if d:
             return relay(d, "pre-bash", payload, lambda m: notice(m))
         return notice(restored) if restored else 0
-    if re.search(r"\bCLAUDECODE\b", cmd):
-        problems.append("this command mentions CLAUDECODE, which the git pre-push hook reads; publish without that")
+    if re.search(rf"\b{_HV}\b", cmd):
+        problems.append("this command mentions CLAUDECODE or CLAUDE_CODE_CHILD_SESSION, which the git pre-push hook "
+                        "reads; publish without that")
     if restored:
         problems.append(f"{restored}; run the command again")
     if problems:
@@ -1517,9 +1575,11 @@ def hook(event: str) -> int:
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    root = project_root(payload)
+    root, proj = project_roots(payload)
     session = str(payload.get("session_id") or "no-session")
     try:
+        if root != proj:
+            inherit_session(root, proj, session)
         return HANDLERS[event](root, payload, session)
     except Exception as e:  # noqa: BLE001 — a crashing hook must say so, never pass silently
         log(root, event, result="crash", error=repr(e)[:300])

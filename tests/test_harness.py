@@ -1009,6 +1009,9 @@ class PreBashTests(Harness):
         for cmd, why in (("CLAUDECODE= sh push.sh", "CLAUDECODE"), ("env -u CLAUDECODE sh push.sh", "CLAUDECODE"),
                          ("unset CLAUDECODE; sh push.sh", "CLAUDECODE"), ('CLAUDE""CODE= sh push.sh', "CLAUDECODE"),
                          ("export CLAUDECODE=; sh push.sh", "CLAUDECODE"), ("env --unset=CLAUDECODE sh push.sh", "CLAUDECODE"),
+                         ("CLAUDE_CODE_CHILD_SESSION= sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -u CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("unset CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("env -i sh push.sh", "clears the environment"), ("env -i PATH=/bin sh push.sh", "clears the environment"),
                          ("env - sh push.sh", "clears the environment"), ("env --ignore-environment sh push.sh", "clears"),
                          ("env -u HOME -i sh push.sh", "clears the environment"), ("exec -c sh push.sh", "clears"),
@@ -1040,9 +1043,11 @@ class PushHookTests(Harness):
         self.git("push", "-q", "origin", "main")
         return remote
 
-    def push(self, *args, claude=True):
-        env = {**self.env, **({"CLAUDECODE": "1"} if claude else {})}
-        return subprocess.run(["git", *args], cwd=self.repo, env=env, capture_output=True, text=True)
+    def push(self, *args, claude=True, ide=False, cwd=None):
+        """git as Claude Code's Bash tool runs it (both markers), as a person in an IDE's terminal (CLAUDECODE only:
+        IDE extensions set it there, CLAUDE_CODE_CHILD_SESSION they do not) or in a plain terminal (neither)."""
+        marks = {"CLAUDECODE": "1"} if ide else {"CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "1"} if claude else {}
+        return subprocess.run(["git", *args], cwd=cwd or self.repo, env={**self.env, **marks}, capture_output=True, text=True)
 
     def remote_head(self, remote):
         return subprocess.run(["git", "rev-parse", "main"], cwd=remote, env=self.env, capture_output=True, text=True).stdout.strip()
@@ -1075,6 +1080,8 @@ class PushHookTests(Harness):
             self.assertEqual(self.remote_head(remote), good, args)
         self.git("update-ref", "refs/heads/main", "bad")  # moved in an earlier command
         self.assertIn("[aok-harness] push refused", self.push("push", "origin", "main").stderr)
+        self.assertEqual(self.push("push", "-q", "origin", "main", ide=True).returncode, 0)  # a person, in an IDE's terminal
+        self.git("push", "-q", "origin", f"{good}:main", "--force")  # put it back for the plain-terminal case
         self.assertEqual(self.push("push", "-q", "origin", "main", claude=False).returncode, 0)  # a person may
         self.assertNotEqual(self.remote_head(remote), good)
         self.assertEqual(self.push("push", "-q", "origin", "bad:old", claude=False).returncode, 0)
@@ -1225,6 +1232,100 @@ class PushHookTests(Harness):
         self.assertIn("core.hooksPath is set", self.start()["hookSpecificOutput"]["additionalContext"])
         self.assertFalse((self.repo / ".husky").exists())
         self.assertIsNone(self.bash("git push"))  # read from the command only, as the session start said
+
+
+class WorktreeTests(Harness):
+    """Claude Code keeps CLAUDE_PROJECT_DIR where the session started and passes the directory Claude works in as the
+    hook input's cwd, after `cd` and after entering a worktree (hooks docs). The harness judges the worktree Claude
+    works in, with the session's baseline from where it started."""
+
+    def worktree(self, branch="feature", new=True):
+        wt = self.tmp / "wt"
+        self.git("worktree", "add", "-q", *(["-b", branch, str(wt)] if new else [str(wt), branch]))
+        return wt
+
+    push = PushHookTests.push
+
+    def at(self, wt, event, payload=None):
+        return self.hook(event, {"cwd": str(wt), **(payload or {})})
+
+    def gitw(self, wt, *args):
+        return subprocess.run(["git", *args], cwd=wt, env=self.env, capture_output=True, text=True, check=True).stdout
+
+    def test_the_worktree_claude_works_in_is_judged(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.at(wt, "stop"))  # nothing changed there yet
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        out = self.at(wt, "stop")
+        self.assertTrue(self.blocked(out))
+        self.assertIn("[test] fail", out["reason"])
+        self.assertIsNone(self.stop())  # the project directory itself is unchanged
+        self.gitw(wt, "commit", "-qam", "bad")  # committed in the worktree: still the session's
+        self.assertTrue(self.blocked(self.at(wt, "stop")))
+        sub = wt / "pkg"
+        self.assertTrue(self.blocked(self.hook("stop", {"cwd": str(sub)})))  # a subdirectory is the same worktree
+        wt2 = self.tmp / "wt2"
+        self.git("worktree", "add", "-q", "-b", "second", str(wt2))
+        (wt2 / "pkg" / "__init__.py").write_text(ADD_BAD)  # `cd` and the edit in one command: no hook saw it clean
+        self.assertTrue(self.blocked(self.at(wt2, "stop")))
+
+    def test_a_push_from_the_worktree_is_gated_there(self):
+        self.python_repo()
+        remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], env=self.env, check=True)
+        self.git("remote", "add", "origin", str(remote))
+        self.git("push", "-q", "origin", "main")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.gitw(wt, "commit", "-qam", "bad")
+        bash = {"tool_name": "Bash", "tool_input": {"command": "git push origin feature"}}
+        out = self.at(wt, "pre-bash", bash)
+        self.assertTrue(self.denied(out))
+        self.assertIn("[test] fail", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "feature", cwd=wt).stderr)
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK + "\n")
+        self.gitw(wt, "commit", "-qam", "good")
+        self.assertIsNone(self.at(wt, "pre-bash", bash))  # passes, and is recorded for the worktree
+        self.assertEqual(self.push("push", "-q", "origin", "feature", cwd=wt).returncode, 0)
+
+    def test_a_worktree_from_before_the_session_is_not_its_own(self):
+        self.python_repo()
+        self.git("branch", "theirs")
+        wt = self.worktree("theirs", new=False)
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK.replace("a + b", "a - b  # noqa"))
+        self.gitw(wt, "commit", "-qam", "someone else's, broken")
+        self.stub("ruff", "exit 0\n")
+        self.start()  # the session starts in the project directory after that
+        self.assertIsNone(self.at(wt, "stop"))  # their HEAD differs from the session's base: not the session's change
+        (wt / "README.md").write_text("notes\n")
+        out = self.at(wt, "stop")  # now the session changed something there: the whole tree is judged
+        self.assertTrue(self.blocked(out))
+        self.assertIn("tell the user instead of editing unrelated code", out["reason"])
+
+    def test_another_repository_in_cwd_is_not_judged(self):
+        self.python_repo()
+        self.start()
+        other = self.tmp / "other"
+        other.mkdir()
+        (other / "pyproject.toml").write_text('[project]\nname = "o"\n')
+        subprocess.run(["git", "init", "-q"], cwd=other, env=self.env, check=True)
+        self.assertIsNone(self.hook("stop", {"cwd": str(other)}))  # the project directory is judged, and it is unchanged
+
+    def test_the_hook_is_kept_from_a_worktree_too(self):
+        self.python_repo()
+        self.start()
+        wt = self.worktree()
+        hook = self.repo / ".git" / "hooks" / "pre-push"  # one hooks directory for every worktree
+        script = hook.read_text()
+        hook.write_text("#!/bin/sh\nexit 0\n")
+        out = self.at(wt, "pre-bash", {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertIn("restored", out["systemMessage"])
+        self.assertEqual(hook.read_text(), script)
 
 
 class VerifyTests(Harness):
