@@ -228,14 +228,14 @@
   "label": "steps ignore the adapter env",
   "old": "env={**clean_env(), **(env or {})}, stdin=subprocess.DEVNULL, start_new_session=True)",
   "new": "env=clean_env(), stdin=subprocess.DEVNULL, start_new_session=True)",
-  "expect": "test_good_edit_is_silent_and_writes_no_bytecode"
+  "expect": "test_steps_get_the_adapter_env"
  },
  {
   "file": "harness/adapters/python.json",
   "label": "python adapter writes bytecode",
   "old": "\"env\": {\"PYTHONDONTWRITEBYTECODE\": \"1\"}",
   "new": "\"env\": {\"AOK_UNUSED\": \"1\"}",
-  "expect": "test_good_edit_is_silent_and_writes_no_bytecode"
+  "expect": "test_steps_get_the_adapter_env"
  },
  {
   "file": "harness/aok_harness.py",
@@ -557,20 +557,13 @@
   "label": "newlines read as spaces",
   "old": "    lex.whitespace = \" \\t\\r\"  # a newline separates commands",
   "new": "    lex.whitespace = \" \\t\\r\\n\"  # a newline separates commands",
-  "expect": "test_only_the_checked_out_tree_is_published"
+  "expect": "test_push_of_a_failing_commit_is_denied_and_a_passing_one_allowed"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "line continuations kept",
-  "old": "shlex.shlex(cmd.replace(\"\\\\\\n\", \" \").replace(\"`\", \" ` \")",
-  "new": "shlex.shlex(cmd.replace(\"`\", \" ` \")",
-  "expect": "test_only_the_checked_out_tree_is_published"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "backticks not opened",
-  "old": ".replace(\"`\", \" ` \"), posix=True",
-  "new": ", posix=True",
+  "old": "shlex.shlex(cmd.replace(\"\\\\\\n\", \" \"), posix=True",
+  "new": "shlex.shlex(cmd, posix=True",
   "expect": "test_only_the_checked_out_tree_is_published"
  },
  {

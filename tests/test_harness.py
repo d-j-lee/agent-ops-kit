@@ -482,6 +482,13 @@ class StopTests(Harness):
                                                                   {"id": "z", "type": "monitor"}])))
         self.assertTrue(self.blocked(self.stop(background_tasks=[])))
 
+    def test_steps_get_the_adapter_env(self):
+        probe = {"name": "env", "cmd": ["python3", "-c", "import os, sys; sys.exit(os.environ.get('PYTHONDONTWRITEBYTECODE') != '1')"]}
+        self.python_repo(config={"adapter": "python", "extra": [probe]})
+        self.stub("ruff", "exit 0\n")
+        code, out = self.verify("--mode", "quick", "--json")
+        self.assertEqual(code, 0, out)
+
     def test_steps_do_not_inherit_git_redirect_variables(self):
         check = {"name": "env", "cmd": ["python3", "-c", "import os, sys; sys.exit(1 if 'GIT_DIR' in os.environ else 0)"]}
         self.python_repo(config={"adapter": "python", "extra": [check]})
@@ -499,6 +506,8 @@ class StopTests(Harness):
         self.write("pkg/__init__.py", ADD_BAD)
         self.assertIn("Block 1 of 3.", self.stop()["reason"])
         self.assertIn("Block 2 of 3.", self.stop()["reason"])  # strikes kept in XDG_STATE_HOME
+        # without git there is no baseline to miss: a session whose start was not seen is still judged by the gate
+        self.assertIn("[test] fail", self.hook("stop", {"session_id": "other"})["reason"])
 
     def test_a_crash_is_reported_not_passed(self):
         self.python_repo()
@@ -531,7 +540,7 @@ class PreBashTests(Harness):
             self.assertTrue(self.denied(out), cmd)
             self.assertIn("hooks off", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
         for cmd in ("git commit -m -n", "git commit --message -n", "git commit -- -n", "git log -n 3",
-                    "grep -i hookspath .git/config"):
+                    "grep -i core.hookspath .git/config"):
             self.assertIsNone(self.bash(cmd), cmd)
 
     def test_push_with_uncommitted_changes_is_denied(self):
@@ -598,6 +607,7 @@ class PreBashTests(Harness):
         self.write("pkg/__init__.py", ADD_OK)
         self.git("commit", "-qam", "good")
         self.assertIsNone(self.bash("gh pr create --fill"))
+        self.assertIsNone(self.bash("git push origin main\necho pushed"))  # the next line is not one of push's refs
         self.assertEqual(self.log()[-1], {**self.log()[-1], "event": "pre-bash", "result": "pass"})
 
     def test_push_after_a_harness_change_is_denied(self):
@@ -730,7 +740,9 @@ class VerifyTests(Harness):
 
     def test_a_step_that_overruns_is_cannot_and_leaves_no_process(self):
         pidfile = self.tmp / "child.pid"
-        spawn = ("import subprocess, sys, time; c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+        # the grandchild lets go of the step's output pipes, so nothing waits for it: only killing the group ends it
+        spawn = ("import subprocess, sys, time; c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], "
+                 "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); "
                  f"open({str(pidfile)!r}, 'w').write(str(c.pid)); time.sleep(60)")
         self.python_repo(config={"adapter": "python", "extra": [{"name": "slow", "cmd": ["python3", "-c", spawn]}],
                                  "budget": {"gate": 4}})
@@ -740,6 +752,8 @@ class VerifyTests(Harness):
         pid = int(pidfile.read_text())
         time.sleep(0.2)
         alive = Path(f"/proc/{pid}").exists() and "zombie" not in Path(f"/proc/{pid}/status").read_text().lower()
+        if alive:
+            os.kill(pid, 9)  # do not leave it behind for the next test
         self.assertFalse(alive, "the step's own child must not outlive the timeout")
 
     def test_the_gate_budget_is_shared_by_the_steps(self):

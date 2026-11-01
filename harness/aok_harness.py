@@ -767,8 +767,8 @@ def command_segments(cmd: str, depth: int = 0) -> list[list[str]] | None:
     split (unbalanced quotes) or nests too deep."""
     if depth > 4:
         return None
-    # a backslash before a newline continues the line; backticks open a command like $(...)
-    lex = shlex.shlex(cmd.replace("\\\n", " ").replace("`", " ` "), posix=True, punctuation_chars=";&|()\n")
+    # a backslash before a newline continues the line (backticks are opened below, with $(...))
+    lex = shlex.shlex(cmd.replace("\\\n", " "), posix=True, punctuation_chars=";&|()\n")
     lex.whitespace = " \t\r"  # a newline separates commands, so it is punctuation, not space
     lex.whitespace_split = True
     lex.commenters = ""
@@ -778,7 +778,7 @@ def command_segments(cmd: str, depth: int = 0) -> list[list[str]] | None:
         return None
     segs, cur = [], []
     for w in words:
-        if w == "`" or (w and set(w) <= SEPARATORS):
+        if w and set(w) <= SEPARATORS:
             segs.append(cur)
             cur = []
         else:
