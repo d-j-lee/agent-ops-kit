@@ -211,16 +211,16 @@
  },
  {
   "file": "scripts/diffcheck.py",
-  "label": "non-finite timeout accepted",
-  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:",
-  "new": "    if not 0 < args.timeout <= MAX_TIMEOUT:",
+  "label": "nan slips through the range test",
+  "old": "    if not 0 < args.timeout <= MAX_TIMEOUT:  # also false for nan and inf",
+  "new": "    if args.timeout <= 0 or args.timeout > MAX_TIMEOUT:",
   "expect": "test_usage_errors"
  },
  {
   "file": "scripts/diffcheck.py",
   "label": "no timeout ceiling",
-  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:",
-  "new": "    if not math.isfinite(args.timeout) or not 0 < args.timeout:",
+  "old": "    if not 0 < args.timeout <= MAX_TIMEOUT:  # also false for nan and inf",
+  "new": "    if not 0 < args.timeout:",
   "expect": "test_usage_errors"
  },
  {

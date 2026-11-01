@@ -72,7 +72,6 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
-import math
 import re
 import secrets
 import shlex
@@ -336,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.timing < 0:
         print("error: --timing must be >= 0", file=sys.stderr)
         return 2
-    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:
+    if not 0 < args.timeout <= MAX_TIMEOUT:  # also false for nan and inf
         print(f"error: --timeout must be a number of seconds in (0, {MAX_TIMEOUT:g}]", file=sys.stderr)
         return 2
     try:

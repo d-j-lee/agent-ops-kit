@@ -64,7 +64,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import shlex
 import shutil
@@ -255,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="mutations to run at the same time, each on its own copy (default 1)")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     args = ap.parse_args(argv)
-    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:
+    if not 0 < args.timeout <= 86400 or args.jobs < 1:  # the range test is also false for nan and inf
         print("error: --timeout must be a number of seconds in (0, 86400] and --jobs >= 1", file=sys.stderr)
         return 2
     try:

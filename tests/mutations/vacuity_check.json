@@ -78,16 +78,16 @@
  },
  {
   "file": "scripts/vacuity_check.py",
-  "label": "non-finite timeout accepted",
-  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:",
-  "new": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "label": "nan slips through the range test",
+  "old": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if args.timeout <= 0 or args.timeout > 86400 or args.jobs < 1:",
   "expect": "test_usage_errors"
  },
  {
   "file": "scripts/vacuity_check.py",
   "label": "no timeout ceiling",
-  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:",
-  "new": "    if not math.isfinite(args.timeout) or not 0 < args.timeout or args.jobs < 1:",
+  "old": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if not 0 < args.timeout or args.jobs < 1:",
   "expect": "test_usage_errors"
  },
  {

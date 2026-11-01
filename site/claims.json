@@ -697,7 +697,7 @@
  },
  {
   "id": "C-self-muts",
-  "claim": "⑦ 도구와 허브 빌드에서 변이 목록에 올린 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 28개, vacuity_check 21개, build_site 55개).",
+  "claim": "⑦ 도구와 허브 빌드에서 변이 목록에 올린 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 33개, vacuity_check 25개, build_site 72개).",
   "grade": "확인",
   "scope": "이 저장소, CI의 checks 작업과 같은 검사(CI는 python -I, --jobs 4, --timeout 300). 변이 목록은 작성자가 골랐다",
   "evidence": [

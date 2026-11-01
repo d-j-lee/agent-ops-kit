@@ -246,6 +246,13 @@
  },
  {
   "file": "scripts/build_site.py",
+  "label": "/tree/ links to this repository allowed",
+  "old": "OWN_LINK = re.compile(r\"(?:github\\.com|raw\\.githubusercontent\\.com)/d-j-lee/agent-ops-kit\\b\", re.I)",
+  "new": "OWN_LINK = re.compile(r\"(?:github\\.com|raw\\.githubusercontent\\.com)/d-j-lee/agent-ops-kit\\b(?!/tree/)\", re.I)",
+  "expect": "test_own_repo_url_variants"
+ },
+ {
+  "file": "scripts/build_site.py",
   "label": "--check writes bytecode",
   "old": "sys.dont_write_bytecode = True  # --check writes nothing",
   "new": "sys.dont_write_bytecode = False  # --check writes nothing",
