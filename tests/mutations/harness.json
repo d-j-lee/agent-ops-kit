@@ -44,8 +44,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "malformed baseline accepted",
-  "old": "    if b is not None and not (isinstance(b, dict)",
-  "new": "    if False and not (isinstance(b, dict)",
+  "old": "    if (b is not None and not (isinstance(b, dict)",
+  "new": "    if (False and not (isinstance(b, dict)",
   "expect": "test_a_damaged_or_missing_state_blocks"
  },
  {
@@ -205,8 +205,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "edit steps each get the whole budget",
-  "old": "        results.append(run_step(root, s, left, file=rel, env=adapter.get(\"env\")) if left > 1 else",
-  "new": "        results.append(run_step(root, s, 99, file=rel, env=adapter.get(\"env\")) if True else",
+  "old": "        results.append(run_step(tree, s, left, file=rel, env=adapter.get(\"env\")) if left > 1 else",
+  "new": "        results.append(run_step(tree, s, 99, file=rel, env=adapter.get(\"env\")) if True else",
   "expect": "test_an_edit_check_that_cannot_run_blocks_and_shares_the_budget"
  },
  {
@@ -296,8 +296,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "damaged state lets the turn end",
-  "old": "        base, pending = session_base(root, state)\n    except HarnessError as e:\n        return strike(root, session, state, f\"the gate cannot run: {e}\")",
-  "new": "        base, pending = session_base(root, state)\n    except HarnessError as e:\n        return 0",
+  "old": "        return strike(root, session, state, f\"the gate cannot run: {e}\")\n    here = tree_of(",
+  "new": "        return 0\n    here = tree_of(",
   "expect": "test_a_damaged_or_missing_state_blocks"
  },
  {
@@ -310,28 +310,28 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a passed tree is run again",
-  "old": "        if fp == state.get(\"last_pass\") and state.get(\"reviewed\") == fp:",
-  "new": "        if False:",
+  "old": "            if fp == rec.get(\"last_pass\") and rec.get(\"reviewed\") == fp:\n",
+  "new": "            if False:\n",
   "expect": "test_pass_then_unchanged_tree_is_not_rerun"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "a pass before a push skips the review",
-  "old": "        if fp == state.get(\"last_pass\") and state.get(\"reviewed\") == fp:",
-  "new": "        if fp == state.get(\"last_pass\"):",
+  "old": "            if fp == rec.get(\"last_pass\") and rec.get(\"reviewed\") == fp:\n",
+  "new": "            if fp == rec.get(\"last_pass\"):\n",
   "expect": "test_weakening_is_reported_after_a_push_passed_the_gate"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "the review repeats every stop",
-  "old": "    state[\"last_pass\"], state[\"reviewed\"], state[\"strikes\"] = fp, fp, 0",
-  "new": "    state[\"last_pass\"], state[\"reviewed\"], state[\"strikes\"] = fp, None, 0",
+  "old": "    for rec, fp in passed:\n        rec[\"reviewed\"] = fp\n",
+  "new": "    for rec, fp in passed:\n        rec[\"reviewed\"] = None\n",
   "expect": "test_weakening_is_reported_after_a_push_passed_the_gate"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "pass recorded before the gate wrote its caches",
-  "old": "        fp = fingerprint(root, cfg_text)  # the tree as the gate left it (a step may write caches)\n",
+  "old": "            fp = fingerprint(t, cfg_text)  # the tree as the gate left it (a step may write caches)\n",
   "new": "",
   "expect": "test_pass_then_unchanged_tree_is_not_rerun"
  },
@@ -394,7 +394,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "harness changes not reported",
-  "old": "    report += [f\"harness file changed in this session: {f}\" for f in harness_changes(root, base, mine, state)]\n",
+  "old": "        report += [f\"{where}harness file changed in this session: {f}\" for f in touched]\n",
   "new": "",
   "expect": "test_changed_definition_and_harness_files_are_reported"
  },
@@ -548,14 +548,14 @@
  {
   "file": "harness/aok_harness.py",
   "label": "harness changes allowed to be pushed",
-  "old": "    touched = harness_changes(root, base, mine, state)\n",
+  "old": "    touched = harness_changes(target, start, mine, before)\n",
   "new": "    touched = []\n",
   "expect": "test_push_after_a_harness_change_is_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "ignored local settings not watched",
-  "old": "    out = set(protected_changes(root, state))\n",
+  "old": "    out = set(protected_changes(root, before))\n",
   "new": "    out = set()\n",
   "expect": "test_push_after_an_ignored_local_settings_change_is_denied"
  },
@@ -604,8 +604,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "failing commit pushed",
-  "old": "    if gate[\"verdict\"] == \"pass\":\n        state[\"last_pass\"] = fingerprint(root, cfg_text)",
-  "new": "    if True:\n        state[\"last_pass\"] = fingerprint(root, cfg_text)",
+  "old": "    if gate[\"verdict\"] == \"pass\":\n        rec[\"last_pass\"] = fingerprint(target, cfg_text)",
+  "new": "    if True:\n        rec[\"last_pass\"] = fingerprint(target, cfg_text)",
   "expect": "test_push_of_a_failing_commit_is_denied_and_a_passing_one_allowed"
  },
  {
@@ -835,29 +835,29 @@
  {
   "file": "harness/aok_harness.py",
   "label": "unreadable definition blocks a session without changes",
-  "old": "        if is_repo(root) and head(root) == start_head(state, base) \\\n                and not changed_since(root, base, pending, start_refs(state)):\n",
+  "old": "        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees)):\n",
   "new": "        if False:\n",
   "expect": "test_an_unreadable_base_definition_blocks_only_a_session_with_changes"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "session that changed nothing is judged",
-  "old": "        if not mine and fp != state.get(\"last_pass\") and head(root) == start_head(state, base):  # HEAD moved: judge\n",
-  "new": "        if False:\n",
+  "old": "            if not mine and fp != rec.get(\"last_pass\") and not moved:  # HEAD moved (a merge): judge the tree\n",
+  "new": "            if False:\n",
   "expect": "test_session_that_changed_nothing_is_not_judged"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "a merge of branches from before the session skips the gate",
-  "old": "        if not mine and fp != state.get(\"last_pass\") and head(root) == start_head(state, base):  # HEAD moved: judge\n",
-  "new": "        if not mine and fp != state.get(\"last_pass\"):  # HEAD moved: judge\n",
+  "old": "            if not mine and fp != rec.get(\"last_pass\") and not moved:  # HEAD moved (a merge): judge the tree\n",
+  "new": "            if not mine and fp != rec.get(\"last_pass\"):  # HEAD moved (a merge): judge the tree\n",
   "expect": "test_a_branch_from_before_the_session_is_not_its_own"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "weakening not reported",
-  "old": "    report = notes + [f\"weakened check: {w}\" for w in weakenings(root, adapter, base, mine, start_refs(state))]\n",
-  "new": "    report = list(notes)\n",
+  "old": "        report += [f\"{where}weakened check: {w}\" for w in weakenings(t, adapter, start, mine, refs)]\n",
+  "new": "",
   "expect": "test_pass_reports_weakened_checks"
  },
  {
@@ -968,7 +968,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a pass at push time not recorded",
-  "old": "        save_state(root, session, state)\n        record_passed(root)\n        return 0\n",
+  "old": "        save_state(root, session, state)\n        record_passed(target)\n        return 0\n",
   "new": "        save_state(root, session, state)\n        return 0\n",
   "expect": "test_only_commits_the_gate_passed_can_be_pushed"
  },
@@ -1192,8 +1192,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "the block does not ask to report a failure it did not cause",
-  "old": "                          \"there, tell the user instead of editing unrelated code.\")\n",
-  "new": "                          \"there.\")\n",
+  "old": "                      \"instead of editing unrelated code.\")\n",
+  "new": "                      \"so.\")\n",
   "expect": "test_failing_gate_blocks_with_the_output"
  },
  {
@@ -1227,8 +1227,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a baseline whose protected hashes are not a mapping is trusted",
-  "old": "                              and isinstance(b.get(\"pending\", {}), dict) and isinstance(b.get(\"protected\", {}), dict)):\n",
-  "new": "                              and isinstance(b.get(\"pending\", {}), dict)):\n",
+  "old": "                               and isinstance(b.get(\"pending\", {}), dict) and isinstance(b.get(\"protected\", {}), dict)\n",
+  "new": "                               and isinstance(b.get(\"pending\", {}), dict)\n",
   "expect": "test_a_damaged_or_missing_state_blocks"
  },
  {
@@ -1241,8 +1241,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "the end report misses ignored harness changes",
-  "old": "    report += [f\"harness file changed in this session: {f}\" for f in harness_changes(root, base, mine, state)]\n",
-  "new": "    report += [f\"harness file changed in this session: {f}\" for f in harness_changes(root, base, mine, {})]\n",
+  "old": "        touched = harness_changes(t, start, mine, before)\n",
+  "new": "        touched = harness_changes(t, start, mine, None)\n",
   "expect": "test_ignored_harness_changes_are_reported_at_the_end"
  },
  {
@@ -1563,22 +1563,22 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a CLAUDECODE assignment is not seen",
-  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) or (\n",
-  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) or (\n",
+  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") or (builtins and v in w) for v in HOOK_VARS) \\\n",
+  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") or (builtins and v in w) for v in HOOK_VARS) \\\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "unset CLAUDECODE is not seen",
-  "old": "                    w in HOOK_VARS and k and (seg[k - 1] in (\"-u\", \"--unset\") or \"unset\" in seg[:k]\n",
-  "new": "                    w in HOOK_VARS and k and (seg[k - 1] in (\"-u\", \"--unset\")\n",
+  "label": "unset, declare +x and the indirect forms of a hook variable are not seen",
+  "old": "    builtins = any(w in VAR_BUILTINS for seg in cmds for w in seg)\n",
+  "new": "    builtins = False\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "env -u CLAUDECODE is not seen",
-  "old": "                    w in HOOK_VARS and k and (seg[k - 1] in (\"-u\", \"--unset\") or \"unset\" in seg[:k]\n",
-  "new": "                    w in HOOK_VARS and k and (seg[k - 1] in () or \"unset\" in seg[:k]\n",
+  "old": "                    or (w in HOOK_VARS and k and seg[k - 1] in (\"-u\", \"--unset\")):\n",
+  "new": "                    or (w in HOOK_VARS and k and seg[k - 1] in ()):\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
@@ -1738,8 +1738,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a restore is not said",
-  "old": "        return notice(restored) if restored else 0\n    if re.search(",
-  "new": "        return 0\n    if re.search(",
+  "old": "        return notice(restored) if restored else 0\n    if len(mine_trees) > 1:",
+  "new": "        return 0\n    if len(mine_trees) > 1:",
   "expect": "test_a_changed_hook_is_restored_before_the_next_command"
  },
  {
@@ -1773,8 +1773,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "the end of the turn does not say a restore (no changes)",
-  "old": "            return notice(restored) if restored else 0\n    if fp is None",
-  "new": "            return 0\n    if fp is None",
+  "old": "            save_state(root, session, state)\n        return notice(restored) if restored else 0\n    for rec, fp",
+  "new": "            save_state(root, session, state)\n        return 0\n    for rec, fp",
   "expect": "test_a_changed_hook_is_restored_before_the_next_command"
  },
  {
@@ -1815,7 +1815,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a new session does not restore a changed harness hook",
-  "old": "        if text is None or not hook_is_harness(root, text):\n",
+  "old": "        if text is None or not hook_is_harness(root, text, legacy=False):\n",
   "new": "        if text is None:\n",
   "expect": "test_a_new_session_restores_a_changed_harness_hook"
  },
@@ -1913,8 +1913,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a pass at the end of the turn does not record the commit for the pre-push hook",
-  "old": "    if fp is not None:\n        record_passed(root)\n    report = notes",
-  "new": "    if False:\n        record_passed(root)\n    report = notes",
+  "old": "        if fp is not None and not touched:  # a harness change is a person's to publish: its commit is not recorded\n",
+  "new": "        if False:\n",
   "expect": "test_a_pass_at_the_end_of_the_turn_lets_the_commit_out"
  },
  {
@@ -1989,58 +1989,205 @@
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "a worktree in cwd is not judged",
-  "old": "    if here is not None and here.resolve() != proj.resolve():\n",
+  "label": "a worktree is judged only while the turn ends there",
+  "old": "        if t.resolve() != root.resolve() and t.is_dir() and is_repo(t):\n            out.append(t)\n",
+  "new": "        if False:\n            out.append(t)\n",
+  "expect": "test_the_worktree_claude_works_in_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the worktree the turn ends in is not remembered",
+  "old": "    new_tree = here is not None and here != root and touch_tree(root, state, here, seen=False)",
+  "new": "    new_tree = False",
+  "expect": "test_the_worktree_claude_works_in_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree a command enters is not remembered",
+  "old": "            if t is not None and t != root:\n                new |= touch_tree(root, state, t, seen=True)\n",
+  "new": "            if False:\n                new |= touch_tree(root, state, t, seen=True)\n",
+  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "cd is not followed",
+  "old": "                cur = word_path(cur, seg[1])\n                dirs.append(cur)\n",
+  "new": "                pass\n",
+  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "pushd is not followed",
+  "old": "        if seg[0] in (\"cd\", \"pushd\"):\n",
+  "new": "        if seg[0] == \"cd\":\n",
+  "expect": "test_a_push_from_the_worktree_is_gated_there"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "git -C is not followed",
+  "old": "                    at = word_path(at, gseg[i + 1])\n",
+  "new": "                    pass\n",
+  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree a command creates is not remembered",
+  "old": "                new |= touch_tree(root, state, path, seen=False)\n",
+  "new": "                pass\n",
+  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the branch name of worktree add is read as its path",
+  "old": "        if args[i] in (\"-b\", \"-B\", \"--reason\"):\n",
+  "new": "        if False:\n",
+  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an edited worktree is not remembered",
+  "old": "    if tree != root and touch_tree(root, state, tree, seen=True, skip=rel):  # the edit is the session's change there\n",
   "new": "    if False:\n",
-  "expect": "test_the_worktree_claude_works_in_is_judged"
+  "expect": "test_an_edit_in_a_worktree_is_remembered"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "another repository in cwd is judged",
-  "old": "        if mine is not None and mine == common_dir(proj):\n",
-  "new": "        if True:\n",
-  "expect": "test_another_repository_in_cwd_is_not_judged"
+  "label": "the edited file counts as changed before the session",
+  "old": "touch_tree(root, state, tree, seen=True, skip=rel)",
+  "new": "touch_tree(root, state, tree, seen=True, skip=None)",
+  "expect": "test_an_edit_in_a_worktree_is_remembered"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "no baseline is carried into a worktree",
-  "old": "            inherit_session(root, proj, session)\n",
+  "label": "a worktree's HEAD at the start is not used",
+  "old": "    if str(tree) in known:\n        return h != known[str(tree)]\n",
+  "new": "",
+  "expect": "test_a_head_moved_before_the_session_looked_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a later worktree's HEAD is not judged",
+  "old": "    return h not in set(start_refs(state)) | {base}\n",
+  "new": "    return False\n",
+  "expect": "test_a_head_moved_before_the_session_looked_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the other worktrees' HEADs are not recorded at the start",
+  "old": "\"protected\": protected_hashes(root), \"worktrees\": trees,",
+  "new": "\"protected\": protected_hashes(root), \"worktrees\": {},",
+  "expect": "test_a_head_moved_before_the_session_looked_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a commit only a worktree's HEAD reached is the session's",
+  "old": "                              \"refs\": sorted(set(refs) | {h for h in trees.values() if h})},",
+  "new": "                              \"refs\": sorted(set(refs))},",
+  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "files already changed in a worktree count as the session's",
+  "old": "        rec[\"pending\"] = {q: file_hash(tree / q) for q in dirty_paths(tree) if q != skip}\n",
+  "new": "        rec[\"pending\"] = {}\n",
+  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree's harness files are not hashed when first seen",
+  "old": "        rec[\"protected\"] = protected_hashes(tree)\n",
+  "new": "",
+  "expect": "test_an_ignored_harness_file_in_a_worktree_is_watched"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a commit with a harness change is recorded for the pre-push hook",
+  "old": "        if fp is not None and not touched:  # a harness change",
+  "new": "        if fp is not None:  # a harness change",
+  "expect": "test_a_harness_change_in_a_worktree_is_a_persons_to_publish"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a push is gated in the project directory, not where it runs",
+  "old": "    target = Path(mine_trees[0]) if mine_trees else None",
+  "new": "    target = root if mine_trees else None",
+  "expect": "test_a_push_from_the_worktree_is_gated_there"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a push from two worktrees in one command is allowed",
+  "old": "    if len(mine_trees) > 1:\n",
+  "new": "    if False:\n",
+  "expect": "test_a_push_from_the_worktree_is_gated_there"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "another repository's push is judged here",
+  "old": "    target = Path(mine_trees[0]) if mine_trees else None",
+  "new": "    target = Path(mine_trees[0]) if mine_trees else root",
+  "expect": "test_another_repository_is_not_this_harnesss"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a failed cd is taken for another repository",
+  "old": "    if t is None or t.resolve() == root.resolve():\n        return root\n",
+  "new": "    if t is None:\n        return None\n    if t.resolve() == root.resolve():\n        return root\n",
+  "expect": "test_another_repository_is_not_this_harnesss"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree inside the project is a dirty file of it",
+  "old": "        paths = [q for q in paths if q.rstrip(\"/\") not in nested]\n",
+  "new": "",
+  "expect": "test_a_worktree_inside_the_project_is_its_own_tree"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a parallel hook's worktree is dropped",
+  "old": "            state[\"trees\"] = {**disk[\"trees\"], **state.get(\"trees\", {})}\n",
   "new": "            pass\n",
-  "expect": "test_the_worktree_claude_works_in_is_judged"
+  "expect": "test_a_worktree_remembered_by_a_parallel_hook_is_kept"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "commits from before the session count in a worktree",
-  "old": "                          \"refs\": start_refs(src), \"seen_head\": head(root), \"from\": str(proj)},\n",
-  "new": "                          \"refs\": [], \"seen_head\": head(root), \"from\": str(proj)},\n",
-  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
+  "label": "worktree records in the state are not checked",
+  "old": "    trees = data.get(\"trees\", {})\n",
+  "new": "    trees = {}\n",
+  "expect": "test_one_state_for_every_worktree"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "a worktree the session has not touched is judged",
-  "old": "                          \"refs\": start_refs(src), \"seen_head\": head(root), \"from\": str(proj)},\n",
-  "new": "                          \"refs\": start_refs(src), \"seen_head\": None, \"from\": str(proj)},\n",
-  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
+  "label": "an earlier core's hook is rewritten",
+  "old": "    heads = [head_, LEGACY_PRE_PUSH] if legacy else [head_]\n",
+  "new": "    heads = [head_]\n",
+  "expect": "test_an_earlier_cores_hook_is_kept_until_a_new_session"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "the HEAD seen in a worktree is not used",
-  "old": "    return seen if isinstance(seen, str) else base\n",
-  "new": "    return base\n",
-  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
+  "label": "each tree gets the whole gate budget",
+  "old": "            gate = run_gate(t, adapter, \"quick\", deadline - time.monotonic())\n",
+  "new": "            gate = run_gate(t, adapter, \"quick\", float(cfg.get(\"budget\", {}).get(\"gate\", GATE_BUDGET)))\n",
+  "expect": "test_one_gate_budget_for_every_tree"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "files already changed in a worktree are not the session's",
-  "old": "    state = {\"baseline\": {\"head\": b.get(\"head\"), \"at\": time.time(), \"pending\": {}, \"protected\": protected_hashes(root),\n",
-  "new": "    state = {\"baseline\": {\"head\": b.get(\"head\"), \"at\": time.time(), \"pending\": {p: file_hash(root / p) for p in dirty_paths(root)}, \"protected\": protected_hashes(root),\n",
-  "expect": "test_the_worktree_claude_works_in_is_judged"
+  "label": "a passing tree's review is lost when another fails",
+  "old": "        rec[\"last_pass\"] = fp\n        passed.append((rec, fp))\n",
+  "new": "        rec[\"last_pass\"] = rec[\"reviewed\"] = fp\n        passed.append((rec, fp))\n",
+  "expect": "test_a_tree_that_passed_beside_a_failing_one_is_reviewed_later"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "the pre-push marker stays in the project directory",
-  "old": "    if marker.is_file():\n        (state_dir(root) / \"pre-push.installed\").write_text(",
-  "new": "    if False:\n        (state_dir(root) / \"pre-push.installed\").write_text(",
-  "expect": "test_the_hook_is_kept_from_a_worktree_too"
+  "label": "the text check misses a builtin with a hook variable",
+  "old": "rf\"{_VB}(?=.*{_HV})|{_HV}(?=.*{_VB})\", re.S)",
+  "new": "rf\"(?!x)x\", re.S)",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the text check knows only CLAUDECODE",
+  "old": "_HV = r\"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)\"\n",
+  "new": "_HV = r\"(?:CLAUDECODE)\"\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  }
 ]
