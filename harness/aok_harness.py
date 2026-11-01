@@ -710,7 +710,7 @@ def install(repo: Path, adapter_name: str, yes: bool) -> int:
         shutil.copy2(HERE / "agents" / "aok-reviewer.md", reviewer)
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("installed. Commit .aok/ and .claude/settings.json; the hooks apply from the next session.")
+    print("installed. Commit .aok/ and .claude/ (settings.json, agents/aok-reviewer.md); the hooks apply from the next session.")
     return 0
 
 

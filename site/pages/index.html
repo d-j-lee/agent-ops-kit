@@ -58,7 +58,7 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
 
     <section id="map">
       <h2>기능 지도</h2>
-      <div class="prose"><p>공통 기반 다섯 개(근거 규약, 수단 선택 규칙, 안전 규칙 S1–S9, 이름·태그·원장, 메일박스 AOK/1) 위에 기능이 놓입니다. ⑦은 v1 기능이고(D25), ⑧은 다음 PR로 들어올 제안입니다(D26).</p></div>
+      <div class="prose"><p>공통 기반 다섯 개(근거 규약, 수단 선택 규칙, 안전 규칙 S1–S9, 이름·태그·원장, 메일박스 AOK/1) 위에 기능이 놓입니다. ⑦과 ⑧은 v1 기능입니다(D25, D26).</p></div>
       <div class="feat">
         <a class="card" href="verification.html#aok"><span class="n">① /aok-verify</span><b>블라인드 재현 대조</b><span class="d">결론을 숨긴 검증자와 별도 판정자로 대조한다. L0 검토 · L1 블라인드 · L2 재현</span></a>
         <a class="card" href="{{docurl:docs/patterns/watchdog.md}}" target="_blank" rel="noopener"><span class="n">② /aok-watch</span><b>정지·비용 감시기</b><span class="d">허브가 깨어날 때마다 자식을 점검하고 경보를 원장에 남긴다</span></a>
@@ -67,7 +67,7 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
         <a class="card" href="{{docurl:docs/patterns/curator.md}}" target="_blank" rel="noopener"><span class="n">⑤ /aok-garden</span><b>큐레이터</b><span class="d">세션 기록을 카드·씨앗으로 증류하고 사람 검토 뒤 스킬을 고친다</span></a>
         <a class="card" href="{{docurl:docs/patterns/budget.md}}" target="_blank" rel="noopener"><span class="n">⑥ /aok-delegate</span><b>예산 가드</b><span class="d">허브를 포함한 트리 상한, 입장 검사, 허브 교대</span></a>
         <a class="card" href="regression.html"><span class="n new">⑦ /aok-regress</span><b>회귀 고정</b><span class="d">고친 뒤에도 전에 되던 것이 되는지. 빈 출력·비결정성을 거르는 전후 비교, 공허한 테스트 검사</span></a>
-        <a class="card" href="rust.html#harness"><span class="n new">⑧ · 제안 D26</span><b>작업 레포 하네스</b><span class="d">자식이 일하는 레포 안의 편집 직후 검사, 턴 종료 게이트, 단일 검증 진입점. 언어 중립 코어 + 어댑터</span></a>
+        <a class="card" href="harness.html"><span class="n new">⑧ /aok-harness</span><b>작업 레포 하네스</b><span class="d">자식이 일하는 레포 안의 편집 직후 검사, 턴 종료 게이트, 단일 검증 진입점. 언어 중립 코어 + 어댑터</span></a>
       </div>
     </section>
 
@@ -106,7 +106,7 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
         <a class="box" href="cases.html" style="text-decoration:none;color:inherit"><h3>공개 레포 적용 사례</h3><p class="small muted">work-atlas 훅 지연, docbench 비교, Rust 도구</p></a>
         <a class="box" href="rust.html" style="text-decoration:none;color:inherit"><h3>Rust × AI 활용 지도</h3><p class="small muted">언어가 검증 비용을 바꾸는 방식, 작업 하네스, 4주 계획</p></a>
       </div>
-      <footer class="pagefoot">2026-10-31 작성, 2026-11-01 독립 검증 반영. 이 안내서와 ⑦을 들인 결정(D25·D27–D29)과 ⑧ 제안(D26)은 {{doc:docs/proposals/regression-harness-hub.md}}에 있습니다.</footer>
+      <footer class="pagefoot">2026-10-31 작성, 2026-11-01 독립 검증 반영. 이 안내서와 ⑦·⑧을 들인 결정(D25–D29)은 {{doc:docs/proposals/regression-harness-hub.md}}에 있습니다.</footer>
     </section>
   </main>
 </div>

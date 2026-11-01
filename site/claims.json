@@ -714,5 +714,41 @@
     "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_site.BuildCheckTests\" --mutations tests/mutations/build_site.json --jobs 4"
    }
   ]
+ },
+ {
+  "id": "C-h8-tests",
+  "claim": "⑧ 하네스의 훅 다섯 개, verify, install, Python·Rust 어댑터의 동작 시험이 모두 통과한다.",
+  "grade": "확인",
+  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "python3 -m unittest tests.test_harness"
+   }
+  ]
+ },
+ {
+  "id": "C-h8-muts",
+  "claim": "하네스의 보호 장치를 하나씩 끈 변이마다 그 변이를 잡도록 지정한 시험이 실패한다.",
+  "grade": "확인",
+  "scope": "이 저장소, CI의 harness 작업과 같은 명령. 변이 목록은 작성자가 골랐다",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_harness\" --mutations tests/mutations/harness.json --jobs 4 --timeout 600"
+   }
+  ]
+ },
+ {
+  "id": "C-hook-doc",
+  "claim": "Claude Code 훅은 Stop에서 decision block과 reason으로 턴 종료를 막고, PreToolUse에서 hookSpecificOutput.permissionDecision deny로 도구 호출을 거부하며, additionalContext는 Claude의 맥락에, systemMessage는 사용자에게 간다. 명령 훅의 시간 초과 기본값은 600초다.",
+  "grade": "문서",
+  "scope": "Claude Code hooks 문서, 2026-11-01 조회",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://code.claude.com/docs/en/hooks"
+   }
+  ]
  }
 ]

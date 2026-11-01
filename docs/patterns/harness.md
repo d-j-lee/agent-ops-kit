@@ -33,14 +33,14 @@ AOK의 다른 기능은 허브와 세션의 층에서 돈다. ⑧은 자식(dev)
 | 언어 중립 | 코어는 언어를 모른다. 지문(HEAD + 바뀐 파일 내용 + 게이트 정의), 기준, 막힘 횟수, 약화 보고, 푸시 판단이 코어의 일이고, 무엇을 돌릴지는 어댑터가 정한다. 어댑터를 둘(Python, Rust) 두는 것은 이 분리가 실제로 언어와 무관한지 시험으로 보이기 위해서다 |
 | 판정받는 쪽이 기준을 못 바꾼다 | 게이트 정의는 세션이 시작된 커밋의 `.aok/harness.json`에서 읽는다. 작업 트리에서 바꾸면 쓰이지 않고 보고된다. `.aok/`와 `.claude/settings*.json`을 바꾼 세션의 푸시는 막고 사람에게 넘긴다 |
 | 닫힌 실패 | 단계를 실행할 수 없거나(필수 도구 없음, 시간 초과, 설정 오류) 하네스가 죽으면 통과로 치지 않는다. 턴 종료는 막고, 푸시는 거부한다. 선택 도구가 없으면 건너뛰되 세션에 한 번 알린다 |
-| 출구가 있다 | 3번 막히면 놓아 준다(Claude Code의 자체 상한 8회보다 먼저). 막힌 자식이 예산을 태우며 맴돌지 않고 AOK/1 `blocked`로 보고할 수 있게 하기 위해서다 |
+| 출구가 있다 | 3번 막히면 놓아 준다. 막힌 자식이 예산을 태우며 맴돌지 않고 AOK/1 `blocked`로 보고할 수 있게 하기 위해서다. Claude Code 쪽에도 연속 블록 상한이 있다는 보고가 있으나 원문에서 확인하지 못했다 [미확인]. 하네스는 그것에 기대지 않는다 |
 | 남의 실패는 남의 것 | 세션이 아무것도 바꾸지 않았으면 판정하지 않는다. 시작할 때 이미 바뀌어 있던 파일은 그 뒤 내용이 바뀐 경우에만 세션의 것으로 센다 |
 | 한 번에 다 보고 | 실패한 단계 뒤에도 모든 단계를 돌려 한 번에 보고한다 |
 
 ## 3. 작업 레포에 들이기
 
 1. **사람 확인(S4).** `.claude/settings.json`을 바꾸는 일이다. 허브는 `install --repo <경로> --adapter <이름>`을 `--yes` 없이 돌려 계획을 보이고, 사용자 확인을 받은 뒤 `--yes`로 다시 돌린다.
-2. 설치가 하는 일: `.aok/harness/`에 코어와 어댑터를 복사, `.aok/harness.json`(`{"adapter": "<이름>"}`)이 없으면 작성, `.claude/settings.json`에 훅 다섯 개와 `.aok/`·`.claude/` 편집 시 묻기(`ask`)를 더한다. 기존 설정은 보존하고, 두 번 돌려도 훅이 겹치지 않는다. 리뷰어가 필요하면 `harness/agents/aok-reviewer.md`를 `.claude/agents/`로 복사한다.
+2. 설치가 하는 일: `.aok/harness/`에 코어와 어댑터를 복사, `.aok/harness.json`(`{"adapter": "<이름>"}`)이 없으면 작성, `.claude/agents/aok-reviewer.md`(적대적 리뷰어)가 없으면 작성, `.claude/settings.json`에 훅 다섯 개와 `.aok/`·`.claude/` 편집 시 묻기(`ask`)를 더한다. 기존 설정은 보존하고, 두 번 돌려도 훅이 겹치지 않는다.
 3. 커밋하고 PR로 올린다. 훅은 다음 세션부터 적용된다. 첫 세션의 맥락이 `[aok-harness] adapter …`로 시작하는지 본다.
 4. CI에는 기존 단계를 그대로 두고(정본 게이트), 기준 브랜치의 정의로 도는 잡을 더한다. PR이 고친 정의가 아니라 기준 브랜치의 정의로 판정하기 위해서다:
    ```bash
@@ -75,5 +75,5 @@ Rust는 fsmap이 `PATH`에 있고 `fsmap hook`을 알면 모든 훅과 `verify`�
 | 근거 | 내용 | 등급 |
 |---|---|---|
 | 1회차 | 출발점 세션의 Rust 하네스와 fsmap이 독립 검증 라운드마다 게이트 우회(턴 중 커밋, 첫 커밋, 검사 도구 부재 시 꺼짐)와 공허한 훅 시험을 찾았다 | [기록됨] `reports/2026-10-30-verification-rounds.md`, fsmap `docs/agent-harness.md` |
-| 훅 계약 | 블록·거부·맥락의 JSON 필드, 시간 초과 기본값(명령 훅 600초), Stop 블록 상한 8회 | [문서] Claude Code hooks 문서 |
+| 훅 계약 | 블록·거부·맥락의 JSON 필드(`decision: "block"`·`reason`, `hookSpecificOutput.permissionDecision: "deny"`, `additionalContext`, `systemMessage`), 명령 훅 시간 초과 기본값 600초 | [문서] https://code.claude.com/docs/en/hooks (2026-11-01 조회) |
 | 시험 | `tests/test_harness.py`: 문서화한 동작마다 시험이 있고, 장치를 하나씩 끈 변이(`tests/mutations/harness.json`)마다 지정한 시험이 실패한다. CI가 돌린다 | [확인] `python3 -I scripts/vacuity_check.py --repo . --test "python3 -m unittest tests.test_harness" --mutations tests/mutations/harness.json --jobs 4` |
