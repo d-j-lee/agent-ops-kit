@@ -36,7 +36,13 @@
    - 진입 문서(README, CONTRIBUTING 등)의 명령을 문서에 적힌 그대로 실행한다.
    - 문서에 없는 행동이 필요하면 **그것 자체가 결함**이다(`doc_missing`). 우회해서 진행했다면 그 단계의 `deviation`에 적는다.
    - 첫 실패의 원문(명령, stderr 앞부분)을 보존한다.
-   - 문서 수정은 금지한다. 끝에 `git diff --exit-code`로 작업 트리가 깨끗한지 검사한다.
+   - 문서 수정은 금지한다. 끝에 작업 트리가 시작 상태 그대로인지 검사한다. `git diff --exit-code`만으로는 부족하다. 스테이징·커밋·새 파일·ignore된 파일을 놓친다.
+     ```bash
+     git rev-parse HEAD                 # 띄울 때 준 source_revision(<sha>)과 같아야 한다
+     git status --porcelain --ignored   # 진입 문서가 보이면 무효
+     git diff --stat <sha>              # 커밋된 변경까지
+     ```
+     HEAD가 다르거나 진입 문서가 어떤 식으로든 바뀌었으면 그 실행은 무효(`fail`)다. 실행이 만든 빌드 산출물이 ignore 경로에 생긴 것은 그 자체로 실패가 아니다. 경로를 `deviation`에 적고 판정은 허브가 한다(S7). 자식 프롬프트: `templates/system-prompts/cleanroom.md`의 Post-check.
 4. **자식: 환경 기록.** 환경 설정 스크립트, CLAUDE.md, 훅이 문서에 없는 전제를 채워 줄 수 있다 [추론]. 그래서 `env_id`, CLI 버전, SessionStart 출력 끝부분을 보고서 `env`에 남긴다.
 5. **자식: 보고.** `schemas/cleanroom-report.schema.json` 형식의 보고서를 PR 코멘트와 원장에 남기고, 부모에게 `AOK/1 result`를 보낸다. 봉투에는 요약과 `refs`(PR 코멘트, 원장 행)만 싣는다.
 6. **flaky 의심.** 같은 sha로 한 번 더 돌린다(새 자식, 같은 파라미터). 두 결과가 다르면 `flaky`.

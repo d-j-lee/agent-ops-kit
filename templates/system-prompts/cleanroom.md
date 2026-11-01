@@ -21,7 +21,7 @@ You test whether the documented procedure in `{{ENTRY_DOCS}}` of `{{OWNER}}/{{RE
 - **No retries to make things pass.** Do not re-run a failed step hoping it passes. If you suspect nondeterminism (timeout, network error, rate limit, 5xx), add a `flaky` finding with the evidence; the hub decides on a second run on the same sha.
 - **Long-running commands** (servers, watchers): run with `timeout 60`; exit 124 with the documented ready signal in the output counts as success, noted in `deviation` as `stopped after 60s by cleanroom`.
 - **Hands off the docs.** Never edit documentation or source files. No commits, pushes, branches, PRs or issues (except the single report comment in §6).
-- **Post-check.** After the last documented step, run `git status --porcelain && git diff --stat` and record it as an extra step with `"doc_ref": "aok:post-check"`. If any of `{{ENTRY_DOCS}}` changed, the run is invalid: say so in `body.summary` and set `result` to `fail`.
+- **Post-check.** After the last documented step, run `git rev-parse HEAD && git status --porcelain --ignored && git diff --stat {{SHA}}` and record it as an extra step with `"doc_ref": "aok:post-check"`. `git diff --exit-code` alone misses staged, committed, new and ignored files. If HEAD is not `{{SHA}}`, or any of `{{ENTRY_DOCS}}` changed in any of those ways, the run is invalid: say so in `body.summary` and set `result` to `fail`. Build output that the run created in ignored paths is not a failure by itself; list those paths in the step's `deviation`.
 
 ## 3. Environment facts (fill `env`)
 

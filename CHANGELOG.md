@@ -6,15 +6,16 @@
 
 ### 추가
 
-- ⑦ 회귀 고정(제안 D19): 런북 `docs/patterns/regression.md`, 스킬 `.claude/skills/aok-regress`, 도구 두 개
-  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 비교. 빈 출력·0이 아닌 종료 코드·실행마다 다른 출력은 실패, 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키, `--timing`은 번갈아 측정
-  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳에 맞아야 한다
-  - CI 자기 시험: ⑦ 도구 시험에 보호 장치를 끄는 변이 7개(`tests/mutations/regress_tools.json`)
-- 읽기 허브 「AOK 안내서」(제안 D21): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`(D22), 빌드 `scripts/build_site.py`. 페이지마다 수치의 근거 표를 만들고, 모르는 수치·근거 없는 [확인]·쓰이지 않는 항목·없는 파일 링크·Artifact URL·세션 ID는 빌드 실패. 게시 URL은 레포에 두지 않는다
+- ⑦ 회귀 고정(D25): 런북 `docs/patterns/regression.md`, 스킬 `.claude/skills/aok-regress`, 도구 두 개
+  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)는 실패. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
+  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬
+  - CI 자기 시험: 문서화한 장치를 하나씩 끈 변이 64개(diffcheck 21, vacuity_check 13, build_site 30), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
+- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): 페이지 본문의 날 측정 수치·손으로 단 [확인] 배지·근거 없이 다시 돌릴 수 없는 [확인]·자리표시가 든 근거 명령·없는 파일·저장소 밖 링크·원자료와 다른 터미널 발췌·공개 레포 금지 항목은 빌드 실패. 게시 URL은 레포에 두지 않는다
+- [문서] 등급 범위(D29): 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. `docs/architecture.md`·`schemas/claim.schema.json`·verifier 정의
 - 시험: `tests/test_regress_tools.py`, `tests/test_site.py`
-- 제안서 `docs/proposals/regression-harness-hub.md`(⑦ 회귀 고정, ⑧ 작업 레포 하네스, 읽기 허브, 결정 D19–D22)
-- 이력: `reports/2026-10-30-verification-rounds.md`(독립 검증 라운드 기록), `reports/2026-10-30-hotspots.md`와 재현 자료(공개 레포 핫스팟 실측)
-- `docs/patterns/brd.md` §8 외부 근거(자기 수정, 오류 찾기, 자기 편애, 상관 오류, 아첨)
+- 제안서 `docs/proposals/regression-harness-hub.md`(⑦, ⑧ 작업 레포 하네스 제안 D26, 읽기 허브, 결정 D25–D29, ⑧에 넘기는 요구)
+- 이력: `reports/2026-10-30-verification-rounds.md`(독립 검증 라운드와 이 PR의 ① T2), `reports/2026-10-30-hotspots.md`와 재현 자료·원자료 `logs/`(공개 레포 핫스팟 실측, 2026-11-01 재측정)
+- `docs/patterns/brd.md` §1 ⑦과의 분담, §8 외부 근거(자기 수정, 오류 찾기, 자기 편애, 상관 오류, 아첨)
 - `.gitignore`(허브 빌드 결과)
 
 - 관제실 콘솔 v11. 실제 런타임에서 연결이 막히던 문제를 고쳤다.
@@ -47,6 +48,13 @@
 - `CLAUDE.md` 문서 목록에 `regression.md`(S4: 이 변경의 병합이 사람 확인이다)
 - 관제실 "주의" 섹션을 "운영 경보"(트리·예산·예약 작업·허브 기록)로 좁히고, 세션 단위 신호는 인박스로 옮겼다
 - 판단 축을 협업 효용으로 바꿨다. "24시간 비용" 타일을 없애고 비용은 참고 수치로만 표시한다
+
+### 고침 (이 PR의 독립 검증이 찾은 기존 결함)
+
+- ③ 클린룸의 작업 트리 검사: `git diff --exit-code`는 스테이징·커밋·새 파일·ignore된 파일을 놓친다. HEAD가 시작 sha인지와 `git status --porcelain --ignored`, `git diff --stat <sha>`로 본다(`docs/patterns/cleanroom.md`, `templates/system-prompts/cleanroom.md`)
+- `docs/patterns/brd.md` §6·`aok-verify`: L1+L0+판정자 비용의 [도출] 값이 전제에서 나오지 않았다. 3개 495k–960k 토큰, 벽시계 14–22분으로 고침. 작업 완료 알림에서 온 값은 [기록됨]
+- `README.md`: 커밋 전 스캔에 `--strict`, 검증자·판정자 도구 설명(읽기·실행, 쓰기 없음)
+- `scripts/secret_scan.py`: 공유 링크 형식(`claude.ai/public/artifacts/<id>`)의 Artifact URL도 잡는다
 
 ## [1.0.0] — 2026-10-21
 
