@@ -1038,6 +1038,13 @@ class PreBashTests(Harness):
                          ("x=CHILD_SESSION; unset CLAUDE_CODE_$x; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("u=un; ${u}set CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("a=CLAUDE_CODE_CHILD; unset ${a}_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("for v in CLAUDE_CODE_CHILD_SESSION; do unset $v; done; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION; declare -n r=$v; unset r; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("echo CLAUDECODE | { read v; unset $v; }; sh push.sh", "CLAUDECODE"),
+                         # builtins that set it empty: the hook only checks that it is not empty
+                         ("printf -v CLAUDE_CODE_CHILD_SESSION ''; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("read CLAUDE_CODE_CHILD_SESSION </dev/null; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("mapfile CLAUDECODE </dev/null; sh push.sh", "CLAUDECODE"),
                          ("env -i sh push.sh", "clears the environment"), ("env -i PATH=/bin sh push.sh", "clears the environment"),
                          ("env - sh push.sh", "clears the environment"), ("env --ignore-environment sh push.sh", "clears"),
                          ("env -u HOME -i sh push.sh", "clears the environment"), ("exec -c sh push.sh", "clears"),
@@ -1054,7 +1061,13 @@ class PreBashTests(Harness):
             self.assertIn(why, reason(out), cmd)
         for cmd in ("echo $CLAUDECODE", "grep -rn CLAUDECODE docs", "echo $CLAUDE_CODE_CHILD_SESSION",
                     "grep -rn 'unset CLAUDE_CODE_CHILD_SESSION' docs", "export FOO=1", "export CLAUDE_CODE_USE_BEDROCK=1",
-                    "env -v FOO=1 python3 -c pass", "env --chdir=docs ls", "$PYTHON -m pytest", "git config alias.st status", "git st",
+                    "env -v FOO=1 python3 -c pass", "env --chdir=docs ls", "$PYTHON -m pytest",
+                    # a builtin elsewhere in the line does not make a mention of the names a change
+                    "export GIT_PAGER=cat && git grep CLAUDE_CODE_CHILD_SESSION",
+                    "export DEBUG=1 && grep -rn CLAUDE_CODE_CHILD_SESSION harness/ > CLAUDE_CODE_CHILD_SESSION.log",
+                    "export PATH=$HOME/bin:$PATH && grep -rn CLAUDECODE docs", "unset CLAUDECODE_EXTRA",
+                    "export MY_CLAUDECODE_COPY=1", "read -r line < notes.txt", "printf '%s' CLAUDECODE",
+                    "git config alias.st status", "git st",
                     "git config --unset core.hooksPath", "env FOO=1 python3 -c pass", "env -u HOME python3 -c pass"):
             self.assertIsNone(self.bash(cmd), cmd)
 

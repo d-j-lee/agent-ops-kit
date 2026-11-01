@@ -1563,15 +1563,15 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a CLAUDECODE assignment is not seen",
-  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) \\\n",
-  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) \\\n",
+  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS):\n",
+  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS):\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "unset, declare +x and the indirect forms of a hook variable are not seen",
-  "old": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \\\n",
-  "new": "    changer = False or any(isinstance(e, list) and e for e in envs) \\\n",
+  "old": "        if w in VAR_BUILTINS or (w == \"printf\" and \"-v\" in words[k + 1:]):\n",
+  "new": "        if w == \"printf\" and \"-v\" in words[k + 1:]:\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
@@ -2013,7 +2013,7 @@
   "label": "cd is not followed",
   "old": "                cur = word_path(cur, seg[1])\n                dirs.append(cur)\n",
   "new": "                pass\n",
-  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+  "expect": "test_a_push_from_the_worktree_is_gated_there"
  },
  {
   "file": "harness/aok_harness.py",
@@ -2027,7 +2027,7 @@
   "label": "git -C is not followed",
   "old": "                    at = word_path(at, gseg[i + 1])\n",
   "new": "                    pass\n",
-  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+  "expect": "test_a_push_from_the_worktree_is_gated_there"
  },
  {
   "file": "harness/aok_harness.py",
@@ -2242,22 +2242,22 @@
  {
   "file": "harness/aok_harness.py",
   "label": "env -u with a name from a variable is allowed",
-  "old": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \\\n",
-  "new": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) \\\n",
+  "old": "    computed = any(re.search(r\"[$`]\", n) for n in unset_by_env)\n",
+  "new": "    computed = False\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "a hook variable's name put together from pieces is allowed",
-  "old": "    return any(part in rest for part in HOOK_VAR_PARTS)\n",
+  "old": "    return any(part in w for part in HOOK_VAR_PARTS)\n",
   "new": "    return False\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "a command name put together by expansion is allowed",
-  "old": "        or any(command_word(seg) is not None and re.search(r\"[$`]\", command_word(seg)) for seg in cmds)\n",
-  "new": "        or False\n",
+  "old": "        if cw is None or not re.search(r\"[$`]\", cw):\n",
+  "new": "        if True:\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
@@ -2336,5 +2336,47 @@
   "old": "        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees)):\n",
   "new": "        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees[:1])):\n",
   "expect": "test_an_unreadable_definition_blocks_a_session_with_worktree_changes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a name put together by expansion widens nothing",
+  "old": "    if computed and any(names_hook_var(w) for seg in cmds for w in seg):\n",
+  "new": "    if False:\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a nameref's value is not taken for a name",
+  "old": "(nameref and m and re.search(r\"[$`]\", m.group(2)))",
+  "new": "False",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "another variable's plain name is taken for a hook variable",
+  "old": "        return w in HOOK_VARS\n",
+  "new": "        return any(part in w for part in HOOK_VAR_PARTS)\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a mention beside a builtin is taken for a change",
+  "old": "        if any(names_hook_var(a) for a in operands):\n",
+  "new": "        if any(names_hook_var(w) for s2 in cmds for w in s2):\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "printf -v is not a change",
+  "old": "        if w in VAR_BUILTINS or (w == \"printf\" and \"-v\" in words[k + 1:]):\n",
+  "new": "        if w in VAR_BUILTINS:\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "read and mapfile are not a change",
+  "old": "VAR_BUILTINS = (\"unset\", \"export\", \"declare\", \"typeset\", \"local\", \"readonly\", \"read\", \"mapfile\", \"readarray\")\n",
+  "new": "VAR_BUILTINS = (\"unset\", \"export\", \"declare\", \"typeset\", \"local\", \"readonly\")\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  }
 ]

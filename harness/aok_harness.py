@@ -165,10 +165,11 @@ HOOK_VARS = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")
 _HV = r"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)"
 # shell builtins that change a variable's value or export (unset, export -n, declare +x, nameref, readonly...): with
 # one of them anywhere in the command, naming a hook variable anywhere (v=NAME; unset $v) is refused
-VAR_BUILTINS = ("unset", "export", "declare", "typeset", "local", "readonly")
+# shell builtins that can unset a variable, stop exporting it, or set it empty (the hook only checks it is not empty)
+VAR_BUILTINS = ("unset", "export", "declare", "typeset", "local", "readonly", "read", "mapfile", "readarray")
 # pieces of the two names: a name put together from parts (x=CHILD_SESSION; unset CLAUDE_CODE_$x) holds one of them
 HOOK_VAR_PARTS = ("CLAUDECODE", "CLAUDE_CODE_", "CHILD_SESSION")
-_VB = r"\b(?:unset|export|declare|typeset|local|readonly|env)\b|\$"
+_VB = r"\b(?:unset|export|declare|typeset|local|readonly|read|mapfile|readarray|printf|env)\b|\$"
 _HP = r"(?:CLAUDECODE|CLAUDE_CODE_|CHILD_SESSION)"
 CLAUDECODE_CHANGE = re.compile(rf"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?{_HV}=|"
                                rf"(?:^|\s)(?:-u\s*|--unset[=\s]){_HV}\b|"
@@ -1633,15 +1634,40 @@ def command_word(seg: list[str]) -> str | None:
 
 
 def names_hook_var(w: str) -> bool:
-    """Whether a word can stand for a hook variable: it holds one of the names, or, unless it is just some other
-    variable's plain name, a piece of one (an assignment's value, a word with an expansion)."""
-    if any(v in w for v in HOOK_VARS):
-        return True
+    """Whether a word can stand for a hook variable: a plain name only when it is one of the two (CLAUDECODE_EXTRA,
+    CLAUDE_CODE_USE_BEDROCK are other variables); `NAME=value` when NAME is one or the value holds a piece of one
+    (v=CLAUDE_CODE_CHILD_SESSION, r=... for a nameref); any other word when it holds a piece (CLAUDE_CODE_$x)."""
     m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", w, re.S)
-    rest = m.group(2) if m else w
-    if not m and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", w):
-        return False  # CLAUDE_CODE_USE_BEDROCK and the like: another variable's whole name
-    return any(part in rest for part in HOOK_VAR_PARTS)
+    if m:
+        return m.group(1) in HOOK_VARS or any(part in m.group(2) for part in HOOK_VAR_PARTS)
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", w):
+        return w in HOOK_VARS
+    return any(part in w for part in HOOK_VAR_PARTS)
+
+
+def changer_operands(seg: list[str]) -> tuple[list[str], bool] | None:
+    """When a simple command can change a variable (a VAR_BUILTINS word, `printf -v`, or a command whose name is put
+    together by expansion, as in ${u}set): the words after it, and whether the name it changes is put together by
+    expansion (unset $v; declare -n r=$v, whose value is a name). Else None."""
+    words = drop_redirections(seg)
+    for k, w in enumerate(words):
+        if w in VAR_BUILTINS or (w == "printf" and "-v" in words[k + 1:]):
+            ops = words[k + 1:]
+            break
+    else:
+        cw = command_word(seg)
+        if cw is None or not re.search(r"[$`]", cw):
+            return None
+        return words[words.index(cw) + 1:], True
+    nameref = any(re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", a) for a in ops)
+    computed = False
+    for a in ops:
+        if a.startswith(("-", "+")):
+            continue
+        m = re.fullmatch(r"([^=]*)=(.*)", a, re.S)
+        if re.search(r"[$`]", m.group(1) if m else a) or (nameref and m and re.search(r"[$`]", m.group(2))):
+            computed = True
+    return ops, computed
 
 
 def tamper_problem(cmd: str) -> str | None:
@@ -1657,16 +1683,26 @@ def tamper_problem(cmd: str) -> str | None:
     envs = [env_options(seg[k + 1:]) for seg in cmds for k, w in enumerate(seg) if Path(w).name == "env"]
     if any(e == "clear" for e in envs):
         return CLEAR_ENV_MSG
-    if any(isinstance(e, list) and set(e) & set(HOOK_VARS) for e in envs):
+    unset_by_env = [n for e in envs if isinstance(e, list) for n in e]
+    if set(unset_by_env) & set(HOOK_VARS):
         return CLAUDECODE_MSG
-    # a command that can change a variable: a builtin that does, env with -u, or a command whose name is put together
-    # by expansion (${u}set); with one of them, a hook variable's name or a piece of it anywhere is refused
-    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \
-        or any(command_word(seg) is not None and re.search(r"[$`]", command_word(seg)) for seg in cmds)
+    # a command that changes a variable is refused when what it changes can be a hook variable: its own operands
+    # name one (or a piece of one); and when it changes a name put together by expansion (unset $v, ${u}set,
+    # env -u $v, a nameref), a name or piece anywhere in the command line counts (v=NAME; for v in NAME; read v)
+    computed = any(re.search(r"[$`]", n) for n in unset_by_env)
+    for seg in cmds:
+        found = changer_operands(seg)
+        if found is None:
+            continue
+        operands, by_expansion = found
+        if any(names_hook_var(a) for a in operands):
+            return CLAUDECODE_MSG
+        computed |= by_expansion
+    if computed and any(names_hook_var(w) for seg in cmds for w in seg):
+        return CLAUDECODE_MSG
     for seg in cmds:
         for k, w in enumerate(seg):
-            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") for v in HOOK_VARS) \
-                    or (changer and names_hook_var(w)):
+            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") for v in HOOK_VARS):
                 return CLAUDECODE_MSG
             if ASSIGN_GIT_CONFIG.match(w) or w == "--config-env" or w.startswith("--config-env="):
                 return GIT_CONFIG_MSG
