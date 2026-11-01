@@ -714,5 +714,65 @@
     "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_site.BuildCheckTests\" --mutations tests/mutations/build_site.json --jobs 4"
    }
   ]
+ },
+ {
+  "id": "C-h8-tests",
+  "claim": "⑧ 하네스의 훅 다섯 개, verify, install, Python·Rust 어댑터의 동작 시험이 모두 통과한다.",
+  "grade": "확인",
+  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일, 2026-11-01. 실제 fsmap 시험 1개는 AOK_FSMAP가 없으면 건너뛰므로 108개에 넣지 않았다",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "python3 -m unittest tests.test_harness"
+   }
+  ]
+ },
+ {
+  "id": "C-h8-muts",
+  "claim": "하네스 코어와 어댑터의 보호 장치를 하나씩 끈 변이마다 그 변이를 잡도록 지정한 시험이 실패한다.",
+  "grade": "확인",
+  "scope": "이 저장소, CI의 harness 작업과 같은 명령, 2026-11-01. CI는 목록을 네 조각으로 나눠 조각마다 --jobs 4 --timeout 900으로 돈다. 변이 목록은 작성자가 골랐다(2·3라운드 검증자가 목록 밖에서 찾은 공허한 장치를 옮겨 넣었다)",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "python3 -I scripts/vacuity_check.py --repo . --test \"python3 -m unittest tests.test_harness\" --mutations tests/mutations/harness.json --jobs 4 --timeout 900"
+   }
+  ]
+ },
+ {
+  "id": "C-hook-doc",
+  "claim": "Claude Code 훅은 Stop에서 decision block과 reason으로 턴 종료를 막고, PreToolUse에서 hookSpecificOutput.permissionDecision deny로 도구 호출을 거부하며, additionalContext는 Claude의 맥락에, systemMessage는 사용자에게 간다. 명령 훅의 시간 초과 기본값은 600초다. onFailure block은 훅이 시작하지 못하거나 0·2가 아닌 코드로 끝나거나 시간을 넘길 때 그 동작을 막고(v2.1.295 이상), Stop 훅에는 효과가 없다. Stop 입력에는 background_tasks가 있고, Stop 훅이 8번 연속 턴을 이어 가게 하면 다음 block은 무시된다.",
+  "grade": "문서",
+  "scope": "Claude Code hooks 문서, 2026-11-01 조회",
+  "evidence": [
+   {
+    "kind": "url",
+    "ref": "https://code.claude.com/docs/en/hooks"
+   }
+  ]
+ },
+ {
+  "id": "C-h8-fsmap",
+  "claim": "Rust 어댑터는 빌드한 fsmap에 훅 다섯 개와 verify를 넘기고, fsmap이 git pre-push 훅을 설치하며, fsmap의 막힘과 통과, verify의 종료 코드(통과 0, rustfmt 위반 1)와 JSON 보고가 그대로 돌아온다.",
+  "grade": "확인",
+  "scope": "fsmap 74b7ffb, cargo 1.99.1, x86_64 Linux, 2026-11-01. AOK_FSMAP가 없으면 시험이 건너뛰어져 종료 0이 나오므로 결과에 skipped가 없어야 한다",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cargo install --git https://github.com/d-j-lee/filesystemMap --rev 74b7ffb --locked && AOK_FSMAP=\"${CARGO_HOME:-$HOME/.cargo}/bin/fsmap\" python3 -m unittest tests.test_harness.RealFsmapTests -v"
+   }
+  ]
+ },
+ {
+  "id": "C-h8-round",
+  "claim": "⑧은 독립 검증자 둘과 판정자의 검증을 세 라운드 받았다. 1라운드는 확정 오류 5건과 검증자만 찾은 항목 43건을 냈고 목록 밖 변이 32개가 모두 살아남았다. 2라운드는 확정 오류 6건과 검증자만 찾은 항목 11건을 냈고 목록 밖에서 서로 다른 장치 40개가 살아남았다. 3라운드는 확정 오류 6건과 검증자만 찾은 항목 7건을 냈고 목록 밖 변이 25개 중 20개가 살아남았다.",
+  "grade": "기록됨",
+  "scope": "run v-20261101-h8(첫 판, 시험 43개+실제 fsmap 1개·변이 51개), v-20261101-h8r2(1라운드 반영 판 f62331e, 시험 66개+1·변이 137개), v-20261101-h8r3(2라운드 반영 판 581f79a, 시험 89개+1·변이 221개), 2026-11-01. 판정자 보고의 건수다(검증자만 찾은 항목은 묶은 수)",
+  "evidence": [
+   {
+    "kind": "file",
+    "ref": "reports/2026-10-30-verification-rounds.md"
+   }
+  ]
  }
 ]

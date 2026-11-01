@@ -243,6 +243,7 @@ table.cmp { min-width: 820px; }
 table.cmp thead th.c { color: var(--cross); } table.cmp thead th.a { color: var(--adv); } table.cmp thead th.g { color: var(--reg); }
 table.rounds { min-width: 860px; }
 table.when { min-width: 760px; }
+table.hooks td:nth-child(2) { white-space: nowrap; }  /* hook names stay whole */
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0.08em; }
 .must { font-weight: 700; }
 .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }

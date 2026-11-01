@@ -1,7 +1,7 @@
 <!--page
 title: Rust × AI 활용 지도
 nav: Rust 트랙
-order: 5
+order: 6
 description: AI 에이전트와 Rust를 함께 쓰는 근거, 작업 하네스, 함정과 대응, 4주 계획. 언어가 검증 비용을 어떻게 바꾸는지.
 -->
 <div class="wrap">
@@ -259,7 +259,7 @@ crates/logq-core/src/count.rs:38:40: <span class="err">error[E0277]</span>: cann
       <h2>하네스: 1회차와 2회차</h2>
       <div class="prose">
         <p><strong>1회차</strong>는 출발점 세션에서 만든 Rust 작업 하네스(<code>rust-ai-harness</code>)입니다. 전체 게이트(정책 검사, <code>fmt</code>, <code>clippy -D warnings</code>, {{fig:gate.tests}}, Python 브리지, rustdoc, cargo-deny)와 {{fig:hooktests.n}}가 통과했습니다 {{grade:C-harness-gate}}. 그 설계는 이후 사용자의 Rust CLI fsmap(<a href="https://github.com/d-j-lee/filesystemMap" target="_blank" rel="noopener">d-j-lee/filesystemMap</a>)에 <code>fsmap verify</code> 게이트와 훅으로 들어갔습니다.</p>
-        <p><strong>2회차</strong>는 AOK의 ⑧ 작업 레포 하네스(제안 D26, 다음 PR)입니다. 훅·게이트·단일 진입점·리뷰어를 언어 중립 코어로 두고, Rust와 Python은 그 위의 어댑터가 됩니다. AOK 쪽이 정본이고, Rust 어댑터는 fsmap 같은 선행 구현이 있으면 그것에 맡길 수 있게 합니다. 아래 구성은 1회차의 Rust 판입니다 <span class="g g-inf">추론</span>.</p>
+        <p><strong>2회차</strong>는 AOK의 ⑧ 작업 레포 하네스(D26, <a href="harness.html">⑧ 페이지</a>)입니다. 훅·게이트·단일 진입점·리뷰어를 언어 중립 코어로 두고, Rust와 Python은 그 위의 어댑터가 됩니다. AOK 쪽이 정본이고, Rust 어댑터는 fsmap이 설치돼 있으면 모든 훅과 게이트를 그것에 맡깁니다. 아래 구성은 1회차의 Rust 판입니다.</p>
       </div>
 <pre class="tree">AGENTS.md / CLAUDE.md   <span class="c"># 에이전트 규칙: 도구 중립 본문 + Claude Code 전용 부분(@AGENTS.md 임포트)</span>
 Cargo.toml              <span class="c"># [workspace.lints]: pedantic + AI가 자주 새는 패턴 선별, unsafe forbid</span>

@@ -1,5 +1,6 @@
 # Runs the repo's own checks on every pull request and on main.
-#   checks:  schema/script/site unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
+#   checks:  schema/script/site/harness unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
+#   harness: the ⑧ harness mutation self-check in four shards; harness-fsmap: the Rust adapter against a real fsmap
 #   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback, fsmap measurements)
 #   atlas:   scripts/atlas_record.py against a real fsmap binary built from a pinned commit (the fsmap/1 contract)
 name: CI
@@ -35,6 +36,43 @@ jobs:
             --test "python -m unittest tests.test_regress_tools.VacuityCheckTests" --mutations tests/mutations/vacuity_check.json
           python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 300 \
             --test "python -m unittest tests.test_site.BuildCheckTests" --mutations tests/mutations/build_site.json
+
+  harness:
+    # ⑧ self-check, separate jobs so they run beside the others: each mutation switches off one guard of the
+    # work-repo harness and the test named in its "expect" must fail. The list is split into four shards.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Harness tests are not vacuous (shard ${{ matrix.shard }} of 4)
+        run: |
+          git config --global user.email ci@example.com && git config --global user.name ci
+          python -I -c "import json, sys; m = json.load(open('tests/mutations/harness.json', encoding='utf-8')); json.dump(m[int(sys.argv[1])::4], open(sys.argv[2], 'w', encoding='utf-8'))" \
+            "${{ matrix.shard }}" "$RUNNER_TEMP/shard.json"
+          python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 900 \
+            --test "python -m unittest tests.test_harness" --mutations "$RUNNER_TEMP/shard.json"
+
+  harness-fsmap:
+    # the stubbed tests fix the contract; this checks it against the first-round harness itself
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Rust adapter against a real fsmap (pinned commit)
+        run: |
+          set -o pipefail  # tee must not hide the test run's exit code
+          git config --global user.email ci@example.com && git config --global user.name ci
+          cargo install --git https://github.com/d-j-lee/filesystemMap --rev 74b7ffb --locked --root "$RUNNER_TEMP/fsmap"
+          AOK_FSMAP="$RUNNER_TEMP/fsmap/bin/fsmap" python -m unittest tests.test_harness.RealFsmapTests -v 2>&1 | tee "$RUNNER_TEMP/fsmap.log"
+          ! grep -q "skipped" "$RUNNER_TEMP/fsmap.log"  # AOK_FSMAP is set, so nothing may be skipped
 
   console:
     # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).

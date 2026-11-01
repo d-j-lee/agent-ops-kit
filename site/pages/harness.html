@@ -1,0 +1,135 @@
+<!--page
+title: 작업 레포 하네스
+nav: ⑧ 하네스
+order: 4
+description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사, 턴 종료 게이트, 푸시 전 게이트, 단일 검증 진입점을 한 파일로 주는 AOK ⑧. 언어 중립 코어와 어댑터, 1회차(fsmap)와 2회차의 관계.
+-->
+<div class="wrap">
+  <nav class="toc" aria-label="목차">
+    <p>목차</p>
+    <ol>
+      <li><a href="#why">왜</a></li>
+      <li><a href="#when">언제 무엇이 도나</a></li>
+      <li><a href="#design">설계의 축</a></li>
+      <li><a href="#rounds">1회차와 2회차</a></li>
+      <li><a href="#install">들이기</a></li>
+      <li><a href="#limits">한계</a></li>
+      <li><a href="#self">자기 시험</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="prose" style="gap:18px">
+      <p class="eyebrow">AOK 안내서 · 기능 ⑧ · D26</p>
+      <h1>작업 레포 하네스</h1>
+      <p class="lede">AOK의 다른 기능은 허브와 세션의 층에서 돕니다. ⑧은 자식이 실제로 코드를 고치는 레포 안에 둡니다. 깨진 코드로 끝난 턴을 사람이 PR에서 처음 보는 일을 줄이는 것이 목적입니다.</p>
+      <nav class="toc-mobile" aria-label="목차">
+        <ol>
+          <li><a href="#why">왜</a></li><li><a href="#when">언제</a></li><li><a href="#design">설계</a></li><li><a href="#rounds">1·2회차</a></li><li><a href="#install">들이기</a></li><li><a href="#limits">한계</a></li><li><a href="#self">자기 시험</a></li>
+        </ol>
+      </nav>
+    </header>
+
+    <section id="why">
+      <h2>왜</h2>
+      <div class="prose">
+        <p>에이전트는 "고쳤다"고 말한 뒤에 턴을 끝냅니다. 그 말이 맞는지는 누군가 컴파일하고 시험을 돌려야 압니다. 사람이 PR에서 그 일을 하면 늦고, 자식이 스스로 하면 빼먹거나 검사를 약하게 만들어 통과시킬 수 있습니다 <span class="g g-inf">추론</span>. ⑧은 그 일을 레포의 훅으로 옮깁니다. 편집 직후에는 그 파일의 검사가, 턴 종료와 푸시 직전에는 같은 게이트가 돌고, 사람과 CI도 그 게이트를 같은 명령으로 씁니다.</p>
+        <p>⑦과 나눠 맡습니다. ⑦은 "바꾸기 전에 되던 것이 바꾼 뒤에도 되는가"를 기준과 비교로 고정합니다. ⑧은 "지금 이 트리가 레포의 검사를 통과하는가"를 매 턴 봅니다. 하네스 자신의 시험이 공허하지 않은지는 ⑦의 도구로 확인합니다.</p>
+      </div>
+    </section>
+
+    <section id="when">
+      <h2>언제 무엇이 도나</h2>
+      <div class="table-scroll">
+        <table class="when hooks">
+          <thead><tr><th scope="col">순간</th><th scope="col">훅</th><th scope="col">하는 일</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">세션 시작</th><td><code>SessionStart</code></td><td>새 세션이거나 쓸 수 있는 상태가 없을 때 기준(HEAD, 이미 바뀐 파일과 하네스 파일의 해시)을 기록하고, 어댑터와 실제 도구 판을 알린다. 상태 없이 이어받은 세션은 이미 바뀐 파일도 자기 것으로 센다. 하네스를 쓸 수 없으면 "OFF"와 이유를 사용자에게 보인다</td></tr>
+            <tr><th scope="row">편집 직후</th><td><code>PostToolUse</code></td><td>어댑터가 맡는 파일이면 그 파일에 편집 검사(Python: 컴파일·ruff, Rust: <code>cargo check</code>). 실패와 실행 불가는 Claude에게 돌아간다</td></tr>
+            <tr><th scope="row">턴 종료</th><td><code>Stop</code></td><td>이 세션이 트리를 바꿨고 이미 통과·보고한 트리가 아니면 quick 게이트. 실패, 실행 불가, 손상되거나 없는 세션 상태 모두 막는다. 연달아 최대 3번 막고, 세 번째에 "마지막"이라고 알린 뒤 그다음 종료는 놓아 주며 "통과하지 않았다"고 사용자에게 알린다. 통과하면(푸시 전 게이트가 먼저 통과했어도) 이 세션이 약하게 만든 검사와 하네스 파일의 변경을 보고한다. 바뀐 pre-push 훅은 되돌리고 알리며, 세션 중에 생긴 <code>core.hooksPath</code>는 막는다. 백그라운드 에이전트가 돌면 진짜 끝으로 미룬다</td></tr>
+            <tr><th scope="row">사용자 입력</th><td><code>UserPromptSubmit</code></td><td>막힌 횟수를 0으로. 위임 중이면 fsmap에도 넘긴다</td></tr>
+            <tr><th scope="row">푸시</th><td>git <code>pre-push</code></td><td>Claude Code 안에서 보내는 ref마다 끝 커밋이 게이트가 깨끗한 트리에서 통과시킨 것인지 본다. <code>git push</code>가 이 훅을 부르는 한, 명령을 어떻게 썼든 git이 실제로 보내는 커밋으로 판정한다. 사람이 터미널에서 하는 푸시는 막지 않는다</td></tr>
+            <tr><th scope="row">셸 명령</th><td><code>PreToolUse</code></td><td>git 훅을 끄는 명령(<code>--no-verify</code>, <code>commit -n</code>, <code>core.hooksPath</code>)과 pre-push 훅이 보는 값을 바꾸는 명령(<code>CLAUDECODE</code>, 환경 비우기, 다른 git 설정, 훅 파일, 셸 별칭)을 거부하고, 바뀐 훅은 명령 전에 되돌린다. <code>git push</code>(별칭 포함)·<code>gh pr create</code>는 체크아웃한 브랜치가 아닌 게시, 같은 명령 안의 HEAD 이동, 이 세션의 하네스·설정·CI 변경, 커밋하지 않은 변경, quick 게이트 실패나 실행 불가에서 거부한다. 훅을 거치지 않는 <code>git send-pack</code>은 그 자체로 거부한다</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">사람·에이전트·CI: <code>python3 -I .aok/harness/aok_harness.py verify --mode quick|full [--json]</code>. 종료 0 통과 · 1 실패 · 2 실행 불가. 훅의 JSON 필드와 시간 제한 기본값은 Claude Code 문서를 따릅니다(명령 훅 {{fig:hook.timeout}}) {{grade:C-hook-doc}}.</p>
+    </section>
+
+    <section id="design">
+      <h2>설계의 축</h2>
+      <div class="split">
+        <div class="box">
+          <h3>판정받는 쪽이 정의를 못 바꾼다</h3>
+          <ul>
+            <li>게이트 정의와 레포에 복사된 어댑터는 세션이 시작된 커밋의 것을 쓴다. 작업 트리에서 바꾼 정의는 쓰이지 않고 보고된다. 기준 커밋에 없던 정의는 커밋한 뒤의 세션부터 쓴다</li>
+            <li>하네스 파일, <code>.claude/settings*.json</code>의 훅·환경 키, 리뷰어, CI 워크플로를 바꾼 세션의 푸시는 막고 사람에게 넘긴다</li>
+            <li>CI는 기준 브랜치의 코어·어댑터·정의로 돈다. 코어를 기준 브랜치에서 꺼내 <code>verify --base origin/main</code>으로 돌린다</li>
+            <li>게시는 명령의 글자가 아니라 보내는 커밋으로 판정한다. 명령 읽기는 빠른 안내이고, <code>git push</code>의 결정은 git pre-push 훅이 한다. 훅을 끄거나 훅이 보는 값을 바꾸는 명령은 거부하고, 바뀐 훅은 다음 명령 전에 되돌린다</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>닫힌 실패, 그리고 출구</h3>
+          <ul>
+            <li>필수 도구가 없거나, 단계가 시간을 넘기거나, 설정을 읽을 수 없거나, 세션 상태가 손상됐거나, 위임한 fsmap이 실패하거나, 하네스가 죽으면 통과로 치지 않는다. 푸시 전 훅은 시작조차 못 해도 명령을 막는다 {{grade:C-hook-doc}}</li>
+            <li>선택 도구가 없으면 건너뛰되 세션에 한 번 알린다</li>
+            <li>연달아 3번 막은 뒤 놓아 준다. 세 번째에 "마지막"이라고 알려, 막힌 자식이 예산을 태우며 맴돌지 않고 그 턴 안에 AOK/1 <code>blocked</code>로 보고하게 한다</li>
+            <li>아무것도 바꾸지 않은 세션은 판정하지 않는다. 무엇이든 바꾼 세션은 트리 전체로 판정받아 원래 있던 실패에도 막히고, 그때는 고치지 말고 사용자에게 말하라는 안내가 붙는다</li>
+          </ul>
+        </div>
+      </div>
+      <div class="prose">
+        <p>코어는 언어를 모릅니다. 지문(HEAD + 바뀐 파일 내용 + 게이트 정의), 기준, 막힘 횟수, 약화 보고, 푸시 판단이 코어의 일이고, 무엇을 돌릴지는 어댑터(데이터 파일)가 정합니다. 어댑터를 둘(Python, Rust) 둔 것은 이 분리가 실제로 언어와 무관한지 시험으로 보이기 위해서입니다. 새 언어는 <code>harness/adapters/&lt;이름&gt;.json</code> 하나로 더합니다.</p>
+      </div>
+    </section>
+
+    <section id="rounds">
+      <h2>1회차와 2회차</h2>
+      <div class="table-scroll">
+        <table class="when">
+          <thead><tr><th scope="col"></th><th scope="col">1회차: Rust 하네스 → fsmap</th><th scope="col">2회차: AOK ⑧ 코어(정본)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">대상</th><td>Rust 레포 하나</td><td>언어 중립 코어 + Python·Rust 어댑터</td></tr>
+            <tr><th scope="row">게이트</th><td>셸 스크립트의 단일 게이트, 이후 fsmap의 <code>verify</code>와 git pre-push 검증·감사</td><td>코어의 <code>verify</code>. 훅·사람·CI가 같은 명령</td></tr>
+            <tr><th scope="row">검증에서 나온 것</th><td>라운드마다 게이트 우회와 공허한 훅 시험이 나왔다 {{grade:C-harness-log}}</td><td>그 부류를 수락 기준으로 받아 시험과 변이로 고정했다</td></tr>
+            <tr><th scope="row">관계</th><td>사용자의 Rust CLI(<a href="https://github.com/d-j-lee/filesystemMap" target="_blank" rel="noopener">d-j-lee/filesystemMap</a>)에 들어가 있다</td><td>Rust 어댑터는 fsmap이 설치돼 있으면 모든 훅과 게이트를 fsmap에 맡긴다. 실제 fsmap으로도 시험한다 {{grade:C-h8-fsmap}}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">1회차의 Rust 판 구성과 겪은 일은 Rust 트랙 페이지의 하네스 절에 있습니다.</p>
+    </section>
+
+    <section id="install">
+      <h2>들이기</h2>
+      <ol class="flow">
+        <li><span class="rn">1</span><div><h3>계획을 보인다</h3><p><code>python3 -I harness/aok_harness.py install --repo &lt;작업 레포&gt; --adapter python</code>. <code>--yes</code> 없이는 아무것도 쓰지 않고 계획만 보입니다.</p></div><span class="who">허브</span></li>
+        <li><span class="rn">2</span><div><h3>사람이 확인한다</h3><p>레포의 <code>.claude/settings.json</code>을 바꾸는 일이라 S4입니다. 확인을 받은 뒤 <code>--yes</code>로 다시 돌립니다. 기존 설정은 보존되고 두 번 돌려도 훅이 겹치지 않습니다.</p></div><span class="who">사람</span></li>
+        <li><span class="rn">3</span><div><h3>PR로 올린다</h3><p><code>.aok/</code>와 <code>.claude/</code>를 커밋합니다. 훅은 다음 세션부터 돕니다. 첫 세션의 맥락이 <code>[aok-harness] adapter …</code>(Rust를 fsmap에 맡기면 <code>[harness] fsmap …</code>)로 시작하는지 봅니다.</p></div><span class="who">허브 → 사람</span></li>
+        <li><span class="rn">4</span><div><h3>CI에 기준 브랜치 잡</h3><p>기존 단계는 그대로 두고, 기준 브랜치에서 꺼낸 코어로 <code>verify --mode full --base origin/main</code>을 도는 잡을 더합니다. PR이 하네스를 고쳤어도 기준 브랜치의 코어·어댑터·정의가 판정합니다.</p></div><span class="who">허브</span></li>
+      </ol>
+      <p class="note">규범: {{doc:docs/patterns/harness.md}} · 실행 순서: {{doc:.claude/skills/aok-harness/SKILL.md}} · 코드: {{doc:harness/aok_harness.py}}</p>
+    </section>
+
+    <section id="limits">
+      <h2>한계</h2>
+      <div class="anti">
+        <div><b>가드레일이지 보안 경계가 아니다</b><span>에이전트는 코어 파일, 상태 디렉터리, 로컬 설정을 고칠 수 있습니다. 손상되거나 지워진 상태는 막지만 꾸민 상태는 알아보지 못합니다. <code>ask</code> 규칙, 푸시 거부, 통과 보고가 그런 변경을 사람 앞에 드러내고, 기준 브랜치의 코어로 도는 CI가 정본 게이트입니다.</span></div>
+        <div><b>게시 판정의 범위</b><span>pre-push 훅은 git push를 거치는 게시를 봅니다. <code>gh api</code>·MCP 도구처럼 git을 거치지 않는 게시, core.hooksPath나 남의 pre-push 훅이 이미 있는 레포, 사람이 터미널에서 하는 푸시는 보지 않습니다. 그런 레포에서는 명령 읽기만 남고, 세션 시작 때 그렇다고 알립니다. 명령 읽기는 명령 줄에 보이는 것만 보므로, 스크립트가 한 번 도는 동안 훅이 보는 값을 바꾸고 푸시하는 것은 막지 못합니다. 하네스는 다음 명령과 턴 종료에서 뒤처리를 하고, 그 사이에 나간 커밋은 CI가 잡습니다.</span></div>
+        <div><b>CLAUDECODE를 물려받는 곳</b><span>IDE 확장의 통합 터미널에도 <code>CLAUDECODE</code>가 있다고 문서에 적혀 있습니다 <span class="g g-doc">문서</span>. 그 터미널에서 사람이 하는 푸시도 훅이 판정합니다 <span class="g g-inf">추론</span>. 세션 중에 worktree로 옮겨 가면 훅의 프로젝트 디렉터리는 처음 자리에 남아 <span class="g g-doc">문서</span>, 턴 종료 게이트가 옮겨 간 worktree의 변경을 보지 않습니다 <span class="g g-inf">추론</span>.</span></div>
+        <div><b>무엇이 세션의 것인가</b><span>세션 시작 때의 ref에 없던 커밋은 세션의 것입니다. 그래서 세션 중에 받아 와 병합한 남의 커밋, 리베이스로 올라온 커밋, 세션이 건드린 파일에 원래 있던 커밋 안 된 억제 주석은 세션의 것으로 보고될 수 있습니다. 게이트는 작업 트리를 보므로 커밋에 없는 무시된 파일 덕에 통과할 수도 있습니다(깨끗한 체크아웃의 CI가 잡습니다). 시험 첫 줄의 <code>return</code>처럼 정규식으로 잡을 수 없는 약화는 보지 못합니다.</span></div>
+        <div><b>원격 자식에서 도는지</b><span>레포의 훅은 레포 하나로 연 클라우드 세션에서 적용된다고 문서에 적혀 있습니다 <span class="g g-doc">문서</span>. 원격 자식 세션에서 실제로 도는지는 아직 시험하지 않았습니다 <span class="g g-unk">미확인</span>. 그 전에는 사람이 여는 세션에 먼저 씁니다.</span></div>
+        <div><b>백그라운드 작업</b><span>Stop 입력의 <code>background_tasks</code>는 문서에 있는 필드입니다 <span class="g g-doc">문서</span>. 그중 에이전트 유형이 돌 때만 게이트를 미루고, 백그라운드 셸은 미루는 이유가 아닙니다. 에이전트가 끝난 뒤 그 턴에 Stop이 다시 오는지는 확인하지 않았습니다 <span class="g g-unk">미확인</span>. 푸시 전 게이트는 미루지 않습니다.</span></div>
+        <div><b>레포 코드를 실행한다</b><span>시험과 빌드 스크립트가 돕니다. 믿지 않는 레포에는 켜지 않습니다.</span></div>
+      </div>
+    </section>
+
+    <section id="self">
+      <h2>자기 시험</h2>
+      <div class="prose">
+        <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작을 시험하고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. Rust 위임은 가짜 실행 파일에 더해 고정 커밋으로 빌드한 fsmap으로도 훅 다섯 개를 모두 시험합니다 {{grade:C-h8-fsmap}}. 정의를 작업 트리에서 읽게 하기, 실행 불가나 fsmap 패닉을 통과로 치기, 다른 브랜치 푸시를 허용하기, 약화 규칙 하나를 지우기처럼 코어와 어댑터의 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
+        <p>이 목록은 독립 검증 세 번을 거치며 늘었습니다. 첫 검증은 다른 ref 푸시, PR이 고친 어댑터로 도는 CI, 손상된 상태에서의 무응답, fsmap 패닉 통과 같은 우회를 찾았습니다. 두 번째 검증은 명령의 글자를 읽는 방식 자체의 빈틈(설정으로 바꾼 refspec, 먼저 옮겨 둔 ref, 늦게 도는 푸시)을 찾았고, 그래서 게시 판정을 git이 실제로 보내는 커밋을 보는 pre-push 훅으로 옮겼습니다. 세 번째이자 마지막 검증은 그 훅이 보는 값을 바꾸는 길, 레포 루트의 표준 모듈 가리기, 읽기만 하는 명령을 막는 오탐을 찾았습니다. 명령 읽기에서 그 길을 막고 바뀐 훅을 되돌리게 했으며, 스크립트 한 번 안의 일은 한계로 적었습니다. 세 번 모두 목록 밖에서 공허한 장치가 나왔습니다 {{grade:C-h8-round}}. 고친 뒤 반례마다 시험과 변이를 더했습니다.</p>
+      </div>
+      <footer class="pagefoot">2026-11-01 작성, 같은 날 세 번째(마지막) 검증까지 반영. ⑧을 들이는 결정은 D26이다: {{doc:docs/proposals/regression-harness-hub.md}}</footer>
+    </section>
+  </main>
+</div>
