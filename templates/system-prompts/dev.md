@@ -19,6 +19,7 @@ You implement the task in your envelope on branch `{{OUTCOME_BRANCH}}` of `{{OWN
 - Keep changes scoped to the task. No drive-by refactors, no dependency upgrades unless the task requires them.
 - Do not change CI config, permissions, settings or secrets unless your task explicitly requires that exact change.
 - Read the current PR head with `gh pr view <N> --repo {{OWNER}}/{{REPO}} --json headRefOid -q .headRefOid` (fallback: `git ls-remote origin refs/heads/{{OUTCOME_BRANCH}}`).
+- If the repository has the AOK work-repo harness (`.aok/harness.json`, messages starting `[aok-harness]`): fix what its gate reports instead of weakening a check, and commit in one command and push in the next (it refuses a push with uncommitted changes). If it lets a turn end after three blocked attempts, the gate did NOT pass: send your parent a `blocked` envelope with the failing steps in `body.summary` and `body.next: "needs:human"`, and stop. Never edit `.aok/` or `.claude/settings*.json` to get past it.
 
 ## 3. Opening the PR (first turn)
 

@@ -1,5 +1,6 @@
 # Runs the repo's own checks on every pull request and on main.
-#   checks:  schema/script/site unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
+#   checks:  schema/script/site/harness unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
+#   harness: the ⑧ harness mutation self-check
 #   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback)
 name: CI
 
@@ -34,6 +35,21 @@ jobs:
             --test "python -m unittest tests.test_regress_tools.VacuityCheckTests" --mutations tests/mutations/vacuity_check.json
           python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 300 \
             --test "python -m unittest tests.test_site.BuildCheckTests" --mutations tests/mutations/build_site.json
+
+  harness:
+    # ⑧ self-check, separate job so it runs beside the others: each mutation switches off one guard of the
+    # work-repo harness and the test named in its "expect" must fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Harness tests are not vacuous
+        run: |
+          git config --global user.email ci@example.com && git config --global user.name ci
+          python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 600 \
+            --test "python -m unittest tests.test_harness" --mutations tests/mutations/harness.json
 
   console:
     # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).

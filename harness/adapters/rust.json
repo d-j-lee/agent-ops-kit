@@ -1,0 +1,39 @@
+{
+  "name": "rust",
+  "detect": ["Cargo.toml"],
+  "delegate": {
+    "bin": "fsmap",
+    "probe": ["fsmap", "hook", "--help"],
+    "hook": ["fsmap", "hook", "{event}"],
+    "events": {"session-start": "session-start", "post-edit": "post-edit", "stop": "stop", "prompt": "prompt", "pre-bash": "pre-bash"},
+    "verify": ["fsmap", "verify", "--mode", "{mode}"],
+    "note": "fsmap (d-j-lee/filesystemMap) is the first-round Rust harness: integrity checks of cargo/rustfmt/clippy/toolchain config, environment cleanup, git pre-push verification and audit. When it is installed, every hook and verify is handed to it."
+  },
+  "versions": [["rustc", "--version"], ["cargo", "--version"], ["cargo", "clippy", "--version"]],
+  "edit": {
+    "match": ["*.rs", "Cargo.toml", "build.rs"],
+    "steps": [
+      {"name": "check", "cmd": ["cargo", "check", "--all-targets", "--offline", "--quiet", "--message-format", "short"]}
+    ]
+  },
+  "gate": {
+    "quick": [
+      {"name": "fmt", "cmd": ["cargo", "fmt", "--all", "--", "--check"]},
+      {"name": "clippy", "cmd": ["cargo", "clippy", "--all-targets", "--quiet", "--", "-D", "warnings"]},
+      {"name": "test", "cmd": ["cargo", "test", "--quiet"]}
+    ],
+    "full": [
+      {"name": "fmt", "cmd": ["cargo", "fmt", "--all", "--", "--check"]},
+      {"name": "clippy", "cmd": ["cargo", "clippy", "--all-targets", "--quiet", "--", "-D", "warnings"]},
+      {"name": "test", "cmd": ["cargo", "test", "--quiet"]},
+      {"name": "deny", "cmd": ["cargo", "deny", "check"], "optional": true}
+    ]
+  },
+  "weakening": [
+    {"name": "allow-attribute", "added": "#!?\\[\\s*allow\\s*\\("},
+    {"name": "ignored-test", "added": "#\\[\\s*ignore\\b"},
+    {"name": "cfg-false", "added": "#\\[\\s*cfg\\s*\\(\\s*(false|any\\s*\\(\\s*\\))"},
+    {"name": "unsafe", "added": "\\bunsafe\\s*(\\{|fn|impl)"},
+    {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("}
+  ]
+}

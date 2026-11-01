@@ -1,0 +1,123 @@
+{
+  "name": "python",
+  "detect": [
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "versions": [
+    [
+      "python3",
+      "--version"
+    ],
+    [
+      "ruff",
+      "--version"
+    ]
+  ],
+  "edit": {
+    "match": [
+      "*.py"
+    ],
+    "steps": [
+      {
+        "name": "compile",
+        "cmd": [
+          "python3",
+          "-I",
+          "-c",
+          "import sys; compile(open(sys.argv[1], 'rb').read(), sys.argv[1], 'exec')",
+          "{file}"
+        ]
+      },
+      {
+        "name": "ruff",
+        "cmd": [
+          "ruff",
+          "check",
+          "--quiet",
+          "--select",
+          "F,E9,PLE,B",
+          "{file}"
+        ],
+        "optional": true
+      }
+    ]
+  },
+  "gate": {
+    "quick": [
+      {
+        "name": "ruff",
+        "cmd": [
+          "ruff",
+          "check",
+          "--quiet",
+          "--select",
+          "F,E9,PLE,B",
+          "."
+        ],
+        "optional": true
+      },
+      {
+        "name": "test",
+        "cmd": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      }
+    ],
+    "full": [
+      {
+        "name": "ruff",
+        "cmd": [
+          "ruff",
+          "check",
+          "--quiet",
+          "."
+        ],
+        "optional": true
+      },
+      {
+        "name": "test",
+        "cmd": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      }
+    ]
+  },
+  "weakening": [
+    {
+      "name": "noqa",
+      "added": "#\\s*noqa"
+    },
+    {
+      "name": "type-ignore",
+      "added": "#\\s*type:\\s*ignore"
+    },
+    {
+      "name": "skipped-test",
+      "added": "@(unittest\\.skip|pytest\\.mark\\.(skip|xfail))|\\bself\\.skipTest\\("
+    },
+    {
+      "name": "no-cover",
+      "added": "pragma:\\s*no\\s*cover"
+    },
+    {
+      "name": "assertion-removed",
+      "removed": "^\\s*(assert\\b|self\\.assert\\w*\\(|pytest\\.raises\\()"
+    }
+  ]
+}
