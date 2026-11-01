@@ -1029,6 +1029,8 @@ class PreBashTests(Harness):
                          ("env -uCLAUDECODE sh push.sh", "CLAUDECODE"),
                          ("env --un CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("env --uns=CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --u CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -S'-u CLAUDE_CODE_CHILD_SESSION' sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("env -S '-u CLAUDE_CODE_CHILD_SESSION sh push.sh'", "CLAUDE_CODE_CHILD_SESSION"),
                          ("env --split-string='-i sh push.sh'", "clears the environment"), ("env -vi sh push.sh", "clears"),
                          ("v=CLAUDE_CODE_CHILD_SESSION; env -u $v sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
