@@ -184,8 +184,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "post-edit outside the project",
-  "old": "    except ValueError:\n        return 0  # outside the project",
-  "new": "    except ValueError:\n        rel = path",
+  "old": "    except ValueError:\n        return 0  # outside the project and its worktrees\n",
+  "new": "    except ValueError:\n        rel = path\n",
   "expect": "test_other_files_tools_and_paths_are_ignored"
  },
  {
@@ -1563,43 +1563,43 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a CLAUDECODE assignment is not seen",
-  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") or (builtins and v in w) for v in HOOK_VARS) \\\n",
-  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") or (builtins and v in w) for v in HOOK_VARS) \\\n",
+  "old": "            if any(w.startswith(f\"{v}=\") or w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) \\\n",
+  "new": "            if any(w in (f\"-u{v}\", f\"--unset={v}\") for v in HOOK_VARS) \\\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "unset, declare +x and the indirect forms of a hook variable are not seen",
-  "old": "    builtins = any(w in VAR_BUILTINS for seg in cmds for w in seg)\n",
-  "new": "    builtins = False\n",
+  "old": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \\\n",
+  "new": "    changer = False or any(isinstance(e, list) and e for e in envs) \\\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "env -u CLAUDECODE is not seen",
-  "old": "                    or (w in HOOK_VARS and k and seg[k - 1] in (\"-u\", \"--unset\")):\n",
-  "new": "                    or (w in HOOK_VARS and k and seg[k - 1] in ()):\n",
+  "old": "                if ch == \"u\" and value is not None:\n                    names.append(value)\n",
+  "new": "                if ch == \"u\" and value is not None:\n                    pass\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "env -i is not seen",
-  "old": "                        return CLEAR_ENV_MSG\n                    j += 2",
-  "new": "                        pass\n                    j += 2",
+  "old": "            if ch == \"i\":\n                return \"clear\"\n",
+  "new": "            if ch == \"i\":\n                pass\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "only env -i itself clears",
-  "old": "                    if o in (\"-\", \"-i\", \"--ignore-environment\") or (not o.startswith(\"--\")\n",
-  "new": "                    if o in (\"-i\",) or (not o.startswith(\"--\")\n",
+  "old": "        if o == \"-\":\n            return \"clear\"\n",
+  "new": "",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "env's option values are read as options",
-  "old": "                    j += 2 if o in ENV_WITH_VALUE else 1\n",
-  "new": "                    j += 1\n",
+  "old": "                    value = o[j + 1:]\n                elif i + 1 < len(args):\n                    i += 1\n",
+  "new": "                    value = o[j + 1:]\n                elif i + 1 < len(args):\n",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
  {
@@ -2032,8 +2032,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a worktree a command creates is not remembered",
-  "old": "                new |= touch_tree(root, state, path, seen=False)\n",
-  "new": "                pass\n",
+  "old": "            if tree_of(root, at) is not None and path.resolve() != root.resolve() and touch_tree(root, state, path, False):\n",
+  "new": "            if False:\n",
   "expect": "test_a_worktree_a_command_works_in_is_remembered"
  },
  {
@@ -2179,7 +2179,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "the text check misses a builtin with a hook variable",
-  "old": "rf\"{_VB}(?=.*{_HV})|{_HV}(?=.*{_VB})\", re.S)",
+  "old": "rf\"(?:{_VB})(?=.*{_HP})|{_HP}(?=.*(?:{_VB}))\", re.S)",
   "new": "rf\"(?!x)x\", re.S)",
   "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
  },
@@ -2210,5 +2210,131 @@
   "old": "            for v in {m.group(1) if m else w, w.split(\"=\", 1)[-1]}:\n",
   "new": "            for v in {m.group(1) if m else w}:\n",
   "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "unique prefixes of env's long options are not read",
+  "old": "            full = name if name in ENV_LONG else hits[0] if len(hits) == 1 else None\n",
+  "new": "            full = name if name in ENV_LONG else None\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "only the first letter of an env option cluster is read",
+  "old": "        for j, ch in enumerate(o[1:], 1):\n",
+  "new": "        for j, ch in list(enumerate(o[1:], 1))[:1]:\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "env -S is not opened",
+  "old": "                if ch == \"S\" and value is not None and depth < 3:\n",
+  "new": "                if False:\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "env --unset by a prefix is not read",
+  "old": "            if full == \"unset\" and value is not None:\n                names.append(value)\n",
+  "new": "            if full == \"unset\" and value is not None:\n                pass\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "env -u with a name from a variable is allowed",
+  "old": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \\\n",
+  "new": "    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) \\\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a hook variable's name put together from pieces is allowed",
+  "old": "    return any(part in rest for part in HOOK_VAR_PARTS)\n",
+  "new": "    return False\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a command name put together by expansion is allowed",
+  "old": "        or any(command_word(seg) is not None and re.search(r\"[$`]\", command_word(seg)) for seg in cmds)\n",
+  "new": "        or False\n",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the text check reads one line",
+  "old": "rf\"(?:{_VB})(?=.*{_HP})|{_HP}(?=.*(?:{_VB}))\", re.S)",
+  "new": "rf\"(?:{_VB})(?=.*{_HP})|{_HP}(?=.*(?:{_VB}))\")",
+  "expect": "test_ways_to_change_what_the_push_hook_sees_are_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree a command made is judged against the refs",
+  "old": "    if isinstance(made, str):  # a command made it, on this commit\n        return h != made\n",
+  "new": "",
+  "expect": "test_a_worktree_made_on_an_old_commit_has_not_moved"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the commit a new worktree checks out is not read",
+  "old": "                if h:  # the commit it will check out, read before the command runs: its HEAD at the start\n",
+  "new": "                if False:\n",
+  "expect": "test_a_worktree_made_on_an_old_commit_has_not_moved"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the commit-ish of worktree add is not read",
+  "old": "    if len(plain) > 1:\n        return plain[0], plain[1]\n",
+  "new": "",
+  "expect": "test_a_worktree_made_on_an_old_commit_has_not_moved"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a removed worktree is still judged",
+  "old": "        if t.resolve() != root.resolve() and t.is_dir() and is_repo(t):\n",
+  "new": "        if t.resolve() != root.resolve():\n",
+  "expect": "test_a_removed_worktree_is_not_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "gh pr create is gated where the command started",
+  "old": "                if gh_pr_create(gseg) is not None:\n                    publishing.append(at)\n",
+  "new": "                if gh_pr_create(gseg) is not None:\n                    pass\n",
+  "expect": "test_other_ways_to_publish_from_a_worktree_are_gated_there"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an alias is not taken for a push",
+  "old": "            if sub in (\"push\", \"send-pack\", \"http-push\") or (sub and sub not in GIT_BUILTINS):  # an alias may publish\n",
+  "new": "            if sub in (\"push\", \"send-pack\", \"http-push\"):\n",
+  "expect": "test_other_ways_to_publish_from_a_worktree_are_gated_there"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree another repository makes is this session's",
+  "old": "            if tree_of(root, at) is not None and path.resolve() != root.resolve() and touch_tree(root, state, path, False):\n",
+  "new": "            if path.resolve() != root.resolve() and touch_tree(root, state, path, False):\n",
+  "expect": "test_another_repository_is_not_this_harnesss"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree's edit checks run on the project's file",
+  "old": "        results.append(run_step(tree, s, left, file=rel, env=adapter.get(\"env\")) if left > 1 else",
+  "new": "        results.append(run_step(root, s, left, file=rel, env=adapter.get(\"env\")) if left > 1 else",
+  "expect": "test_an_edit_in_a_worktree_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a worktree first seen at a clean end of the turn is forgotten",
+  "old": "    if not passed:\n        if new_tree:\n            save_state(root, session, state)\n",
+  "new": "    if not passed:\n        if False:\n            save_state(root, session, state)\n",
+  "expect": "test_the_worktree_claude_works_in_is_judged"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an unreadable definition lets worktree changes through",
+  "old": "        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees)):\n",
+  "new": "        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees[:1])):\n",
+  "expect": "test_an_unreadable_definition_blocks_a_session_with_worktree_changes"
  }
 ]

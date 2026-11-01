@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -42,6 +43,38 @@ def py(code: str, *extra: str) -> str:
 # A command that exits 0 on its first call and 1 on every later call (state in a counter file).
 FLAKY = "import pathlib, sys; p = pathlib.Path(sys.argv[1]); n = int(p.read_text() or 0) if p.exists() else 0; " \
         "p.write_text(str(n + 1)); print('out'); sys.exit(0 if n == 0 else 1)"
+
+
+class MutationListTests(unittest.TestCase):
+    """Every list under tests/mutations/ still fits the code it mutates, so a stale or broken entry shows up here in
+    a second, not as a mutation_error at the end of CI's long vacuity run: OLD occurs exactly once (overlapping
+    matches count, as vacuity_check reads it), the mutated file still parses, the test named in `expect` exists, and
+    labels are unique."""
+
+    def test_every_mutation_applies_and_parses(self):
+        lists = sorted((ROOT / "tests" / "mutations").glob("*.json"))
+        self.assertTrue(lists)
+        tests = {line.strip()[4:].split("(")[0] for f in (ROOT / "tests").glob("test_*.py")
+                 for line in f.read_text(encoding="utf-8").splitlines() if line.strip().startswith("def test_")}
+        for lst in lists:
+            muts = json.loads(lst.read_text(encoding="utf-8"))
+            labels = [m["label"] for m in muts]
+            self.assertEqual(len(labels), len(set(labels)), f"{lst.name}: duplicate labels")
+            for m in muts:
+                where = f"{lst.name}: {m['label']}"
+                data = (ROOT / m["file"]).read_bytes()
+                old = m["old"].encode("utf-8")
+                n = len(re.findall(b"(?=" + re.escape(old) + b")", data))
+                self.assertEqual(n, 1, f"{where}: OLD occurs {n} times")
+                mutated = data.replace(old, m["new"].encode("utf-8"), 1)
+                if m["file"].endswith(".py"):
+                    try:
+                        compile(mutated, m["file"], "exec")
+                    except (SyntaxError, ValueError) as e:
+                        self.fail(f"{where}: the mutated file does not compile ({e})")
+                elif m["file"].endswith(".json"):
+                    json.loads(mutated)  # an adapter that no longer parses proves nothing
+                self.assertIn(m["expect"], tests, f"{where}: no test named {m['expect']}")
 
 
 class DiffcheckTests(unittest.TestCase):

@@ -1023,6 +1023,19 @@ class PreBashTests(Harness):
                          ('CLAUDE_CODE_CHILD_SESSION= sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
                          ('declare +x CLAUDE_CODE_CHILD_SESSION; sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
                          ('v=CLAUDE_CODE_CHILD_SESSION; unset $v; sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION\nunset $v\ncat <<EOF\nit's\nEOF\nsh push.sh", "CLAUDE_CODE"),
+                         # env's options as GNU env reads them: clusters, unique prefixes, -S
+                         ("env -vu CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -uCLAUDECODE sh push.sh", "CLAUDECODE"),
+                         ("env --un CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --uns=CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -S '-u CLAUDE_CODE_CHILD_SESSION sh push.sh'", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --split-string='-i sh push.sh'", "clears the environment"), ("env -vi sh push.sh", "clears"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION; env -u $v sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         # a name, or the command, put together by expansion
+                         ("x=CHILD_SESSION; unset CLAUDE_CODE_$x; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("u=un; ${u}set CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("a=CLAUDE_CODE_CHILD; unset ${a}_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("env -i sh push.sh", "clears the environment"), ("env -i PATH=/bin sh push.sh", "clears the environment"),
                          ("env - sh push.sh", "clears the environment"), ("env --ignore-environment sh push.sh", "clears"),
                          ("env -u HOME -i sh push.sh", "clears the environment"), ("exec -c sh push.sh", "clears"),
@@ -1038,7 +1051,8 @@ class PreBashTests(Harness):
             self.assertTrue(self.denied(out), cmd)
             self.assertIn(why, reason(out), cmd)
         for cmd in ("echo $CLAUDECODE", "grep -rn CLAUDECODE docs", "echo $CLAUDE_CODE_CHILD_SESSION",
-                    "grep -rn 'unset CLAUDE_CODE_CHILD_SESSION' docs", "export FOO=1", "git config alias.st status", "git st",
+                    "grep -rn 'unset CLAUDE_CODE_CHILD_SESSION' docs", "export FOO=1", "export CLAUDE_CODE_USE_BEDROCK=1",
+                    "env -v FOO=1 python3 -c pass", "env --chdir=docs ls", "$PYTHON -m pytest", "git config alias.st status", "git st",
                     "git config --unset core.hooksPath", "env FOO=1 python3 -c pass", "env -u HOME python3 -c pass"):
             self.assertIsNone(self.bash(cmd), cmd)
 
@@ -1280,15 +1294,13 @@ class WorktreeTests(Harness):
         self.stub("ruff", "exit 0\n")
         self.start()
         wt = self.worktree()
-        self.assertIsNone(self.at(wt, "stop"))  # nothing changed there yet
-        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
-        out = self.at(wt, "stop")
+        self.assertIsNone(self.at(wt, "stop"))  # nothing changed there yet; the worktree is remembered all the same
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)  # the next turn, by a script
+        out = self.stop()  # that turn ends in the project directory (cd, ExitWorktree): the worktree is still judged
         self.assertTrue(self.blocked(out))
         self.assertIn(f"{wt.resolve()}: the quick gate failed", out["reason"])
         self.assertIn("[test] fail", out["reason"])
-        out = self.stop()  # back in the project directory (cd, ExitWorktree): the worktree is still judged
-        self.assertTrue(self.blocked(out))
-        self.assertIn(str(wt.resolve()), out["reason"])
+        self.assertIn(str(wt.resolve()), self.at(wt, "stop")["reason"])
         self.hook("prompt")  # the user writes: the count starts again
         self.gitw(wt, "commit", "-qam", "bad")  # committed in the worktree: still the session's
         self.assertIn("Block 1 of 3", self.at(wt, "stop")["reason"])
@@ -1402,6 +1414,9 @@ class WorktreeTests(Harness):
         self.assertTrue(self.blocked(out))  # the edit checks run there
         self.assertIn("pkg/other.py", out["reason"])
         (wt / "pkg" / "other.py").unlink()
+        (wt / "pkg" / "only_here.py").write_text("X = 1\n")  # the project directory has no such file
+        self.assertIsNone(self.edit_at(wt / "pkg" / "only_here.py"))
+        (wt / "pkg" / "only_here.py").unlink()
         (wt / "pkg" / "__init__.py").write_text(ADD_OK.replace("a + b", "a + b  # noqa"))
         msg = self.stop()["systemMessage"]
         self.assertIn(f"{wt.resolve()}: weakened check: pkg/__init__.py: noqa", msg)
@@ -1444,6 +1459,59 @@ class WorktreeTests(Harness):
         self.assertEqual(self.push("push", "-q", "origin", "feature", cwd=wt).returncode, 0)
         out = self.bash(f"git push origin main && git -C {wt} push origin feature")
         self.assertIn("more than one worktree", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_removed_worktree_is_not_judged(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertTrue(self.blocked(self.stop()))
+        self.hook("prompt")
+        self.git("worktree", "remove", "--force", str(wt))  # gone, with its changes: nothing left to judge
+        self.assertIsNone(self.stop())
+
+    def test_other_ways_to_publish_from_a_worktree_are_gated_there(self):
+        self.python_repo()
+        self.git("config", "alias.p", "push")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.gitw(wt, "commit", "-qam", "bad")
+        for cmd in (f"cd {wt} && gh pr create --fill", f"git -C {wt} p origin feature"):
+            out = self.bash(cmd)
+            self.assertTrue(self.denied(out), cmd)
+            self.assertIn("[test] fail", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
+
+    def test_an_unreadable_definition_blocks_a_session_with_worktree_changes(self):
+        self.python_repo(config={"adapter": "cobol"})
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        self.assertIsNone(self.stop())  # nothing changed anywhere
+        (wt / "README.md").write_text("x\n")  # a change in the worktree only
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("the gate cannot run", out["reason"])
+
+    def test_a_worktree_made_on_an_old_commit_has_not_moved(self):
+        self.python_repo()
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "broken")
+        old = self.git("rev-parse", "HEAD").strip()
+        self.write("pkg/__init__.py", ADD_OK)
+        self.git("commit", "-qam", "fixed")  # the broken commit is no ref's tip now
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.tmp / "bisect"
+        cmd = f"git worktree add -q --detach {wt} {old}"
+        self.assertIsNone(self.bash(cmd))  # read before it runs: the commit it checks out is the worktree's start
+        self.git("worktree", "add", "-q", "--detach", str(wt), old)
+        self.assertIsNone(self.stop())  # looking at an old commit changes nothing
+        self.gitw(wt, "commit", "--allow-empty", "-qm", "the session's")
+        self.assertTrue(self.blocked(self.stop()))  # a commit of its own there: the whole tree is judged
 
     def test_a_harness_change_in_a_worktree_is_a_persons_to_publish(self):
         self.python_repo()
@@ -1601,6 +1669,14 @@ class WorktreeTests(Harness):
         self.write("pkg/__init__.py", ADD_BAD)  # the project directory has uncommitted changes
         for cmd in (f"git -C {other} push origin main", f"cd {other} && git push origin main"):
             self.assertIsNone(self.bash(cmd), cmd)  # its pushes are its own hooks' to judge
+        self.write("pkg/__init__.py", ADD_OK)
+        subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "o"], cwd=other, env=self.env, check=True)
+        theirs = self.tmp / "theirs"  # a worktree of the other repository
+        self.assertIsNone(self.bash(f"git -C {other} worktree add -q {theirs}"))
+        subprocess.run(["git", "worktree", "add", "-q", str(theirs)], cwd=other, env=self.env, check=True)
+        (theirs / "x.txt").write_text("x\n")
+        self.assertIsNone(self.stop())  # not this session's tree: its gate is not run here
+        self.write("pkg/__init__.py", ADD_BAD)
         self.assertTrue(self.denied(self.bash(f"cd {self.tmp / 'nowhere'} && git push")))  # a failed cd stays here
 
     def test_the_hook_is_kept_from_a_worktree_too(self):

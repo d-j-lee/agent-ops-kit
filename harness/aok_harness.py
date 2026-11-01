@@ -166,10 +166,13 @@ _HV = r"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)"
 # shell builtins that change a variable's value or export (unset, export -n, declare +x, nameref, readonly...): with
 # one of them anywhere in the command, naming a hook variable anywhere (v=NAME; unset $v) is refused
 VAR_BUILTINS = ("unset", "export", "declare", "typeset", "local", "readonly")
-_VB = r"\b(?:unset|export|declare|typeset|local|readonly)\b"
+# pieces of the two names: a name put together from parts (x=CHILD_SESSION; unset CLAUDE_CODE_$x) holds one of them
+HOOK_VAR_PARTS = ("CLAUDECODE", "CLAUDE_CODE_", "CHILD_SESSION")
+_VB = r"\b(?:unset|export|declare|typeset|local|readonly|env)\b|\$"
+_HP = r"(?:CLAUDECODE|CLAUDE_CODE_|CHILD_SESSION)"
 CLAUDECODE_CHANGE = re.compile(rf"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?{_HV}=|"
                                rf"(?:^|\s)(?:-u\s*|--unset[=\s]){_HV}\b|"
-                               rf"{_VB}(?=.*{_HV})|{_HV}(?=.*{_VB})", re.S)
+                               rf"(?:{_VB})(?=.*{_HP})|{_HP}(?=.*(?:{_VB}))", re.S)
 CLEAR_ENV = re.compile(r"\benv(?:\s+(?:-u\s*\S+|--unset=\S+|-[^\s]+))*?\s+(?:-i|--ignore-environment|-)(?=\s|$)")
 GIT_CONFIG_ENV = re.compile(r"\bGIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=|--config-env\b")
 GIT_HOOK_FILES = re.compile(r"\.git/hooks\b|\bhooks/pre-push\b")
@@ -970,12 +973,16 @@ def session_trees(root: Path, state: dict) -> list[Path]:
 
 
 def tree_moved(state: dict, tree: Path, base: str | None) -> bool:
-    """Whether a worktree's HEAD moved since the session started: against its HEAD then, or, for one made later,
-    against every ref then (a new worktree on an existing branch has not moved; a merge or reset there has)."""
+    """Whether a worktree's HEAD moved since the session started: against its HEAD then; for one a command made,
+    against the commit it checked out; for any other made later, against every ref then (a new worktree on an existing
+    branch has not moved; a merge or reset there has)."""
     h = head(tree)
     known = (state.get("baseline") or {}).get("worktrees") or {}
     if str(tree) in known:
         return h != known[str(tree)]
+    made = ((state.get("trees") or {}).get(str(tree)) or {}).get("start_head")
+    if isinstance(made, str):  # a command made it, on this commit
+        return h != made
     return h not in set(start_refs(state)) | {base}
 
 
@@ -997,7 +1004,8 @@ def tree_changes(root: Path, state: dict, tree: Path, base: str | None):
         return changed_since(root, base, b.get("pending", {}), refs), head(root) != base, refs, base, b.get("protected")
     rec = tree_record(state, tree, root)
     known = (state.get("baseline") or {}).get("worktrees") or {}
-    start = known[str(tree)] if str(tree) in known else tree_start(tree, base, refs)
+    start = known[str(tree)] if str(tree) in known else rec["start_head"] if isinstance(rec.get("start_head"), str) \
+        else tree_start(tree, base, refs)
     return changed_since(tree, base, rec.get("pending", {}), refs), tree_moved(state, tree, base), refs, start, \
         rec.get("protected")
 
@@ -1006,23 +1014,32 @@ def word_path(cur: Path, w: str) -> Path:
     return (cur / os.path.expandvars(os.path.expanduser(w))).resolve()
 
 
-def worktree_add_path(args: list[str]) -> str | None:
-    """The path of `git worktree add [options] <path> [<commit-ish>]`."""
-    i = 0
+def worktree_add_path(args: list[str]) -> tuple[str | None, str | None]:
+    """`git worktree add [options] <path> [<commit-ish>]`: the path, and what it will check out (the commit-ish; a
+    new branch starts at HEAD; without either, git checks out the branch named like the path's last part, if there is
+    one, else HEAD)."""
+    plain, new_branch, orphan, i = [], False, False, 0
     while i < len(args):
         if args[i] in ("-b", "-B", "--reason"):
+            new_branch |= args[i] != "--reason"
             i += 2
             continue
-        if not args[i].startswith("-"):
-            return args[i]
+        if args[i] == "--orphan":
+            orphan = True
+        elif not args[i].startswith("-"):
+            plain.append(args[i])
         i += 1
-    return None
+    if not plain or orphan:
+        return (plain[0] if plain else None), None
+    if len(plain) > 1:
+        return plain[0], plain[1]
+    return plain[0], "HEAD" if new_branch or "--detach" in args else f"refs/heads/{Path(plain[0]).name}"
 
 
-def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tuple[Path, Path]], list[Path]]:
+def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tuple[Path, Path, str | None]], list[Path]]:
     """Where a command works, read from its words like the rest: the directories it enters (`cd X`, `pushd X`) or
     points git at (`git -C X`), the directories its publishing invocations run in (git push, send-pack, an alias,
-    gh pr create), (where git runs, the path) for each `git worktree add`, and every path it names (an argument, a
+    gh pr create), (where git runs, the path, what it checks out) for each `git worktree add`, and every path it names (an argument, a
     redirection's target, the value of `--opt=value`), as seen from where it stands. A `cd` inside ( ) or a script is
     not followed exactly; there the pre-push hook is what holds."""
     dirs, publishing, created, named, cur = [], [], [], [], cwd
@@ -1063,9 +1080,9 @@ def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tupl
             if sub in ("push", "send-pack", "http-push") or (sub and sub not in GIT_BUILTINS):  # an alias may publish
                 publishing.append(at)
             if sub == "worktree" and args[:1] == ["add"]:
-                target = worktree_add_path(args[1:])
+                target, start = worktree_add_path(args[1:])
                 if target:
-                    created.append((at, word_path(at, target)))
+                    created.append((at, word_path(at, target), start))
             break
     return dirs, publishing, created, named
 
@@ -1085,9 +1102,14 @@ def remember_trees(root: Path, session: str, state: dict, cmd: str, cwd: Path) -
         for t in others:
             if any(q == t or t in q.parents for q in named):
                 new |= touch_tree(root, state, t, seen=True)
-        for at, path in created:
-            if tree_of(root, at) is not None and path.resolve() != root.resolve():
-                new |= touch_tree(root, state, path, seen=False)
+        for at, path, start in created:
+            if tree_of(root, at) is not None and path.resolve() != root.resolve() and touch_tree(root, state, path, False):
+                new = True
+                h = git(at, "rev-parse", "--verify", "-q", f"{start}^{{commit}}") if start else None
+                if h:  # the commit it will check out, read before the command runs: its HEAD at the start
+                    state["trees"][str(path)]["start_head"] = h
+                elif start == "refs/heads/" + path.name:  # no such branch: git makes one at HEAD
+                    state["trees"][str(path)]["start_head"] = git(at, "rev-parse", "--verify", "-q", "HEAD")
         if new:
             save_state(root, session, state)
     return publishing
@@ -1540,7 +1562,86 @@ GIT_HOOKS_MSG = "the harness owns the git hooks (.git/hooks); leave them alone, 
 SHELL_ALIAS_MSG = ("this command defines a shell alias (alias.*=!...), which can publish where the command reading "
                    "cannot see; run the commands directly")
 ASSIGN_GIT_CONFIG = re.compile(r"GIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=")
-ENV_WITH_VALUE = {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}
+ENV_LONG = ("unset", "ignore-environment", "chdir", "split-string", "argv0", "null", "debug", "block-signal",
+            "default-signal", "ignore-signal", "list-signal-handling", "help", "version")
+ENV_LONG_WITH_VALUE = {"unset", "chdir", "split-string", "argv0"}
+ENV_SHORT_WITH_VALUE = "uCSa"
+
+
+def env_options(args: list[str], depth: int = 0) -> str | list[str]:
+    """What `env <args>` does to the environment, read as GNU env reads its options: short options in clusters
+    (`-vu NAME`, `-uNAME`), long ones by any unique prefix (`--un NAME`, `--uns=NAME`), and the words of `-S`.
+    "clear" when it empties the environment (-i, -), else the names it unsets."""
+    names, i = [], 0
+    while i < len(args):
+        o = args[i]
+        if o == "-":
+            return "clear"
+        if o == "--" or not o.startswith("-"):
+            break
+        value = None
+        if o.startswith("--"):
+            name, eq, val = o[2:].partition("=")
+            hits = [x for x in ENV_LONG if x.startswith(name)] if name else []
+            full = name if name in ENV_LONG else hits[0] if len(hits) == 1 else None
+            if full == "ignore-environment":
+                return "clear"
+            if full in ENV_LONG_WITH_VALUE:
+                if eq:
+                    value = val
+                elif i + 1 < len(args):
+                    i += 1
+                    value = args[i]
+            if full == "unset" and value is not None:
+                names.append(value)
+            if full == "split-string" and value is not None and depth < 3:
+                try:
+                    inner = env_options(shlex.split(value) + args[i + 1:], depth + 1)
+                except ValueError:
+                    return "clear"
+                return inner if inner == "clear" else names + inner
+            i += 1
+            continue
+        for j, ch in enumerate(o[1:], 1):
+            if ch == "i":
+                return "clear"
+            if ch in ENV_SHORT_WITH_VALUE:
+                if j + 1 < len(o):
+                    value = o[j + 1:]
+                elif i + 1 < len(args):
+                    i += 1
+                    value = args[i]
+                if ch == "u" and value is not None:
+                    names.append(value)
+                if ch == "S" and value is not None and depth < 3:
+                    try:
+                        inner = env_options(shlex.split(value) + args[i + 1:], depth + 1)
+                    except ValueError:
+                        return "clear"
+                    return inner if inner == "clear" else names + inner
+                break
+        i += 1
+    return names
+
+
+def command_word(seg: list[str]) -> str | None:
+    """The word a simple command runs (after `NAME=value` assignments and redirections)."""
+    for w in drop_redirections(seg):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", w, re.S):
+            return w
+    return None
+
+
+def names_hook_var(w: str) -> bool:
+    """Whether a word can stand for a hook variable: it holds one of the names, or, unless it is just some other
+    variable's plain name, a piece of one (an assignment's value, a word with an expansion)."""
+    if any(v in w for v in HOOK_VARS):
+        return True
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", w, re.S)
+    rest = m.group(2) if m else w
+    if not m and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", w):
+        return False  # CLAUDE_CODE_USE_BEDROCK and the like: another variable's whole name
+    return any(part in rest for part in HOOK_VAR_PARTS)
 
 
 def tamper_problem(cmd: str) -> str | None:
@@ -1553,24 +1654,24 @@ def tamper_problem(cmd: str) -> str | None:
             if rx.search(cmd):
                 return msg
         return None
-    builtins = any(w in VAR_BUILTINS for seg in cmds for w in seg)
+    envs = [env_options(seg[k + 1:]) for seg in cmds for k, w in enumerate(seg) if Path(w).name == "env"]
+    if any(e == "clear" for e in envs):
+        return CLEAR_ENV_MSG
+    if any(isinstance(e, list) and set(e) & set(HOOK_VARS) for e in envs):
+        return CLAUDECODE_MSG
+    # a command that can change a variable: a builtin that does, env with -u, or a command whose name is put together
+    # by expansion (${u}set); with one of them, a hook variable's name or a piece of it anywhere is refused
+    changer = any(w in VAR_BUILTINS for seg in cmds for w in seg) or any(isinstance(e, list) and e for e in envs) \
+        or any(command_word(seg) is not None and re.search(r"[$`]", command_word(seg)) for seg in cmds)
     for seg in cmds:
         for k, w in enumerate(seg):
-            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") or (builtins and v in w) for v in HOOK_VARS) \
-                    or (w in HOOK_VARS and k and seg[k - 1] in ("-u", "--unset")):
+            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") for v in HOOK_VARS) \
+                    or (changer and names_hook_var(w)):
                 return CLAUDECODE_MSG
             if ASSIGN_GIT_CONFIG.match(w) or w == "--config-env" or w.startswith("--config-env="):
                 return GIT_CONFIG_MSG
             if " " not in w and (".git/hooks" in w or w.endswith("hooks/pre-push")):  # `>.git/hooks/x` too
                 return GIT_HOOKS_MSG
-            if Path(w).name == "env":
-                j = k + 1
-                while j < len(seg) and seg[j].startswith("-"):
-                    o = seg[j]
-                    if o in ("-", "-i", "--ignore-environment") or (not o.startswith("--")
-                                                                     and re.fullmatch(r"-[A-Za-z]*i[A-Za-z]*", o)):
-                        return CLEAR_ENV_MSG
-                    j += 2 if o in ENV_WITH_VALUE else 1
             if w == "exec" and k + 1 < len(seg) and re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", seg[k + 1]):
                 return CLEAR_ENV_MSG
     for seg in command_segments(cmd) or []:
