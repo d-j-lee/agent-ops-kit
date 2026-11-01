@@ -36,7 +36,7 @@
     {"name": "allow-attribute", "added": "#!?\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?(?:allow|expect)\\s*\\("},
     {"name": "ignored-test", "added": "#\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?ignore\\b"},
     {"name": "cfg-false", "added": "#!?\\[\\s*cfg\\s*\\(\\s*(?:false|any\\s*\\(\\s*\\)|not\\s*\\(\\s*all\\s*\\(\\s*\\)\\s*\\))"},
-    {"name": "unsafe", "added": "\\bunsafe\\s*(\\{|fn|impl)"},
+    {"name": "unsafe", "added": "\\bunsafe\\s*(?:\\{|\\(|fn\\b|impl\\b|trait\\b|extern\\b)"},
     {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("},
     {"name": "test-removed", "removed": "^\\s*#\\[(tokio::)?test\\b"}
   ]

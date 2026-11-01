@@ -36,7 +36,9 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 | 세 번째 block("This is the last block") | 지금 고칠 수 없으면 더 돌지 말고 그 턴 안에 AOK/1 `blocked`로 실패 단계와 출력 첫 줄을 부모에게 보내고 턴을 끝낸다. 그 종료는 놓아 준다(사용자에게 "게이트가 통과하지 않았다"가 간다) |
 | git이 푸시를 거부("[aok-harness] push refused") | pre-push 훅이 보낸 커밋 중 게이트가 통과시키지 않은 것을 찾았다. 그 커밋을 체크아웃해 게이트를 통과시킨 뒤 푸시한다. 다른 브랜치나 옮겨 둔 ref를 보내려 하지 않는다 |
 | `git push`·`gh pr create` 거부 | 이유를 읽는다. 커밋하지 않은 변경이면 커밋하고 다음 명령에서 푸시한다(한 명령에 묶으면 거부된다). 게이트가 남긴 파일이면 `.gitignore`에 넣는다. 체크아웃한 브랜치만 푸시한다. 하네스·settings·CI 워크플로를 바꾼 세션이면 푸시하지 말고 사람에게 넘긴다 |
-| git 명령 거부("hooks off") | `--no-verify`·`commit -n`·`core.hooksPath` 없이 다시 낸다 |
+| git 명령 거부("hooks off") | `--no-verify`·`commit -n`·`core.hooksPath` 없이 다시 낸다. 하네스가 `core.hooksPath`를 지우라고 하면 `git config --unset core.hooksPath`는 받는다 |
+| 명령 거부(`CLAUDECODE`, `env -i`, `GIT_CONFIG_*`, `.git/hooks`, 셸 별칭, `send-pack`) | pre-push 훅이 보는 것을 바꾸는 꼴이다. 그 부분 없이 낸다(필요한 변수만 넘기고, 푸시는 `git push`로). git 훅을 바꿔야 하면 사용자에게 말한다 |
+| "pre-push hook ... restored" | 바뀐 훅을 하네스가 되돌렸다. 게시 명령이었다면 다시 낸다. 무엇이 훅을 바꿨는지 사용자에게 말한다 |
 | 사람·CI와 같은 판정이 필요할 때 | `python3 -I .aok/harness/aok_harness.py verify --mode quick --json` (종료 0 통과 · 1 실패 · 2 실행 불가) |
 
 ## 3. 진단
@@ -45,12 +47,12 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 - **게이트가 매 턴 너무 오래 걸림**: `.aok/harness.json`의 `gate.quick`을 줄이고 full은 CI에 둔다. 정의 변경은 PR로(사람 확인).
 - **선택 도구가 없음**(예: ruff): 그 단계는 건너뛰고 세션에 한 번 알린다. 필수 도구가 없으면 실행 불가로 막는다.
 - **상태**: `<git-dir>/aok-harness/session-<id>.json`(기준, 막힘 횟수, 마지막 통과·보고 지문), `log.jsonl`. git이 없으면 XDG 상태 디렉터리. 손상되거나 없으면 턴 종료를 막고 푸시를 거부한다.
-- **pre-push 훅**: 세션 시작 때 git 디렉터리의 `hooks/pre-push`에 깔린다(작업 트리 밖). Claude Code 안에서만(`CLAUDECODE`) 통과한 커밋만 보낸다. 통과한 커밋 목록은 `<git-dir>/aok-harness/passed.json`. core.hooksPath가 있거나 남의 pre-push 훅이 있으면 깔지 않고 세션 시작 때 알린다.
+- **pre-push 훅**: 세션 시작 때 git 디렉터리의 `hooks/pre-push`에 깔린다(작업 트리 밖). Claude Code 안에서만(`CLAUDECODE`) 보내는 ref의 끝 커밋이 통과한 커밋일 때만 보낸다. 통과한 커밋 목록은 `<git-dir>/aok-harness/passed.json`. 바뀌거나 지워지면 다음 셸 명령과 턴 종료 때 되돌린다. 세션 중에 `core.hooksPath`가 생기면 턴 종료를 막는다. core.hooksPath가 처음부터 있거나 남의 pre-push 훅이 있으면 깔지 않고 세션 시작 때 알린다(명령 읽기만 남는다). 스크립트가 한 번 도는 동안 훅이 보는 값을 바꾸고 푸시하는 것은 막지 못한다. CI가 정본이다.
 - **Rust**: `fsmap`이 `PATH`에 있고 `fsmap hook --help`가 되면 훅 다섯 개와 verify를 fsmap(1회차 구현)에 넘긴다. fsmap이 0·2가 아닌 코드로 끝나거나 시작하지 못하면 닫힌 실패다. 그때는 fsmap이 git `pre-push` 훅을 설치하고, 게이트 정의를 작업 트리에서 읽어 무결성 단계로 본다(`--base`는 어댑터 선택에만 쓰인다). 없으면 기본 cargo 단계로 돌고 세션 시작 때 그 차이를 알린다.
 
 ## 4. 새 언어 어댑터
 
-`harness/adapters/<이름>.json` 하나로 더한다. 키: `detect`, `versions`, `env`, `edit.match`·`edit.steps`, `gate.quick`·`gate.full`, `test_files`, `weakening`(`added`·`removed` 정규식), 선택적으로 `delegate`. 단계는 `{"name", "cmd": [...], "optional"}`. 어댑터를 더하면 `tests/test_harness.py`에 그 언어의 시험과 `tests/mutations/harness.json`에 변이를 더하고 `vacuity_check`로 공허하지 않은지 본다(⑦).
+`harness/adapters/<이름>.json` 하나로 더한다. 키: `detect`, `versions`, `env`, `edit.match`·`edit.steps`, `gate.quick`·`gate.full`, `test_files`, `weakening`(`added`·`removed` 정규식), 선택적으로 `test_name_re`·`test_package_marker`(시험 파일을 모으는 조건), `check_config`(바뀌면 보고할 검사 설정), `shadow_check`, `delegate`. 단계는 `{"name", "cmd": [...], "optional"}`. 어댑터를 더하면 `tests/test_harness.py`에 그 언어의 시험과 `tests/mutations/harness.json`에 변이를 더하고 `vacuity_check`로 공허하지 않은지 본다(⑦).
 
 ## 5. 하지 않을 것
 

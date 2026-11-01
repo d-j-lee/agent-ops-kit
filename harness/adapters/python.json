@@ -23,6 +23,7 @@
   "test_files": ["tests/test*.py", "test_*.py", "tests/**/test*.py"],
   "test_name_re": "test\\w*\\.py",
   "test_package_marker": "__init__.py",
+  "shadow_check": "python-stdlib",
   "check_config": ["pyproject.toml", "setup.cfg", "tox.ini", "ruff.toml", ".ruff.toml", ".flake8", "pytest.ini", ".coveragerc", "conftest.py", "*/conftest.py", "sitecustomize.py", "usercustomize.py"],
   "weakening": [
     {"name": "noqa", "added": "(?i)#\\s*(?:ruff:\\s*|flake8:\\s*)?noqa"},
