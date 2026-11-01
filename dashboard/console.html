@@ -216,7 +216,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
 <div class="band" id="band">
   <div class="band-in">
-    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · 콘솔 v12</span></div>
+    <div class="brand"><h1>AOK 관제실</h1><span class="ver">AOK/1 · 콘솔 v13</span></div>
     <div class="verdict" id="verdict"><span class="dot"></span><span>상태를 불러오는 중</span></div>
     <span class="spacer"></span>
     <nav class="jump" aria-label="섹션으로 이동">
@@ -326,7 +326,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 <script>
 (() => {
   const SERVER = 'Claude Code Remote';
-  const CONSOLE_VERSION = 'v12';
+  const CONSOLE_VERSION = 'v13';
   const MCP_PERM = 'mcp:' + SERVER; // scoped permission name: consent is per connector (mcp.d.ts)
   const UA_KIND = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : /Electron|ClaudeDesktop|Claude\/[0-9]/i.test(navigator.userAgent) ? 'app' : 'browser';
   // Authorization denials: connector-derived data is withdrawn and the ledger snapshot is not shown in its place (mcp.d.ts failure design).
@@ -355,7 +355,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     perm: null, permState: null, asked: false, watching: false, liveOk: false, fromSnapshot: false, snap: null, snapSavedAt: 0, snapSig: '', myId: null, firstReading: false, ledgerUnsubs: [], ledgerRetryAt: 0,
     diag: { boot_at: new Date().toISOString(), caps: {}, events: [], calls: {} },
     triggers: [], triggersAt: null, triggersErr: null,
-    ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, atlas: {}, policy: { ...DEFAULT_POLICY }, loaded: false },
+    ledger: { trees: [], reg: {}, alerts: {}, verifs: [], audit: [], trig: {}, inbox: {}, atlas: {}, handoff: null, policy: { ...DEFAULT_POLICY }, loaded: false },
     showHidden: false,
     scope: 'all', q: '', showArchived: false, open: null, sel: new Set(),
     confirm: null, busy: {}, drafts: {}, results: {}, deferred: new Set(),
@@ -415,7 +415,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       case 'server_not_connected': return '이 보기에서는 Claude Code Remote 커넥터를 쓸 수 없습니다.';
       case 'approval_required': return '세션 정보를 읽으려면 허용이 필요합니다.';
       case 'not_in_manifest': return '이 페이지에서 Claude Code Remote 사용이 꺼져 있습니다. 페이지 권한 메뉴에서 켤 수 있습니다.';
-      case 'blocked_by_policy': return '조직 정책이 이 도구를 막고 있습니다.';
+      case 'blocked_by_policy': return '이 화면에서는 이 도구를 쓸 수 없거나 조직 정책이 막고 있습니다.';
       case 'selection_required': return '같은 이름의 커넥터가 여럿입니다. 표시되는 선택 창에서 하나를 고르세요.';
       case 'server_unavailable': case 'upstream_error': return '서버가 응답하지 않았습니다. 조작이었다면 실행됐는지 불확실하니 새로고침해 상태를 확인하세요.';
       case 'tool_error': return '도구가 실패를 알렸습니다: ' + String((e.message || '')).slice(0, 240);
@@ -794,7 +794,9 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     else if (code === 'needs_reauth') note('warn', 'Claude Code Remote 연결이 만료됐습니다. claude.ai 설정 → 커넥터에서 다시 연결한 뒤 다시 시도하세요.', retry());
     else if (code === 'server_not_connected') note('warn', '이 계정에서 Claude Code Remote 커넥터를 찾지 못했습니다. claude.ai 설정 → 커넥터에서 추가하세요.', retry());
     else if (code === 'selection_required') note('warn', '같은 이름의 커넥터가 여러 개입니다. claude.ai가 띄우는 선택 창에서 하나를 고른 뒤 다시 시도하세요.', retry());
-    else if (code === 'blocked_by_policy') note('warn', '조직 정책이 이 커넥터 사용을 막고 있습니다.');
+    // Platform text: "tool is not available on this connector or is blocked by your organization". Seen from the mobile browser (diag/, 2026-10-30 and 11-01).
+    else if (code === 'blocked_by_policy') note('warn', '이 화면에서는 Claude Code Remote 도구를 쓸 수 없거나 조직 정책이 막고 있습니다(blocked_by_policy).' + (UA_KIND === 'mobile' ? ' 모바일 브라우저에서 이렇게 응답한 기록이 있습니다.' : '') +
+      ' PC의 claude.ai나 데스크톱 앱에서 열어 보세요. 그동안 "당신 차례"에는 세션들이 원장에 남긴 사람 몫을 보여 줍니다.');
     else if (['not_granted', 'capability_disabled', 'capability_removed'].includes(code)) note('warn', '이 보기는 커넥터 기능을 실행하지 못합니다(' + code + ').' + snapLine());
     else if (e) note('', '세션 목록을 갱신하지 못했습니다(' + (code || '오류') + '). ' + (S.liveOk ? '마지막으로 받은 내용을 보여 줍니다.' : (S.fromSnapshot ? '' : '아직 받은 내용이 없습니다.')) + snapLine(), retry());
     if (S.watchBroken) note('', '실시간 갱신을 시작하지 못했습니다. 새로고침 버튼으로 직접 갱신하세요.');
@@ -826,8 +828,9 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const localLive = localAll.filter(turnEnded).length; const localWorking = localAll.length - localLive;
     const tile = (k, v, s, cls) => h('div', { class: 'tile ' + (cls || '') }, h('span', { class: 'k', text: k }), h('span', { class: 'v', text: v }), h('span', { class: 's', text: s }));
     const ready = S.sessionsAt != null;
+    const ho = S.ledger.handoff; const ledgerMine = ho ? ho.items.filter((x) => x.owner === 'user').length + ho.decisions.length : 0;
     t.append(
-      tile('당신 차례', ready ? String(mine.length) : '—', '긴급 ' + urgent + '건 · 미룸·처리 ' + hidden + '건', urgent ? 'bad' : (mine.length ? 'warn' : '')),
+      tile('당신 차례', ready ? String(mine.length) : (ledgerMine ? String(ledgerMine) : '—'), ready ? '긴급 ' + urgent + '건 · 미룸·처리 ' + hidden + '건' : (ledgerMine ? '원장에 남은 사람 몫(세션 정보 없음)' : '세션 정보 없음'), urgent ? 'bad' : ((ready ? mine.length : ledgerMine) ? 'warn' : '')),
       tile('AI 작업 중', ready ? String(working) : '—', '보관 제외 ' + live.length + '개 중 · 막힘 ' + blocked, ''),
       tile('사람 응답 대기 최장', ready ? (waits.length ? dur(waits[waits.length - 1]) : '없음') : '—', waits.length ? '답을 기다리는 세션 ' + waits.length + '개 · 중앙값 ' + dur(median(waits)) : 'AI가 기다리는 답이 없습니다', waits.length && waits[waits.length - 1] > 72 ? 'warn' : ''),
       tile('숨은 후속', ready ? String(followups) : '—', '완료 세션에 남은 사람 몫(추정)', ''),
@@ -837,6 +840,26 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   }
   // Session-level signals live in the inbox; the operational list keeps AOK tree/budget/trigger/hub signals.
   const SESSION_KINDS = new Set(['blocked', 'failed', 'needs_action', 'stale']);
+  // Without session data (connector refused or absent), the inbox shows what sessions left for the person in the ledger (handoff/current).
+  // That is data sessions wrote, not connector data, so it stays visible where connector data must be withdrawn. Rendered as text only (S5).
+  function normHandoff(d) {
+    if (!d || typeof d !== 'object') return null;
+    const str = (v) => (typeof v === 'string' ? v : '');
+    const items = (Array.isArray(d.open_items) ? d.open_items : []).filter((x) => x && typeof x === 'object' && typeof x.what === 'string')
+      .map((x) => ({ what: x.what.slice(0, 600), owner: str(x.owner), priority: ['high', 'mid', 'low'].includes(x.priority) ? x.priority : 'low', ref: str(x.ref).slice(0, 200) }));
+    const decisions = (Array.isArray(d.decisions_pending) ? d.decisions_pending : []).filter((x) => x && typeof x === 'object' && typeof x.question === 'string')
+      .map((x) => ({ id: str(x.id).slice(0, 20), question: x.question.slice(0, 400), def: str(x.default).slice(0, 400) }));
+    return { by: str(d.by).slice(0, 120), updated_at: str(d.updated_at), items, decisions };
+  }
+  const PRIO_LABEL = { high: '높음', mid: '중간', low: '낮음' };
+  function ledgerTodo(ho, mine) {
+    const row = (cls, chip, title, sub) => h('div', { class: 'alert ledger-todo' + cls }, h('div', { class: 'stripe' }),
+      h('div', { class: 'body' }, h('div', { class: 't' }, h('span', { class: 'chip', text: chip }), ' ', title), sub ? h('div', { class: 'd', text: sub }) : null), h('div', { class: 'acts' }));
+    return [h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:2px', text: '세션 정보를 읽지 못해 원장(handoff/current)에 남은 사람 몫을 보여 줍니다. 작성: ' + (ho.by || '—') + ' · ' + kst(ho.updated_at) + '. 세션이 쓴 내용이니 확인용으로만 보세요.' }),
+      ...[...mine].sort((a, b) => ['high', 'mid', 'low'].indexOf(a.priority) - ['high', 'mid', 'low'].indexOf(b.priority))
+        .map((x) => row(x.priority === 'high' ? ' critical' : '', '원장 · ' + PRIO_LABEL[x.priority], x.what, x.ref)),
+      ...ho.decisions.map((d) => row('', '결정 ' + (d.id || ''), d.question, d.def ? '권장 기본값: ' + d.def : ''))];
+  }
   function renderInbox(inbox) {
     paint('inbox-tools', (root) => {
       root.replaceChildren();
@@ -850,7 +873,11 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     paint('inbox-list', (root) => {
       root.replaceChildren();
       const items = inbox.filter((i) => S.showHidden || i.state === 'open');
-      if (!items.length) { root.append(h('div', { class: 'empty', text: S.sessionsAt ? '지금 당신 차례인 일이 없습니다.' : (S.mcpState === 'loading' ? '세션을 불러오는 중…' : '세션 정보를 읽으면 여기에 할 일이 모입니다.') })); return; }
+      if (!items.length) {
+        const ho = S.ledger.handoff; const mine = ho ? ho.items.filter((x) => x.owner === 'user') : [];
+        if (!S.sessionsAt && S.mcpState !== 'loading' && ho && (mine.length || ho.decisions.length)) { root.append(...ledgerTodo(ho, mine)); return; }
+        root.append(h('div', { class: 'empty', text: S.sessionsAt ? '지금 당신 차례인 일이 없습니다.' : (S.mcpState === 'loading' ? '세션을 불러오는 중…' : '세션 정보를 읽으면 여기에 할 일이 모입니다.') })); return;
+      }
       for (const it of items.slice(0, 40)) {
         const acts = h('div', { class: 'acts' });
         if (it.s) acts.append(h('a', { class: 'btn primary', href: sessionUrl(it.s.id), target: '_blank', rel: 'noopener', title: '세션을 새 탭에서 열어 직접 답합니다' }, '세션 열기'),
@@ -1366,7 +1393,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     const keep = (u) => { if (typeof u === 'function') S.ledgerUnsubs.push(u); };
     // A subscription that ends 'unavailable' recovers only by subscribing again; 'revoked' means this view lost read access (db.d.ts).
     const fail = (e) => { const code = e && e.code; dlog('ledger', { ok: false, code });
-      if (code === 'revoked' || code === 'permission_denied') { S.ledger = { ...S.ledger, trees: [], reg: {}, alerts: {}, inbox: {}, verifs: [], audit: [], trig: {}, atlas: {} }; S.ledgerErr = code; renderAll(); return; }
+      if (code === 'revoked' || code === 'permission_denied') { S.ledger = { ...S.ledger, trees: [], reg: {}, alerts: {}, inbox: {}, verifs: [], audit: [], trig: {}, atlas: {}, handoff: null }; S.ledgerErr = code; renderAll(); return; }
       if (code === 'unavailable' && Date.now() > S.ledgerRetryAt) { S.ledgerRetryAt = Date.now() + 60000; setTimeout(startLedger, 2000 + Math.random() * 3000); return; }
       if (code && code !== 'unavailable') toast('원장 구독 오류(' + code + ')', 'bad'); };
     keep(db.collection('trees').onSnapshot((q) => { S.ledger.trees = q.docs.map((d) => ({ tree_id: d.id, ...d.data() })); renderAll(); }, fail));
@@ -1379,6 +1406,7 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     keep(db.collection('atlas').orderBy('generated_at', 'desc').limit(200).onSnapshot((q) => { const m = {}; let dropped = 0;
       for (const d of q.docs) { const a = normAtlas(d.id, d.data()); if (a) m[d.id] = a; else dropped++; }
       if (dropped) dlog('atlas', { ok: false, code: 'dropped', count: dropped }); S.ledger.atlas = m; renderAll(); }, fail));
+    keep(db.doc('handoff/current').onSnapshot((d) => { S.ledger.handoff = d.exists ? normHandoff(d.data()) : null; renderAll(); }, fail));
     keep(db.doc('config/policy').onSnapshot((d) => { S.ledger.policy = d.exists ? { ...DEFAULT_POLICY, ...d.data() } : { ...DEFAULT_POLICY }; S.ledger.loaded = true; renderAll(); }, fail));
   }
 

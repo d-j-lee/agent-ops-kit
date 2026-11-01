@@ -3,6 +3,8 @@
 //   full: list_sessions returns full records (classification test).
 //   slim: list_sessions returns the slim record (2026-10 format) and get_session returns the full one (enrichment test).
 //   snapshot: no connector in this view; the ledger holds a snapshot of the full records (fallback test).
+//   policy: the connector refuses list_sessions with blocked_by_policy (seen from the mobile browser); the ledger holds a snapshot, which must stay
+//     hidden, and a handoff document, whose items for the person must show.
 // A case may carry `atlas: { generated_hours_ago, repos: [...], gaps }` or a raw row `atlas_raw`; it becomes the ledger doc atlas/<session_id>
 // (fsmap measurement) in every mode.
 // Needs the `playwright` package (NODE_PATH) and a Chromium build; tests/test_console_inbox.py skips when either is missing.
@@ -57,17 +59,27 @@ function slim(rec) {
   const p = await browser.newPage(); const errors = [];
   await p.clock.setFixedTime(new Date(NOW));
   p.on('pageerror', (e) => errors.push(e.message));
-  const snap = mode === 'snapshot' ? { at: NOW, records: fulls, triggers: [] } : null;
-  await p.addInitScript(({ list, byId, snap, atlas }) => {
+  const snap = mode === 'snapshot' || mode === 'policy' ? { at: NOW, records: fulls, triggers: [] } : null;
+  const noMcp = mode === 'snapshot'; const refuse = mode === 'policy';
+  const handoff = refuse ? { by: 'test hub', updated_at: NOW, summary: 's',
+    open_items: [{ what: 'low item for the person', owner: 'user', priority: 'low', ref: 'r1' }, { what: 'high item for the person', owner: 'user', priority: 'high', ref: 'r2' },
+      { what: 'item for any session', owner: 'any_session', priority: 'high', ref: 'r3' }, null, { what: 7 }],
+    decisions_pending: [{ id: 'D99', question: 'decide something', default: 'the default' }] } : null;
+  await p.addInitScript(({ list, byId, snap, atlas, noMcp, refuse, handoff }) => {
     window.__fetched = [];
     const empty = { docs: [], exists: false, data: () => ({}) };
     const docsOf = (name) => name === 'atlas' ? { docs: Object.entries(atlas).map(([id, rec]) => ({ id, data: () => rec })) } : empty;
     // Collections answer later than list_sessions, so the inbox is first computed without ledger data and must be recomputed when it lands.
     const coll = (name) => ({ onSnapshot: (cb) => { setTimeout(() => cb(docsOf(name)), 80); return () => {}; }, orderBy() { return this; }, limit() { return this; } });
-    const db = { collection: coll, doc: (path) => ({ onSnapshot: (cb) => { setTimeout(() => cb(path === 'data/users/u_test/snapshot' && snap ? { exists: true, data: () => snap } : empty), 5); return () => {}; }, set: async () => {} }) };
+    const docOf = (path) => (path === 'data/users/u_test/snapshot' && snap ? { exists: true, data: () => snap } : path === 'handoff/current' && handoff ? { exists: true, data: () => handoff } : empty);
+    // In policy mode the viewer's snapshot lands after the refusal (a slow ledger), so the gate that keeps it hidden is actually exercised.
+    const docDelay = (path) => (refuse && path === 'data/users/u_test/snapshot' ? 300 : 5);
+    const db = { collection: coll, doc: (path) => ({ onSnapshot: (cb) => { setTimeout(() => cb(docOf(path)), docDelay(path)); return () => {}; }, set: async () => {} }) };
+    const refusal = () => Object.assign(new Error('tool is not available on this connector or is blocked by your organization'), { code: 'blocked_by_policy', retryable: false });
     const mcp = {
-      watchTool: (srv, tool, input, handler) => { setTimeout(() => handler({ type: 'data', result: { payload: tool === 'list_sessions' ? list : { data: [] } } }), 20); return () => {}; },
+      watchTool: (srv, tool, input, handler) => { setTimeout(() => handler(refuse ? { type: 'error', error: refusal() } : { type: 'data', result: { payload: tool === 'list_sessions' ? list : { data: [] } } }), 20); return () => {}; },
       callTool: async (srv, tool, input) => {
+        if (refuse) throw refusal();
         if (tool === 'get_session') { window.__fetched.push(input.session_id); return { payload: { ccr: byId[input.session_id] } }; }
         if (tool === 'list_sessions') return { payload: list };
         return { payload: {} };
@@ -75,17 +87,21 @@ function slim(rec) {
       invalidate: async () => {},
     };
     const user = { canEdit: async () => true, can: async () => true, id: async () => 'u_test' };
-    window.claude = { use: async (n) => (n === 'mcp' ? (snap ? null : mcp) : n === 'user' ? user : n === 'db' ? db : null) };
-  }, { list, byId, snap, atlas });
+    window.claude = { use: async (n) => (n === 'mcp' ? (noMcp ? null : mcp) : n === 'user' ? user : n === 'db' ? db : null) };
+  }, { list, byId, snap, atlas, noMcp, refuse, handoff });
   await p.goto('file://' + tmp);
   // The ledger answers after the sessions (80 ms vs 20 ms here, any order in real use): with measurements, wait until the workspace card shows them,
   // which happens in the same render that recomputes the inbox with them.
   const measured = Object.keys(atlas).length > 0;
-  await p.waitForFunction((m) => Array.isArray(window.__inbox) && window.__inbox.length > 0 && (!m || document.querySelectorAll('#atlas-list .atlas-row').length > 0), measured, { timeout: 10000 });
+  // Policy mode: wait until the refusal is on screen, then long enough for the late snapshot; the test asserts what is (not) shown.
+  if (refuse) { await p.waitForFunction(() => [...document.querySelectorAll('#notices .notice')].some((n) => n.textContent.includes('blocked_by_policy')), null, { timeout: 10000 }); await p.waitForTimeout(800); }
+  else await p.waitForFunction((m) => Array.isArray(window.__inbox) && window.__inbox.length > 0 && (!m || document.querySelectorAll('#atlas-list .atlas-row').length > 0), measured, { timeout: 10000 });
   if (mode === 'slim') await p.waitForTimeout(1500);
   const inbox = await p.evaluate(() => window.__inbox); const fetched = await p.evaluate(() => window.__fetched);
   const notices = await p.$$eval('#notices .notice p', (els) => els.map((e) => e.textContent));
   const tiles = await p.$$eval('#tiles .tile', (els) => els.map((e) => e.textContent));
+  const ledgerTodo = await p.$$eval('#inbox-list .ledger-todo', (els) => els.map((e) => e.textContent));
+  const sessionRows = await p.$$eval('#s-body tr.row', (els) => els.length);
   const atlasRows = await p.$$eval('#atlas-list .atlas-row', (els) => els.map((e) => e.textContent));
   // Open the first measured session's row: the detail must show the workspace box without page errors.
   let atlasBox = null; const first = Object.keys(atlas)[0];
@@ -94,5 +110,5 @@ function slim(rec) {
     if (row) { await row.click(); await p.waitForTimeout(300); atlasBox = await p.$$eval('td.detail .box h3', (els) => els.map((e) => e.textContent)); }
   }
   await browser.close();
-  console.log(JSON.stringify({ mode, ids, inbox, fetched, notices, tiles, atlasRows, atlasBox, errors }));
+  console.log(JSON.stringify({ mode, ids, inbox, fetched, notices, tiles, atlasRows, atlasBox, ledgerTodo, sessionRows, errors }));
 })().catch((e) => { console.error(String(e && e.stack || e)); process.exit(2); });

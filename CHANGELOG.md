@@ -6,6 +6,10 @@
 
 ### 추가
 
+- 관제실 콘솔 v13: 실제 모바일 런타임 기록(원장 `diag/`)에 맞춘 대응. 모바일 브라우저에서 `list_sessions`가 `blocked_by_policy`로 거부됐다.
+  - 세션 정보를 읽지 못하는 보기에서 "당신 차례"에 원장 `handoff/current`의 사람 몫과 대기 중인 결정을 보여 준다. 커넥터 데이터가 아니므로 거부 상황에서도 보인다. 스냅숏은 계약대로 계속 숨긴다
+  - `blocked_by_policy` 안내를 플랫폼 문구에 맞췄다("이 화면에서 쓸 수 없거나 조직 정책이 막음"). PC에서 열기를 권한다
+  - 시험: 거부 모드(`policy`). 스냅숏이 거부 뒤에 도착해도 보이지 않는지, 사람 몫만 중요도 순으로 보이는지 확인한다. 변이 시험으로 스냅숏 누출을 잡는지도 확인했다
 - 작업공간 측정(관제탑 v2 Rust 적용 R1). 엔진은 사용자의 Rust CLI fsmap(`d-j-lee/filesystemMap`)이다.
   - `scripts/atlas_record.py`: fsmap 스냅숏(`fsmap/1`)을 원장 레코드 `atlas/<session_id>`(`aok-atlas/1`)로 줄인다. 표준 라이브러리만 쓴다. fsmap이 놓치는 원격에 없는 커밋(detached HEAD, 업스트림이 지워진 브랜치)을 git으로 대조하고, 측정의 빈틈을 `coverage`로 남긴다
   - 스킬 `aok-atlas`: 고정 커밋 설치, 스캔, 변환, 원장 쓰기, 결과별 조치, 해석의 한계
