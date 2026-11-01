@@ -20,6 +20,7 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 6. 첫 세션 맥락이 `[aok-harness] adapter …`(Rust를 fsmap에 맡기면 `[harness] fsmap … hooks are active`)로 시작하는지 본다. `[aok-harness] OFF: …`면 3절.
 7. CI에는 기존 단계를 그대로 두고, 기준 브랜치의 코어·어댑터·정의로 도는 잡을 더한다. PR이 하네스를 고쳤어도 기준 브랜치의 것이 판정한다.
    ```
+   set -euo pipefail
    git fetch origin main
    git show origin/main:.aok/harness/aok_harness.py > "$RUNNER_TEMP/aok_harness.py"
    python3 -I "$RUNNER_TEMP/aok_harness.py" verify --mode full --base origin/main

@@ -126,7 +126,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
       <h2>자기 시험</h2>
       <div class="prose">
         <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작을 시험하고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. Rust 위임은 가짜 실행 파일에 더해 고정 커밋으로 빌드한 fsmap으로도 훅 다섯 개를 모두 시험합니다 {{grade:C-h8-fsmap}}. 정의를 작업 트리에서 읽게 하기, 실행 불가나 fsmap 패닉을 통과로 치기, 다른 브랜치 푸시를 허용하기, 약화 규칙 하나를 지우기처럼 코어와 어댑터의 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
-        <p>이 목록은 두 번째 검증에서 늘었습니다. 독립 검증자 둘이 첫 판에서 다른 ref 푸시, PR이 고친 어댑터로 도는 CI, 손상된 상태에서의 무응답, fsmap 패닉 통과 같은 우회와, 목록 밖에서 공허한 장치 수십 곳을 찾았습니다 {{grade:C-h8-round}}. 고친 뒤 반례마다 시험과 변이를 더했습니다.</p>
+        <p>이 목록은 독립 검증 두 번을 거치며 늘었습니다. 첫 검증은 다른 ref 푸시, PR이 고친 어댑터로 도는 CI, 손상된 상태에서의 무응답, fsmap 패닉 통과 같은 우회를 찾았습니다. 두 번째 검증은 명령의 글자를 읽는 방식 자체의 빈틈(설정으로 바꾼 refspec, 먼저 옮겨 둔 ref, 늦게 도는 푸시)을 찾았고, 그래서 게시 판정을 git이 실제로 보내는 커밋을 보는 pre-push 훅으로 옮겼습니다. 두 번 모두 목록 밖에서 공허한 장치가 수십 곳 나왔습니다 {{grade:C-h8-round}}. 고친 뒤 반례마다 시험과 변이를 더했습니다.</p>
       </div>
       <footer class="pagefoot">2026-11-01 작성, 같은 날 두 번째 검증 반영. ⑧을 들이는 결정은 D26이다: {{doc:docs/proposals/regression-harness-hub.md}}</footer>
     </section>
