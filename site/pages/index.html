@@ -58,16 +58,16 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
 
     <section id="map">
       <h2>기능 지도</h2>
-      <div class="prose"><p>공통 기반 다섯 개(근거 규약, 수단 선택 규칙, 안전 규칙 S1–S9, 이름·태그·원장, 메일박스 AOK/1) 위에 기능이 놓입니다. ⑦과 ⑧은 제안 단계입니다.</p></div>
+      <div class="prose"><p>공통 기반 다섯 개(근거 규약, 수단 선택 규칙, 안전 규칙 S1–S9, 이름·태그·원장, 메일박스 AOK/1) 위에 기능이 놓입니다. ⑦은 v1 기능이고(D25), ⑧은 다음 PR로 들어올 제안입니다(D26).</p></div>
       <div class="feat">
         <a class="card" href="verification.html#aok"><span class="n">① /aok-verify</span><b>블라인드 재현 대조</b><span class="d">결론을 숨긴 검증자와 별도 판정자로 대조한다. L0 검토 · L1 블라인드 · L2 재현</span></a>
-        <a class="card" href="https://github.com/d-j-lee/agent-ops-kit/blob/main/docs/patterns/watchdog.md" target="_blank" rel="noopener"><span class="n">② /aok-watch</span><b>정지·비용 감시기</b><span class="d">허브가 깨어날 때마다 자식을 점검하고 경보를 원장에 남긴다</span></a>
-        <a class="card" href="https://github.com/d-j-lee/agent-ops-kit/blob/main/docs/patterns/cleanroom.md" target="_blank" rel="noopener"><span class="n">③ /aok-cleanroom</span><b>클린룸 재현 게이트</b><span class="d">새 컨테이너에서 문서의 명령을 글자 그대로 실행한다</span></a>
-        <a class="card" href="https://github.com/d-j-lee/agent-ops-kit/blob/main/docs/patterns/loop.md" target="_blank" rel="noopener"><span class="n">④ /aok-loop</span><b>리뷰↔개발 루프</b><span class="d">PR을 정본으로 dev와 reviewer가 최대 3라운드 왕복한다</span></a>
-        <a class="card" href="https://github.com/d-j-lee/agent-ops-kit/blob/main/docs/patterns/curator.md" target="_blank" rel="noopener"><span class="n">⑤ /aok-garden</span><b>큐레이터</b><span class="d">세션 기록을 카드·씨앗으로 증류하고 사람 검토 뒤 스킬을 고친다</span></a>
-        <a class="card" href="https://github.com/d-j-lee/agent-ops-kit/blob/main/docs/patterns/budget.md" target="_blank" rel="noopener"><span class="n">⑥ /aok-delegate</span><b>예산 가드</b><span class="d">허브를 포함한 트리 상한, 입장 검사, 허브 교대</span></a>
-        <a class="card" href="regression.html"><span class="n new">⑦ /aok-regress · 제안</span><b>회귀 고정</b><span class="d">고친 뒤에도 전에 되던 것이 되는지. 빈 출력·비결정성을 거르는 전후 비교, 공허한 테스트 검사</span></a>
-        <a class="card" href="rust.html#harness"><span class="n new">⑧ · 제안</span><b>작업 레포 하네스</b><span class="d">자식이 일하는 레포 안의 편집 직후 검사, 턴 종료 게이트, 단일 검증 진입점. 언어 중립 코어 + 어댑터</span></a>
+        <a class="card" href="{{docurl:docs/patterns/watchdog.md}}" target="_blank" rel="noopener"><span class="n">② /aok-watch</span><b>정지·비용 감시기</b><span class="d">허브가 깨어날 때마다 자식을 점검하고 경보를 원장에 남긴다</span></a>
+        <a class="card" href="{{docurl:docs/patterns/cleanroom.md}}" target="_blank" rel="noopener"><span class="n">③ /aok-cleanroom</span><b>클린룸 재현 게이트</b><span class="d">새 컨테이너에서 문서의 명령을 글자 그대로 실행한다</span></a>
+        <a class="card" href="{{docurl:docs/patterns/loop.md}}" target="_blank" rel="noopener"><span class="n">④ /aok-loop</span><b>리뷰↔개발 루프</b><span class="d">PR을 정본으로 dev와 reviewer가 최대 3라운드 왕복한다</span></a>
+        <a class="card" href="{{docurl:docs/patterns/curator.md}}" target="_blank" rel="noopener"><span class="n">⑤ /aok-garden</span><b>큐레이터</b><span class="d">세션 기록을 카드·씨앗으로 증류하고 사람 검토 뒤 스킬을 고친다</span></a>
+        <a class="card" href="{{docurl:docs/patterns/budget.md}}" target="_blank" rel="noopener"><span class="n">⑥ /aok-delegate</span><b>예산 가드</b><span class="d">허브를 포함한 트리 상한, 입장 검사, 허브 교대</span></a>
+        <a class="card" href="regression.html"><span class="n new">⑦ /aok-regress</span><b>회귀 고정</b><span class="d">고친 뒤에도 전에 되던 것이 되는지. 빈 출력·비결정성을 거르는 전후 비교, 공허한 테스트 검사</span></a>
+        <a class="card" href="rust.html#harness"><span class="n new">⑧ · 제안 D26</span><b>작업 레포 하네스</b><span class="d">자식이 일하는 레포 안의 편집 직후 검사, 턴 종료 게이트, 단일 검증 진입점. 언어 중립 코어 + 어댑터</span></a>
       </div>
     </section>
 
@@ -93,19 +93,19 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
       <h2>근거 등급</h2>
       <div class="prose"><p>모든 주장에는 등급을 붙입니다. 결론의 등급은 가장 약한 전제의 등급을 따르고, 비율은 n≥10부터 씁니다. 규약: {{doc:docs/architecture.md}} §2.1, 계약: {{doc:schemas/claim.schema.json}}</p></div>
       <ul class="legend" aria-label="근거 등급">
-        <li><span class="g g-ok">확인</span> 직접 실행·측정. 다시 돌릴 명령이나 파일 위치가 있어야 한다</li>
+        <li><span class="g g-ok">확인</span> 직접 실행·측정. 다시 실행하거나 조회할 수 있는 근거(ref)가 있어야 한다</li>
         <li><span class="g g-der">도출</span> 확인된 값에서 계산</li>
         <li><span class="g g-inf">추론</span> 판단이 들어감</li>
         <li><span class="g g-unk">미확인</span> 확인하지 못함</li>
         <li><span class="g g-rec">기록됨</span> 다른 세션·에이전트의 기록</li>
-        <li><span class="g g-doc">문서</span> 도구 설명·외부 문서에 그렇게 적혀 있음</li>
+        <li><span class="g g-doc">문서</span> 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음(D29)</li>
       </ul>
     </section>
 
     <section id="about">
       <h2>이 안내서</h2>
       <div class="prose">
-        <p>규범은 저장소의 <code>docs/</code>가 정본이고, 이 안내서는 그 설명입니다. 페이지 원본은 <code>site/pages/</code>, 결론을 받치는 수치(전후 비교, 검증 건수, 연구 수치)는 <code>site/claims.json</code>(claim 스키마)과 <code>site/figures.json</code>에 한 번만 적고, <code>scripts/build_site.py</code>가 페이지를 만듭니다. 빌드는 모르는 수치, 근거 없는 [확인], 쓰이지 않는 항목, 없는 파일 링크, Artifact URL이나 세션 ID를 실패로 처리합니다. 각 페이지 맨 아래의 "이 페이지의 수치와 근거" 표가 밑줄 친 수치의 출처입니다.</p>
+        <p>규범은 저장소의 <code>docs/</code>가 정본이고, 이 안내서는 그 설명입니다. 페이지 원본은 <code>site/pages/</code>, 결론을 받치는 수치(전후 비교, 검증 건수, 연구 수치)는 <code>site/claims.json</code>(claim 스키마)과 <code>site/figures.json</code>에 한 번만 적고, <code>scripts/build_site.py</code>가 페이지를 만듭니다(D27·D28).</p><p>빌드가 막는 것: 페이지 본문에 직접 쓴 측정 수치(%, 배, 시간, 크기), 손으로 단 [확인] 배지, 다시 돌리거나 조회할 근거가 없는 [확인], 자리표시가 든 근거 명령, 없는 파일이나 저장소 밖을 가리키는 링크, 원자료와 다른 터미널 발췌, 쓰이지 않는 레지스트리 항목, Artifact URL·세션 ID 같은 공개 레포 금지 항목. 개수(건, 개, 회)는 기계로 맥락 수치와 구분할 수 없어 작성자가 챙깁니다. 각 페이지 맨 아래의 "이 페이지의 수치와 근거" 표가 밑줄 친 수치와 배지의 출처입니다.</p>
       </div>
       <div class="split">
         <a class="box" href="verification.html" style="text-decoration:none;color:inherit"><h3>AI 검증 플레이북</h3><p class="small muted">교차·적대·회귀의 차이, AOK 기능과의 대응, 실제 검증 기록, 브리핑 템플릿</p></a>
@@ -113,7 +113,7 @@ description: 멀티에이전트 운영 키트 AOK를 사람이 읽는 안내서.
         <a class="box" href="cases.html" style="text-decoration:none;color:inherit"><h3>공개 레포 적용 사례</h3><p class="small muted">work-atlas 훅 지연, docbench 비교, Rust 도구</p></a>
         <a class="box" href="rust.html" style="text-decoration:none;color:inherit"><h3>Rust × AI 활용 지도</h3><p class="small muted">언어가 검증 비용을 바꾸는 방식, 작업 하네스, 4주 계획</p></a>
       </div>
-      <footer class="pagefoot">2026-10-31 작성. 제안 단계 기능(⑦ D19, ⑧ D20, 안내서 D21·D22)은 {{doc:docs/proposals/regression-harness-hub.md}}에 있습니다.</footer>
+      <footer class="pagefoot">2026-10-31 작성, 2026-11-01 독립 검증 반영. 이 안내서와 ⑦을 들인 결정(D25·D27–D29)과 ⑧ 제안(D26)은 {{doc:docs/proposals/regression-harness-hub.md}}에 있습니다.</footer>
     </section>
   </main>
 </div>

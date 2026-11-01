@@ -1,0 +1,212 @@
+[
+ {
+  "file": "scripts/build_site.py",
+  "label": "unknown figure accepted",
+  "old": "                    errors.append(f\"{name}: unknown figure {arg}\")\n",
+  "new": "                    pass\n",
+  "expect": "test_unknown_figure"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unknown claim accepted",
+  "old": "                    errors.append(f\"{name}: unknown claim {arg}\")\n",
+  "new": "                    pass\n",
+  "expect": "test_unknown_claim_and_placeholder_kind"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unknown placeholder kind accepted",
+  "old": "            errors.append(f\"{name}: unknown placeholder kind {kind!r}\")\n",
+  "new": "            pass\n",
+  "expect": "test_unknown_claim_and_placeholder_kind"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "malformed placeholders pass through",
+  "old": "        if \"{{\" in body_out or \"}}\" in body_out:",
+  "new": "        if False:",
+  "expect": "test_malformed_placeholder"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unused figures allowed",
+  "old": "        errors.append(f\"figure {fid} is not used by any page\")",
+  "new": "        pass",
+  "expect": "test_unused_figure_and_claim"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "unused claims allowed",
+  "old": "        errors.append(f\"claim {cid} is not used by any page or figure\")",
+  "new": "        pass",
+  "expect": "test_unused_figure_and_claim"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "figure to a missing claim accepted",
+  "old": "        elif f.get(\"claim\") not in claims:\n            errors.append(f\"figure {fid}: claim {f.get('claim')!r} not in claims.json\")",
+  "new": "        elif False:\n            pass",
+  "expect": "test_figure_to_missing_claim"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "duplicate claim ids accepted",
+  "old": "        if cid in claims:\n            errors.append(f\"duplicate claim id {cid}\")",
+  "new": "        if False:\n            pass",
+  "expect": "test_duplicate_claim_id"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "[확인] without anything to re-run",
+  "old": "        if c.get(\"grade\") == \"확인\" and not kinds & {\"cmd\", \"url\"}:",
+  "new": "        if c.get(\"grade\") == \"확인\" and not kinds:",
+  "expect": "test_confirmed_needs_something_to_rerun"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "evidence kind not checked",
+  "old": "            if not isinstance(e, dict) or e.get(\"kind\") not in (\"cmd\", \"event\", \"file\", \"url\") \\",
+  "new": "            if not isinstance(e, dict) \\",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs not checked for existence",
+  "old": "            elif e[\"kind\"] == \"file\" and not (root / ref.split(\"@\", 1)[0]).exists():",
+  "new": "            elif False:",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "url refs not checked",
+  "old": "            if e[\"kind\"] == \"url\" and not ref.startswith(\"https://\"):",
+  "new": "            if False:",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "cmd placeholders allowed",
+  "old": "            if e[\"kind\"] == \"cmd\" and re.search(r\"<[^<>\\s][^<>]*>\", ref):",
+  "new": "            if False:",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs ignore @sha",
+  "old": "                path, _, sha = e[\"ref\"].partition(\"@\")",
+  "new": "                path, sha = e[\"ref\"].partition(\"@\")[0], \"\"",
+  "expect": "test_file_ref_at_sha_links_that_sha"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "extra claim fields allowed",
+  "old": "        if extra:\n            errors.append",
+  "new": "        if False:\n            errors.append",
+  "expect": "test_bad_grade_and_extra_field"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "typed [확인] badges allowed",
+  "old": "    if CONFIRMED_BADGE.search(text):",
+  "new": "    if False:",
+  "expect": "test_typed_confirmed_badge"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "legend not exempt",
+  "old": "    r'<span class=\"ctx\">.*?</span>', r'<ul class=\"legend\".*?</ul>')]",
+  "new": "    r'<span class=\"ctx\">.*?</span>')]",
+  "expect": "test_grade_placeholder_and_legend"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "raw measured quantities allowed",
+  "old": "    if found:\n        shown",
+  "new": "    if False:\n        shown",
+  "expect": "test_measured_quantity_outside_registry"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "ctx spans not exempt",
+  "old": "    r'<span class=\"ctx\">.*?</span>', ",
+  "new": "",
+  "expect": "test_context_and_code_numbers_are_exempt"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "own-repo URLs allowed",
+  "old": "    if OWN_LINK.search(PLACEHOLDER.sub(\" \", body)):",
+  "new": "    if False:",
+  "expect": "test_own_repo_url_must_use_doc"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "doc paths outside the repo allowed",
+  "old": "            if not inside(root, arg):\n                errors.append(f\"{name}: doc link outside the repository {arg}\")\n            elif",
+  "new": "            if False:\n                pass\n            elif",
+  "expect": "test_doc_outside_repo"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "log excerpts not checked",
+  "old": "        errors += check_logs(name, body, root)\n",
+  "new": "",
+  "expect": "test_log_excerpt_must_be_verbatim"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "log elisions not required",
+  "old": "if log[i:i + len(block)] == block), None)",
+  "new": "if all(b in log for b in block)), None)",
+  "expect": "test_log_excerpt_must_be_verbatim"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "public-repo scan skipped",
+  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)})",
+  "new": "        hits = []",
+  "expect": "test_public_repo_rule"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "public-repo scan only on index",
+  "old": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)})",
+  "new": "        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page)}) if name == \"index.html\" else []",
+  "expect": "test_public_repo_rule_covers_supporting_pages"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "file refs outside the repo allowed",
+  "old": "            if e[\"kind\"] == \"file\" and not inside(root, ref.split(\"@\", 1)[0]):",
+  "new": "            if False:",
+  "expect": "test_evidence_items_are_checked"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "UUIDs allowed",
+  "old": "        if UUID.search(page):",
+  "new": "        if False:",
+  "expect": "test_public_repo_rule"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "index.html not required",
+  "old": "    if not any(name == \"index.html\" for name, _, _ in pages):",
+  "new": "    if False:",
+  "expect": "test_index_required"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "foreign --out replaced",
+  "old": "            if not (out / MARKER).is_file():",
+  "new": "            if False:",
+  "expect": "test_out_dir_not_made_by_the_build_is_kept"
+ },
+ {
+  "file": "scripts/build_site.py",
+  "label": "--check writes",
+  "old": "    out = None if args.check else Path(args.out) if args.out else root / \"site\" / \"dist\"",
+  "new": "    out = Path(args.out) if args.out else root / \"site\" / \"dist\"",
+  "expect": "test_check_mode_writes_nothing"
+ }
+]

@@ -1,0 +1,16 @@
+# 2026-11-01T01:16:24Z 2 vCPU · base 10011b6 · cand 49e4fbe · zk, --as-of 2026-10-29T00:00:00+00:00 --no-llm
+build 1: base 21.6s · cand 19.0s
+build 2: base 22.9s · cand 18.2s
+build 3: base 24.9s · cand 22.4s
+model files byte-identical: 5 of 5 (build.json and catalog.json carry paths and build times by design)
+## trap: the same build twice without --as-of
+categories.json differs in fields: age_h_p50, as_of
+# done 2026-11-01T01:19:31Z
+# 2026-11-01T01:20:21Z 2 vCPU · base 10011b6 · cand 49e4fbe · zk, --as-of 2026-10-29T00:00:00+00:00 --no-llm
+build 1: base 23.7s · cand 20.5s
+build 2: base 23.5s · cand 20.1s
+build 3: base 23.7s · cand 22.8s
+model files byte-identical: 5 of 5 (build.json and catalog.json carry paths and build times by design)
+## trap: the same build twice without --as-of
+categories.json differs in fields: age_h_p50, as_of
+# done 2026-11-01T01:23:32Z

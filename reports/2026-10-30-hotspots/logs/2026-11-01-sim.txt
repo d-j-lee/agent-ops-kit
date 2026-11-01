@@ -1,0 +1,9 @@
+# 2026-11-01T01:24:04Z 2 vCPU · WORK_ATLAS=work-atlas@49e4fbe · python 3.13.18 orjson 3.13.0 · atlas-sim release build
+## lang: bench-sim.sh $INST/lang/data/model/text_index.json - queries/lang.txt 11
+identical (200 lines, json·orjson·rust)
+whole process  python(orjson)  242ms · rust   79ms   (N=11, interleaved, median)
+in process     python(orjson)   80ms · rust   58ms   (load + postings + query)
+## zk: bench-sim.sh $INST/zk/data/model/text_index.json - queries/zk.txt 11
+identical (200 lines, json·orjson·rust)
+whole process  python(orjson)  402ms · rust  176ms   (N=11, interleaved, median)
+in process     python(orjson)  197ms · rust  136ms   (load + postings + query)

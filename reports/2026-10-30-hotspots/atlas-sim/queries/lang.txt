@@ -1,0 +1,1 @@
+StringUtils abbreviate throws an exception for a negative max width

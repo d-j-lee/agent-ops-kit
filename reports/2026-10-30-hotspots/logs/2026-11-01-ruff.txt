@@ -1,0 +1,13 @@
+# 2026-11-01T01:26:41Z 2 vCPU · work-atlas@10011b6 · 16738 lines in atlas/ tests/ · ruff 0.17.3
+## uvx ruff@0.17.3 check --no-cache --select F,B,E9,PLE --statistics atlas tests
+6	B905	zip-without-explicit-strict
+4	B023	function-uses-loop-variable
+3	B008	function-call-in-default-argument
+3	B007	unused-loop-control-variable
+2	B904	raise-without-from-inside-except
+Found 18 errors.
+9 unsafe fixes available with `--fix --unsafe-fixes`.
+## the same, wall time of 7 runs (ms)
+121 109 113 97 80 102 104 
+## ruff binary directly (no uvx start-up), 7 runs (ms)
+45 55 62 45 44 44 46 

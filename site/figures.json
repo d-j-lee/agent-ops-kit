@@ -99,41 +99,145 @@
   "text": "테스트 15개와 doctest 2개",
   "claim": "C-harness-gate"
  },
- "wa.edit.lang": {
-  "text": "190→101ms",
+ "survey.2025": {
+  "text": "48.8%",
+  "claim": "C-res-survey"
+ },
+ "survey.2023": {
+  "text": "38.7%",
+  "claim": "C-res-survey"
+ },
+ "survey.2024": {
+  "text": "45.5%",
+  "claim": "C-res-survey"
+ },
+ "survey.worry.use": {
+  "text": "42.1%",
+  "claim": "C-res-survey"
+ },
+ "survey.worry.complex": {
+  "text": "41.6%",
+  "claim": "C-res-survey"
+ },
+ "android.vuln": {
+  "text": "약 1000배",
+  "claim": "C-res-android"
+ },
+ "android.rollback": {
+  "text": "약 4배",
+  "claim": "C-res-android"
+ },
+ "android.review": {
+  "text": "약 25%",
+  "claim": "C-res-android"
+ },
+ "rustassistant": {
+  "text": "약 74%",
+  "claim": "C-res-rustassistant"
+ },
+ "rustevo.before": {
+  "text": "56.1%",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.after": {
+  "text": "32.5%",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.rag": {
+  "text": "13.5%p",
+  "claim": "C-res-rustevo"
+ },
+ "rustevo.semantic": {
+  "text": "38.0%",
+  "claim": "C-res-rustevo"
+ },
+ "crust.repair": {
+  "text": "48%",
+  "claim": "C-res-crust"
+ },
+ "crust.single": {
+  "text": "19%",
+  "claim": "C-res-crust"
+ },
+ "metr.slower": {
+  "text": "19%",
+  "claim": "C-res-metr"
+ },
+ "metr.felt": {
+  "text": "20%",
+  "claim": "C-res-metr"
+ },
+ "metr2.same": {
+  "text": "18%",
+  "claim": "C-res-metr2"
+ },
+ "metr2.new": {
+  "text": "4%",
+  "claim": "C-res-metr2"
+ },
+ "bench.loop": {
+  "text": "2.05–2.26 s",
+  "claim": "C-bench-bridge"
+ },
+ "bench.re": {
+  "text": "1.15–1.42 s",
+  "claim": "C-bench-bridge"
+ },
+ "bench.rs": {
+  "text": "131–170 ms",
+  "claim": "C-bench-bridge"
+ },
+ "bench.x.re": {
+  "text": "7.2~9.8배",
+  "claim": "C-bench-bridge"
+ },
+ "bench.x.loop": {
+  "text": "12.0~17.2배",
+  "claim": "C-bench-bridge"
+ },
+ "pr4.counts": {
+  "text": "일치 9 · 반박 4 · 미검증 2",
+  "claim": "C-brd-pr4"
+ },
+ "pr4.only": {
+  "text": "44건",
+  "claim": "C-brd-pr4"
+ },
+ "pr4.wrong": {
+  "text": "확정 오류 2건",
+  "claim": "C-brd-pr4"
+ },
+ "wa.edit": {
+  "text": "-44~-46%",
   "claim": "C-wa-hooks"
  },
- "wa.edit.zk": {
-  "text": "192→110ms",
+ "wa.prompt": {
+  "text": "-37~-41%",
   "claim": "C-wa-hooks"
  },
- "wa.prompt.lang": {
-  "text": "340→197ms",
-  "claim": "C-wa-hooks"
+ "wa.aa": {
+  "text": "-0.5%",
+  "claim": "C-wa-aa"
  },
- "wa.prompt.zk": {
-  "text": "636→393ms",
-  "claim": "C-wa-hooks"
+ "wa.history.edit": {
+  "text": "-43~-47%",
+  "claim": "C-wa-history"
  },
- "wa.range": {
-  "text": "-32~-50%",
-  "claim": "C-wa-range"
+ "wa.history.prompt": {
+  "text": "-38~-42%",
+  "claim": "C-wa-history"
+ },
+ "wa.abs": {
+  "text": "143~274ms",
+  "claim": "C-wa-abs"
  },
  "wa.build": {
-  "text": "18.2~18.8초에서 14.1~14.4초",
+  "text": "-4~-21%",
   "claim": "C-wa-build"
  },
  "wa.tests": {
   "text": "277개",
   "claim": "C-wa-tests"
- },
- "dc.edit": {
-  "text": "-42~-46%",
-  "claim": "C-dc-demo"
- },
- "dc.prompt": {
-  "text": "-38~-39%",
-  "claim": "C-dc-demo"
  },
  "trap.empty": {
   "text": "306바이트 → 0바이트",
@@ -143,36 +247,36 @@
   "text": "상위 200개",
   "claim": "C-sim-same"
  },
+ "sim.proc": {
+  "text": "LANG 242→79ms, ZK 402→176ms",
+  "claim": "C-sim-proc"
+ },
+ "sim.inproc": {
+  "text": "ZK 197→136ms",
+  "claim": "C-sim-inproc"
+ },
+ "sim.startup": {
+  "text": "약 165ms(73%)",
+  "claim": "C-sim-inproc"
+ },
  "sim.ulp": {
   "text": "13,048개 중 1,159개",
   "claim": "C-sim-ulp"
  },
- "sim.proc": {
-  "text": "LANG 약 220→55ms, ZK 약 330→135ms",
-  "claim": "C-sim-proc"
- },
- "sim.inproc": {
-  "text": "ZK 약 130→105ms",
-  "claim": "C-sim-inproc"
- },
- "sim.startup": {
-  "text": "150ms 안팎",
-  "claim": "C-sim-inproc"
- },
- "db.js": {
-  "text": "3.6~4.0초",
+ "db.js.light": {
+  "text": "35ms",
   "claim": "C-db-js"
  },
- "db.js.light": {
-  "text": "19ms",
+ "db.js": {
+  "text": "4.67~5.44초",
   "claim": "C-db-js"
  },
  "db.wasm": {
-  "text": "3.6초→0.72초, 4.0초→0.50초",
+  "text": "4.67초→0.84초, 5.44초→0.57초",
   "claim": "C-db-wasm"
  },
  "db.wasm.small": {
-  "text": "19→33ms",
+  "text": "35→41ms",
   "claim": "C-db-wasm"
  },
  "db.wasm.size": {
@@ -181,11 +285,11 @@
  },
  "db.counts": {
   "text": "9개 경우 모두",
-  "claim": "C-db-highlight"
+  "claim": "C-db-lines"
  },
  "db.lines": {
   "text": "6개 경우",
-  "claim": "C-db-highlight"
+  "claim": "C-db-lines"
  },
  "db.highlight": {
   "text": "9개 경우 중 3개",
@@ -196,11 +300,11 @@
   "claim": "C-db-fuzz"
  },
  "db.caps": {
-  "text": "약 200ms·100ms",
+  "text": "약 204ms·137ms",
   "claim": "C-db-caps"
  },
  "tool.ruff": {
-  "text": "약 40ms",
+  "text": "44~62ms",
   "claim": "C-tool-ruff"
  },
  "tool.ruff.n": {
@@ -219,8 +323,20 @@
   "text": "캐시 없이 13.5→6.0초, 캐시 있을 때 6.6→1.2초",
   "claim": "C-tool-uv"
  },
+ "excluded.build": {
+  "text": "LANG 6초, ZK 약 18초",
+  "claim": "C-excluded"
+ },
+ "excluded.eval": {
+  "text": "6.1초",
+  "claim": "C-excluded"
+ },
+ "excluded.harvest": {
+  "text": "219MB를 2.2초",
+  "claim": "C-excluded"
+ },
  "self.muts": {
-  "text": "변이 7개",
+  "text": "변이 64개",
   "claim": "C-self-muts"
  }
 }

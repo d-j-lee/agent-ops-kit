@@ -869,7 +869,8 @@ class SecretScanTests(unittest.TestCase):
                      "child: session_0" + "1AbCdEfGhIjKlMnOpQrStUv" + "\n"
                      "env: cse_" + "0AbCdEfGhIjKlMnOpQ" + "\n"
                      "task: trig_" + "01AbCdEfGhIjKlMnOp" + "\n"
-                     "page: https://claude.ai/" + "artifact/" + "3f2a9c1e-77aa-4b1c" + "\n",
+                     "page: https://claude.ai/" + "artifact/" + "3f2a9c1e-77aa-4b1c" + "\n"
+                     "shared: https://claude.ai/" + "public/artifacts/" + "3f2a9c1e-77aa-4b1c-9d0e-1a2b3c4d5e6f" + "\n",
                      encoding="utf-8")
         code, out, _ = run_script("secret_scan", f)
         self.assertEqual(code, 0)
@@ -878,6 +879,7 @@ class SecretScanTests(unittest.TestCase):
         self.assertIn(":3: claude_cse_id (warn)", out)
         self.assertIn(":4: claude_trigger_id (warn)", out)
         self.assertIn(":5: claude_artifact_url (warn)", out)
+        self.assertIn(":6: claude_artifact_url (warn)", out)  # the public share-link form
 
     def test_allow_marker(self):
         f = self.base / "a.md"

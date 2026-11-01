@@ -34,12 +34,12 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
         <div class="q reg"><span class="tag">회귀검증</span><span class="ask">고친 뒤에도 전에 되던 것이 되는가?</span><p>바꾸기 전에 성립하던 것이 바꾼 뒤에도 성립하는지 반복해 확인합니다.</p></div>
       </div>
       <ul class="legend" aria-label="근거 등급 (AOK §2.1)">
-        <li><span class="g g-ok">확인</span> 직접 실행·측정, 다시 돌릴 수 있는 근거</li>
+        <li><span class="g g-ok">확인</span> 직접 실행·측정. 다시 실행하거나 조회할 수 있는 근거(ref)가 있어야 한다</li>
         <li><span class="g g-der">도출</span> 확인된 값에서 계산</li>
         <li><span class="g g-inf">추론</span> 판단이 들어감</li>
         <li><span class="g g-unk">미확인</span> 확인하지 못함</li>
         <li><span class="g g-rec">기록됨</span> 다른 세션·에이전트의 기록</li>
-        <li><span class="g g-doc">문서</span> 외부 문서·논문에 그렇게 적혀 있음</li>
+        <li><span class="g g-doc">문서</span> 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. 그 내용이 맞다는 확인은 아니다(D29)</li>
       </ul>
       <nav class="toc-mobile" aria-label="목차">
         <ol>
@@ -125,7 +125,7 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
             <tr><th scope="row">교차검증</th><td>① L1 블라인드 + 판정자, 관제탑 v2 사다리 V2·V4</td><td><code>/aok-verify</code>, 서브에이전트 <code>verifier</code>·<code>adjudicator</code></td><td>{{doc:docs/patterns/brd.md}}</td></tr>
             <tr><th scope="row">적대적 검증</th><td>① L0 검토, L1 "반례 탐색" 렌즈, ④ reviewer</td><td><code>/aok-verify</code>, <code>/aok-loop</code></td><td>{{doc:docs/patterns/loop.md}}</td></tr>
             <tr><th scope="row">재현</th><td>① L2, ③ 클린룸, v2 V3</td><td><code>/aok-cleanroom</code></td><td>{{doc:docs/patterns/cleanroom.md}}</td></tr>
-            <tr><th scope="row">회귀검증</th><td>⑦ 회귀 고정(제안 D19)</td><td><code>/aok-regress</code>, <code>scripts/diffcheck.py</code>, <code>scripts/vacuity_check.py</code></td><td>{{doc:docs/patterns/regression.md}} · <a href="regression.html">안내</a></td></tr>
+            <tr><th scope="row">회귀검증</th><td>⑦ 회귀 고정(D25)</td><td><code>/aok-regress</code>, <code>scripts/diffcheck.py</code>, <code>scripts/vacuity_check.py</code></td><td>{{doc:docs/patterns/regression.md}} · <a href="regression.html">안내</a></td></tr>
             <tr><th scope="row">근거 등급</th><td>§2.1 근거 규약, 여섯 등급</td><td>모든 주장</td><td>{{doc:schemas/claim.schema.json}}</td></tr>
           </tbody>
         </table>
@@ -140,26 +140,27 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
           <thead><tr><th scope="col">단계</th><th scope="col">검증자</th><th scope="col">방식</th><th scope="col">찾은 것</th><th scope="col">대표 사례</th></tr></thead>
           <tbody>
             <tr><th scope="row">0 · 자기 검증</th><td>작성자</td><td>전체 게이트 통과, 훅 시나리오 7개, shellcheck</td><td>"전달 가능"으로 판단</td><td>—</td></tr>
-            <tr><th scope="row">1 · 적대적</th><td>새 서브에이전트, 코드와 공격 범위만 받음(작성자 결론 없음)</td><td>저장소 사본에서 공격 실험</td><td class="num">{{fig:r1.counts}}</td><td>턴 중에 커밋하면 종료 게이트 통과 · 해시 도구가 없으면 게이트가 꺼짐 · 브리지가 모든 검사 밖 · 자동 허용 규칙에 걸리는 <code>cargo test --config</code> 형태로 임의 명령 실행 가능</td></tr>
-            <tr><th scope="row">2 · 회귀 재검증</th><td>1과 같은 서브에이전트(발견 목록 보유)</td><td>발견마다 같은 실험을 다시 + 수정이 만든 회귀 탐색</td><td class="num">{{fig:r2.counts}}</td><td>고친 포맷 훅이 이식한 저장소에서 거짓 오류를 냄(1라운드 수정이 만든 회귀)</td></tr>
-            <tr><th scope="row">3 · 적대적</th><td>새 서브에이전트, 앞 라운드 발견 목록은 받지 않음</td><td>최신 변경에 집중, 시간 제한 요청</td><td class="num">{{fig:r3.counts}}</td><td>빈 저장소에서 첫 커밋을 하면 게이트 우회(2라운드 수정이 만든 회귀) · 정책 검사 회귀 · 공허한 테스트 1개 더</td></tr>
+            <tr><th scope="row">1 · 적대적</th><td>새 서브에이전트, 코드와 공격 범위만 받음(작성자 결론 없음)</td><td>저장소 사본에서 공격 실험</td><td class="num">{{fig:r1.counts}}</td><td>게이트를 우회하는 경로 · 검사 도구가 없을 때 열리는 실패(fail-open) · 검사 범위 밖의 코드 · 권한 규칙의 빈틈</td></tr>
+            <tr><th scope="row">2 · 회귀 재검증</th><td>1과 같은 서브에이전트(발견 목록 보유)</td><td>발견마다 같은 실험을 다시 + 수정이 만든 회귀 탐색</td><td class="num">{{fig:r2.counts}}</td><td>1라운드 수정이 만든 회귀(거짓 오류)</td></tr>
+            <tr><th scope="row">3 · 적대적</th><td>새 서브에이전트, 앞 라운드 발견 목록은 받지 않음</td><td>최신 변경에 집중, 시간 제한 요청</td><td class="num">{{fig:r3.counts}}</td><td>기준이 없는 상태에서의 게이트 우회(2라운드 수정이 만든 회귀) · 정책 검사 회귀 · 공허한 테스트 1개 더</td></tr>
             <tr><th scope="row">팩트체크</th><td>새 서브에이전트</td><td>가이드의 주장을 출처와 대조 + 과장 탐지</td><td class="num">{{fig:fc.counts}}</td><td>설문 비율의 모집단을 잘못 씀(응답자 기준을 조직 기준으로)</td></tr>
+            <tr><th scope="row">6 · ① T2</th><td>이 키트의 PR #4에 L1 둘(결론 없이) + L0 둘 + 판정자</td><td>결론을 숨긴 패킷과 카나리, 반박은 양쪽 근거를 다시 실행해 해소</td><td class="num">{{fig:pr4.counts}}</td><td>검증자만 찾은 것 {{fig:pr4.only}}, 그중 작성자 근거가 재현되지 않은 {{fig:pr4.wrong}}. 회귀 도구 자신의 거짓 통과, 수치 규칙이 빌드에 없음</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="note">검증 서브에이전트 한 번마다 작업 완료 알림에 표시된 토큰은 {{fig:rounds.tokens}}, 실행 시간은 {{fig:rounds.time}}이었습니다. "공허한 테스트"는 보호 장치를 지워도 통과하는 테스트를 말합니다. 3라운드의 중간 3건은 고친 뒤 실패→통과 테스트로 확인했지만 새 검증 라운드는 돌리지 않았습니다. 아래 "멈출 때" 기준대로라면 한 번 더 새 눈으로 보거나, 남은 위험을 밝히고 사람에게 수용 여부를 물었어야 하는 경우입니다.</p>
+      <p class="note">대표 사례는 부류만 적습니다. 공개 레포에 개별 공격 형태를 남기지 않기 위해서입니다. 1~3라운드와 팩트체크에서 검증 서브에이전트 한 번마다 작업 완료 알림에 표시된 토큰은 {{fig:rounds.tokens}}, 실행 시간은 {{fig:rounds.time}}이었습니다. "공허한 테스트"는 보호 장치를 지워도 통과하는 테스트를 말합니다. 3라운드의 중간 3건은 고친 뒤 실패→통과 테스트로 확인했지만 새 검증 라운드는 돌리지 않았습니다. 아래 "멈출 때" 기준대로라면 한 번 더 새 눈으로 보거나, 남은 위험을 밝히고 사람에게 수용 여부를 물었어야 하는 경우입니다.</p>
       <div class="obs">
         <div class="ob"><h3>자기 검증은 "완료"라고 했다</h3><p>게이트를 통과하고 시나리오 테스트까지 돌린 뒤였는데도, 분리된 적대적 검증이 {{fig:r1.high}}을 찾았습니다. 네 건 모두 작성자가 미리 적어 둔 시나리오 목록에 없던 경로였습니다.</p></div>
         <div class="ob"><h3>수정은 회귀를 만든다</h3><p>2라운드와 3라운드 모두 직전 수정이 만든 회귀를 찾았습니다. 수정 라운드 뒤의 회귀검증은 선택 사항이 아닙니다. AOK에서는 ⑦을 ④의 라운드마다 붙입니다.</p></div>
         <div class="ob"><h3>회귀 테스트도 검증해야 한다</h3><p>수정마다 만든 회귀 테스트 중 {{fig:vacuous.total}}가 아무것도 증명하지 못했습니다. 보호 장치를 일부러 지운 변형으로 돌려 테스트가 실제로 실패하는지 보는 도구가 <code>scripts/vacuity_check.py</code>입니다.</p></div>
         <div class="ob"><h3>검증 환경도 거짓말을 한다</h3><p>테스트용 사본과 원본이 빌드 디렉터리를 공유하자, 원본 검증이 사본에서 빌드된 산출물과 경고를 재사용했습니다. 거짓 통과도 거짓 실패도 날 수 있고, 2라운드에서는 거짓 실패가 실제로 재현됐습니다. 검증은 격리된 사본에서, 사본마다 따로 빌드해야 합니다.</p></div>
-        <div class="ob"><h3>같은 검증자와 새 검증자는 역할이 다르다</h3><p>같은 검증자는 발견 목록을 들고 있어 수정 확인이 빠르고 정확했습니다. 새 검증자는 앞 라운드가 보지 못한 회귀를 찾았습니다. 둘 다 필요합니다 <span class="g g-inf">추론</span>.</p></div>
+        <div class="ob"><h3>같은 검증자와 새 검증자는 역할이 다르다</h3><p>같은 검증자는 발견 목록을 들고 있어 수정 확인이 빨랐습니다. 새 검증자는 앞 라운드가 보지 못한 회귀를 찾았습니다. 둘 다 필요합니다 <span class="g g-inf">추론</span>.</p></div>
         <div class="ob"><h3>시간 제한은 프롬프트로 지켜지지 않는다</h3><p>3라운드 검증자에게 한 시간 안쪽을 요청했지만 {{fig:timebox}}이 걸렸습니다. 비용 상한이 중요하면 중간에 확인하고 직접 멈춥니다 <span class="g g-inf">추론</span>.</p></div>
         <div class="ob"><h3>높음은 빠르게 줄었다</h3><p>새로 찾은 높음은 {{fig:trend.high}}, 중간은 {{fig:trend.mid}}이었습니다. 다만 2라운드에는 {{fig:trend.partial}}이 남아 있었습니다. 새 발견이 줄어드는 만큼 라운드의 비용 대비 효과도 줄어, 멈출 기준이 필요합니다(아래 "라운드와 멈출 때").</p></div>
       </div>
       <div class="prose">
-        <p>공개 레포 핫스팟 작업에서도 같은 원칙으로 회귀를 막았습니다 <span class="g g-ok">확인</span>. work-atlas 지연 패치는 수정 전후의 훅 출력, 기존 테스트 {{fig:wa.tests}}, 같은 기준 시각으로 지은 모델 파일(바이트)이 모두 같았습니다. Rust로 옮긴 유사도 질의는 Python 원본과 {{fig:sim.same}} 결과가 같았습니다. 같은 입력을 두 구현에 넣고 결과를 비교하는 이 방식을 차분 검증(differential testing)이라고 부르며, 리팩터링과 언어 이식에서 가장 싼 회귀검증입니다. <a href="cases.html">적용 사례</a></p>
-        <p>그 결과물과 이 플레이북에도 분리된 적대적 검증을 붙였습니다. {{fig:r4.counts}}이 나왔는데, 그중 셋이 회귀검증 자체의 허점이었습니다. 고친 뒤 같은 검증자가 실험으로 다시 확인했습니다. 그 허점들이 ⑦ 회귀 고정의 출발점입니다. <a href="regression.html">회귀 고정</a></p>
+        <p>공개 레포 핫스팟 작업에서도 같은 원칙으로 회귀를 막았습니다. work-atlas 지연 패치는 수정 전후의 훅 출력과 같은 기준 시각으로 지은 모델 파일이 바이트 단위로 같았고 {{grade:C-wa-hooks}}, 기존 테스트 {{fig:wa.tests}}도 통과했습니다. Rust로 옮긴 유사도 질의는 Python 원본과 {{fig:sim.same}} 결과가 같았습니다. 같은 입력을 두 구현에 넣고 결과를 비교하는 이 방식을 차분 검증(differential testing)이라고 부르며, 리팩터링과 언어 이식에서 가장 싼 회귀검증입니다. <a href="cases.html">적용 사례</a></p>
+        <p>그 결과물과 이 플레이북에도 분리된 적대적 검증을 붙였습니다. {{fig:r4.counts}}이 나왔는데, 그중 셋이 회귀검증 자체의 허점이었습니다. 고친 뒤 같은 검증자가 실험으로 다시 확인했습니다. 그 허점들이 ⑦ 회귀 고정의 출발점입니다. 그리고 ⑦과 이 안내서를 키트에 넣는 PR에 ① T2를 돌리자, 이번에는 ⑦ 도구 자신이 속는 경우와 안내서의 수치 규칙이 빌드에 없다는 것이 나왔습니다(위 표 6). 검증 장치도 검증해야 한다는 같은 교훈입니다. <a href="regression.html">회귀 고정</a></p>
       </div>
     </section>
 

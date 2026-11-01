@@ -328,6 +328,8 @@ section { scroll-margin-top: 72px; }
 .g-unk { color: var(--unk); background: var(--unk-soft); }
 .g-rec { color: var(--reg); background: var(--reg-soft); }
 .g-doc { color: var(--cross); background: var(--cross-soft); }
+a.g { text-decoration: none; }
+a.g:hover, a.g:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; }
 a.fig { color: inherit; text-decoration: underline dotted var(--faint); text-underline-offset: 4px; font-variant-numeric: tabular-nums; }
 a.fig:hover, a.fig:focus-visible { text-decoration-color: var(--accent); outline: none; }
 .evidence { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 40px; display: grid; gap: 12px; }

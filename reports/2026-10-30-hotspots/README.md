@@ -1,51 +1,58 @@
-# 재현 자료 — 공개 레포 핫스팟 (2026-10-29~31)
+# 재현 자료 — 공개 레포 핫스팟 (2026-10-29~11-01)
 
 [`../2026-10-30-hotspots.md`](../2026-10-30-hotspots.md)의 수치를 다시 재는 자료다. 키트 기능이 아니라 이력의 일부다. 새 비교는 이 폴더의 측정 스크립트보다 `scripts/diffcheck.py`(⑦)를 쓴다.
 
-| 폴더 | 무엇 |
+| 경로 | 무엇 |
 |---|---|
-| `work-atlas/` | 훅 지연 패치(`hook-latency.patch`, 같은 내용이 work-atlas PR #1) · 처음 쓴 측정 스크립트(`bench-hooks.sh`, 번갈아 측정 · 새 세션 ID · 빈 출력 검사) |
-| `atlas-sim/` | work-atlas 유사도 질의의 Rust 이식과 Python 기준(`py_sim.py`), 비교 스크립트(`bench-sim.sh`) |
+| `logs/` | 2026-11-01에 아래 절차로 다시 잰 원자료. 허브 수치 레지스트리(`site/claims.json`)의 [확인]이 가리키는 곳이다 |
+| `work-atlas/` | 훅 지연 패치(`hook-latency.patch`, 같은 내용이 work-atlas PR #1) · `measure.sh`(훅, ⑦ 도구로) · `measure-build.sh`(전체 빌드) · 처음 쓴 측정 스크립트 `bench-hooks.sh`(이력) |
+| `atlas-sim/` | work-atlas 유사도 질의의 Rust 이식과 Python 기준(`py_sim.py`), 비교 스크립트(`bench-sim.sh`), 저장한 질의(`queries/`) |
 | `docbench-diff/` | docbench `lineDiff`의 Rust 이식(네이티브 + WASM)과 jsdiff 비교 벤치 |
 | `tooling/` | ruff · oxlint · uv 도입 설정과 측정 |
+
+## 공통 준비
+
+아래 변수 이름을 각 절의 명령과 허브 레지스트리의 근거 명령이 그대로 쓴다.
+
+```bash
+git clone https://github.com/apache/commons-lang.git && git clone https://github.com/apache/zookeeper.git
+git clone https://github.com/d-j-lee/work-atlas.git wa && git -C wa fetch origin pull/1/head:pr1
+git -C wa worktree add --detach ../wa-base 10011b6 && git -C wa worktree add --detach ../wa-cand 49e4fbe
+python3 -m venv venv && venv/bin/pip install orjson==3.13.0 pyyaml jsonschema
+export AOK=$PWD/agent-ops-kit PY=$PWD/venv/bin/python3 WA_BASE=$PWD/wa-base WA_CAND=$PWD/wa-cand \
+       INST=$PWD/inst REPO_LANG=$PWD/commons-lang REPO_ZK=$PWD/zookeeper OUT=$PWD/logs
+# 인스턴스 inst/lang, inst/zk 의 atlas.toml 은 work-atlas EVALUATION.md "재현" 절의 형식 그대로
+for i in lang zk; do $PY -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from atlas.__main__ import main; raise SystemExit(main(sys.argv[2:]))' \
+  $WA_BASE collect all --root $INST/$i; done
+for i in lang zk; do $PY -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from atlas.__main__ import main; raise SystemExit(main(sys.argv[2:]))' \
+  $WA_BASE build --root $INST/$i --as-of 2026-10-29T00:00:00+00:00 --no-llm; done   # 기준 시각을 고정해야 바이트 비교가 된다
+```
 
 ## work-atlas
 
 ```bash
-git clone https://github.com/apache/commons-lang.git && git clone https://github.com/apache/zookeeper.git
-python -m venv .venv && . .venv/bin/activate && pip install -e <work-atlas> orjson
-# inst/zk/atlas.toml 은 work-atlas EVALUATION.md "재현" 절의 형식 그대로
-atlas collect all --root inst/zk
-atlas build --root inst/zk --as-of 2026-10-29T00:00:00+00:00 --no-llm     # 기준 시각을 고정해야 바이트 비교가 된다
-cp -r <work-atlas> /tmp/wa-patched && git -C /tmp/wa-patched apply $PWD/work-atlas/hook-latency.patch
+bash $AOK/reports/2026-10-30-hotspots/work-atlas/measure.sh         # → $OUT/hooks.txt
+bash $AOK/reports/2026-10-30-hotspots/work-atlas/measure-build.sh   # → $OUT/build.txt
 ```
 
-⑦ 도구로 비교한다. 이벤트 파일의 `session_id`에 `{nonce}`를 넣으면 실행마다 새 세션이 된다(같은 ID를 다시 쓰면 편집 훅이 아무것도 내지 않는다).
-
-```bash
-R=<zookeeper 경로>
-printf '{"hook_event_name":"PostToolUse","session_id":"dc-{nonce}","cwd":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/zookeeper-server/src/main/java/org/apache/zookeeper/server/quorum/Leader.java"}}' $R $R > edit.json
-hook() { printf '%s -I -c "import sys; sys.path.insert(0, sys.argv[1]); from atlas.hook import main; raise SystemExit(main([\\"--root\\", sys.argv[2]]))" %s inst/zk' .venv/bin/python3 "$1"; }
-python3 -I <agent-ops-kit>/scripts/diffcheck.py --base "$(hook <work-atlas>)" --cand "$(hook /tmp/wa-patched)" \
-  --stdin edit.json --determinism --timing 11
-```
-
-프롬프트 훅은 `{"hook_event_name":"UserPromptSubmit","session_id":"dc-{nonce}","cwd":"<R>","prompt":"ZOOKEEPER-4990 고쳐줘"}`. 빌드 비교는 원본·패치로 인스턴스 사본을 하나씩 같은 `--as-of`로 지은 뒤 `data/model/` 파일을 `cmp`한다. `build.json`(경로·시간)과 `catalog.json`(`built_at`)은 원래 실행마다 다르다.
+- `measure.sh`는 훅 4종(편집·프롬프트 × LANG·ZK)을 `diffcheck --determinism --timing 21`로 두 번씩 재고, 기준끼리의 A/A 한 번, 같은 세션 ID를 다시 쓰는 함정 두 번을 남긴다. 이벤트의 `session_id`는 `dc-{nonce}`라 실행마다 새 세션이다.
+- 훅 명령은 `$PY -I -c "<atlas.hook main>" <코드 경로> <인스턴스>` 꼴이고, 시작할 때 import한 `atlas`가 그 코드 경로의 것인지 단언한다(설치된 다른 판을 조용히 쓰지 않게).
+- `measure-build.sh`는 인스턴스 사본 두 개를 원본·패치로 같은 `--as-of`에 번갈아 3회 지어 시간과 `data/model/` 파일 5개의 바이트 동일성을 보고, `--as-of` 없이 두 번 지어 `categories.json`이 어느 필드에서 달라지는지 본다. `build.json`(경로·시간)과 `catalog.json`(`built_at`)은 원래 실행마다 다르다. 실패한 빌드는 시간 대신 `FAIL`로 찍힌다.
 
 ## atlas-sim
 
 ```bash
-cd atlas-sim && cargo build --release
-WORK_ATLAS=<work-atlas> PY=<venv>/bin/python3 ./bench-sim.sh <inst>/data/model/text_index.json wu:issue:ZOOKEEPER-4990 query.txt 11
+cd $AOK/reports/2026-10-30-hotspots/atlas-sim && cargo build --release
+for i in lang zk; do WORK_ATLAS=$WA_CAND ./bench-sim.sh $INST/$i/data/model/text_index.json - queries/$i.txt 11; done   # → logs/…-sim.txt
 ```
 
-첫 줄은 Python(표준 json · orjson)과 Rust의 상위 200개가 같은지, 다음 두 줄은 프로세스 전체와 프로세스 안(색인 읽기 + postings + 질의) 시간의 중앙값이다. 두 시간의 차이가 Python 기동·import 몫이다. 점수는 Python `round(x, 4)`와 같은 방식(정확한 10진 반올림)으로, JSON 실수는 serde_json `float_roundtrip`으로 읽는다. `WORK_ATLAS`가 없거나 틀리면 설치된 다른 판을 쓰지 않고 멈춘다.
+첫 줄은 Python(표준 json · orjson)과 Rust의 상위 200개가 같은지, 다음 두 줄은 프로세스 전체와 프로세스 안(색인 읽기 + postings + 질의) 시간의 중앙값이다. 두 시간의 차이가 Python 기동·import 몫이다. 점수는 Python `round(x, 4)`와 같은 방식(정확한 10진 반올림)으로, JSON 실수는 serde_json `float_roundtrip`으로 읽는다. `WORK_ATLAS`가 없거나 틀리면 설치된 다른 판을 쓰지 않고 멈춘다. 10-30의 합성 다국어 질의 13종과 반올림 경계 값 색인은 남기지 않았다.
 
 ## docbench-diff
 
 ```bash
-cd docbench-diff && npm init -y && npm i diff@9.0.0
-cat <work-atlas>/*.md <docbench>/*.md <docbench>/docs/*.md <dj-assis>/*.md > base_all.md   # 4,334줄
+cd $AOK/reports/2026-10-30-hotspots/docbench-diff && npm init -y && npm i diff@9.0.0
+cat $WA_BASE/*.md docbench/*.md docbench/docs/*.md dj-assis/*.md > base_all.md   # 공개 레포 3곳, 4,334줄
 node mkcases.mjs && node bench.mjs 1000 2000 4334            # jsdiff (docbench lineDiff 그대로)
 cargo run --release --bin docdiff-bench -- . 1000 2000 4334  # Rust 네이티브 + 원문 복원 검증
 cargo build --release --lib --target wasm32-unknown-unknown
@@ -53,4 +60,10 @@ node bench-wasm.mjs target/wasm32-unknown-unknown/release/docdiff.wasm 1000 2000
 node split.mjs 4334 && node caps.mjs                          # 시간 구성, jsdiff timeout·maxEditLength
 ```
 
-"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다.
+"heavy" 시나리오는 빈 줄이 아닌 줄의 약 40%를 글자 순서를 뒤집은 글로 바꾼다(`mkcases.mjs`, 시드 고정). 영어 낱말은 거의 겹치지 않고, 한글은 같은 글자 토큰이 순서만 뒤집혀 남는다. `bench-wasm.mjs`가 비교하는 것은 더한·지운 줄 수와 줄 목록(종류·글자)까지다. 낱말 강조 위치는 비교하지 않는다. 11-01 로그의 `base_all.md`는 10-30에 이어 붙인 파일 그대로다(sha256 앞 12자리가 로그 머리에 있다).
+
+## tooling
+
+```bash
+cd $WA_BASE && uvx ruff@0.17.3 check --no-cache --select F,B,E9,PLE --statistics atlas tests
+```
