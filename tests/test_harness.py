@@ -466,6 +466,15 @@ class RustAdapterTests(Harness):
         self.assertIn("hook stop", log)
         self.assertIn('"session_id": "s1"', log)
 
+    def test_verify_delegates_to_fsmap(self):
+        self.rust_repo()
+        record = self.tmp / "fsmap.log"
+        self.stub("fsmap", f'echo "$*" >> {record}\ncase "$*" in "hook --help") exit 0;; esac\nexit 1\n')
+        code, out = self.verify("--mode", "full", "--json", "--base", "HEAD")
+        self.assertEqual(code, 1, out)  # fsmap's own exit code: 0 pass, 1 fail, 2 cannot run
+        self.assertIn("verify --mode full --json", record.read_text())
+        self.assertIn("--base chose the adapter only", out)
+
     def test_old_fsmap_without_hook_falls_back(self):
         self.rust_repo()
         self.stub("fsmap", 'case "$*" in "hook --help") echo "unknown command hook" >&2; exit 2;; esac\necho \'{"decision": "block", "reason": "should not be asked"}\'\n')
@@ -492,6 +501,40 @@ class RustAdapterTests(Harness):
         self.start()
         self.write("src/lib.rs", "#[allow(dead_code)]\npub fn f() {}\n")
         self.assertIn("src/lib.rs: allow-attribute ×1", self.stop()["systemMessage"])
+
+
+@unittest.skipUnless(os.environ.get("AOK_FSMAP"), "set AOK_FSMAP to a built fsmap (d-j-lee/filesystemMap) to run")
+class RealFsmapTests(Harness):
+    """The Rust adapter against a real fsmap, not a stub: the hooks and verify are handed over and fsmap's exit
+    codes come back unchanged."""
+
+    def setUp(self):
+        super().setUp()
+        self.assertIsNotNone(shutil.which("cargo"), "AOK_FSMAP is set, so cargo must be there too")  # fail, never skip
+        (self.bin / "fsmap").symlink_to(Path(os.environ["AOK_FSMAP"]).resolve())
+        home = Path(os.environ.get("HOME", "/root"))
+        self.env.update(PATH=f"{self.bin}:{Path(shutil.which('cargo')).parent}:/usr/bin:/bin",
+                        CARGO_HOME=os.environ.get("CARGO_HOME", str(home / ".cargo")),
+                        RUSTUP_HOME=os.environ.get("RUSTUP_HOME", str(home / ".rustup")))
+        self.write("Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\nedition = "2021"\n')
+        self.write("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n")
+        subprocess.run(["cargo", "generate-lockfile", "--offline"], cwd=self.repo, env=self.env, check=True,
+                       capture_output=True)
+        self.git("init", "-q", "-b", "main")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "init")
+
+    def test_hooks_and_verify_go_to_real_fsmap(self):
+        ctx = self.start()["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("fsmap", ctx)
+        self.assertNotIn("[aok-harness]", ctx)
+        self.assertTrue((self.repo / ".git" / "hooks" / "pre-push").is_file(), "fsmap's session start installs it")
+        code, out = self.verify("--mode", "quick", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["mode"], "quick")
+        self.write("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 {\n    a +  b\n}\n")  # not rustfmt-clean
+        code, out = self.verify("--mode", "quick")
+        self.assertEqual(code, 1, out)
 
 
 class InstallTests(Harness):

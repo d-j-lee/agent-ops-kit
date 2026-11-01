@@ -17,7 +17,7 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 3. 계획(복사할 파일, `.aok/harness.json`, 리뷰어 `.claude/agents/aok-reviewer.md`, `.claude/settings.json`에 더할 훅 다섯 개와 `.aok/`·`.claude/` 편집 시 `ask`)을 사용자에게 보이고 확인을 받는다(S4: settings 변경).
 4. 확인을 받은 뒤에만 `--yes`로 다시 돌린다. 기존 설정은 보존되고, 두 번 돌려도 훅이 겹치지 않는다.
 5. 커밋하고 PR로 올린다. 병합이 곧 사람 확인이다. 훅은 다음 세션부터 돈다.
-6. 첫 세션 맥락이 `[aok-harness] adapter …`로 시작하는지 본다. `[aok-harness] OFF: …`면 3절.
+6. 첫 세션 맥락이 `[aok-harness] adapter …`(Rust를 fsmap에 맡기면 `[harness] fsmap … hooks are active`)로 시작하는지 본다. `[aok-harness] OFF: …`면 3절.
 7. CI에는 기존 단계를 그대로 두고, 기준 브랜치의 정의로 도는 잡을 더한다.
    ```
    git fetch origin main
@@ -41,7 +41,7 @@ description: AOK ⑧ 작업 레포 하네스(docs/patterns/harness.md) 런북. �
 - **게이트가 매 턴 너무 오래 걸림**: `.aok/harness.json`의 `gate.quick`을 줄이고 full은 CI에 둔다. 정의 변경은 PR로(사람 확인).
 - **선택 도구가 없음**(예: ruff): 그 단계는 건너뛰고 세션에 한 번 알린다. 필수 도구가 없으면 실행 불가로 막는다.
 - **상태**: `<git-dir>/aok-harness/session-<id>.json`(기준, 막힘 횟수, 마지막 통과 지문), `log.jsonl`. git이 없으면 XDG 상태 디렉터리.
-- **Rust**: `fsmap`이 `PATH`에 있고 `fsmap hook --help`가 되면 모든 훅과 verify를 fsmap(1회차 구현)에 넘긴다. 없으면 기본 cargo 단계로 돌고 세션 시작 때 그 차이를 알린다.
+- **Rust**: `fsmap`이 `PATH`에 있고 `fsmap hook --help`가 되면 모든 훅과 verify를 fsmap(1회차 구현)에 넘긴다. 그때는 fsmap이 git `pre-push` 훅을 설치하고, 게이트 정의를 작업 트리에서 읽어 무결성 단계로 본다(`--base`는 어댑터 선택에만 쓰인다). 없으면 기본 cargo 단계로 돌고 세션 시작 때 그 차이를 알린다.
 
 ## 4. 새 언어 어댑터
 

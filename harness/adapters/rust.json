@@ -7,6 +7,7 @@
     "hook": ["fsmap", "hook", "{event}"],
     "events": {"session-start": "session-start", "post-edit": "post-edit", "stop": "stop", "prompt": "prompt", "pre-bash": "pre-bash"},
     "verify": ["fsmap", "verify", "--mode", "{mode}"],
+    "json": ["--json"],
     "note": "fsmap (d-j-lee/filesystemMap) is the first-round Rust harness: integrity checks of cargo/rustfmt/clippy/toolchain config, environment cleanup, git pre-push verification and audit. When it is installed, every hook and verify is handed to it."
   },
   "versions": [["rustc", "--version"], ["cargo", "--version"], ["cargo", "clippy", "--version"]],

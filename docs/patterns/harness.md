@@ -41,7 +41,7 @@ AOK의 다른 기능은 허브와 세션의 층에서 돈다. ⑧은 자식(dev)
 
 1. **사람 확인(S4).** `.claude/settings.json`을 바꾸는 일이다. 허브는 `install --repo <경로> --adapter <이름>`을 `--yes` 없이 돌려 계획을 보이고, 사용자 확인을 받은 뒤 `--yes`로 다시 돌린다.
 2. 설치가 하는 일: `.aok/harness/`에 코어와 어댑터를 복사, `.aok/harness.json`(`{"adapter": "<이름>"}`)이 없으면 작성, `.claude/agents/aok-reviewer.md`(적대적 리뷰어)가 없으면 작성, `.claude/settings.json`에 훅 다섯 개와 `.aok/`·`.claude/` 편집 시 묻기(`ask`)를 더한다. 기존 설정은 보존하고, 두 번 돌려도 훅이 겹치지 않는다.
-3. 커밋하고 PR로 올린다. 훅은 다음 세션부터 적용된다. 첫 세션의 맥락이 `[aok-harness] adapter …`로 시작하는지 본다.
+3. 커밋하고 PR로 올린다. 훅은 다음 세션부터 적용된다. 첫 세션의 맥락이 `[aok-harness] adapter …`(Rust를 fsmap에 맡기면 `[harness] fsmap … hooks are active`)로 시작하는지 본다.
 4. CI에는 기존 단계를 그대로 두고(정본 게이트), 기준 브랜치의 정의로 도는 잡을 더한다. PR이 고친 정의가 아니라 기준 브랜치의 정의로 판정하기 위해서다:
    ```bash
    git fetch origin main
@@ -56,7 +56,12 @@ AOK의 다른 기능은 허브와 세션의 층에서 돈다. ⑧은 자식(dev)
 | `python` | 컴파일(바이트코드를 쓰지 않음), ruff(선택) | ruff 버그 계열(선택), `unittest discover -s tests` | ruff(레포 설정), 시험 | `noqa`, `type: ignore`, 건너뛴 시험, `pragma: no cover`, 지운 단언 |
 | `rust` | `cargo check` | fmt, clippy `-D warnings`, test | + cargo-deny(선택) | `#[allow(`, `#[ignore]`, `cfg(false)`, `unsafe`, 지운 단언 |
 
-Rust는 fsmap이 `PATH`에 있고 `fsmap hook`을 알면 모든 훅과 `verify`를 fsmap에 넘긴다. fsmap은 cargo·rustfmt·clippy·툴체인 설정의 무결성 검사, 환경 변수 정리, git pre-push 검증과 감사까지 하는 1회차 구현이다. 없으면 위 기본 단계로 돌고, 세션 시작 때 그 차이를 알린다.
+Rust는 fsmap이 `PATH`에 있고 `fsmap hook --help`가 되면 모든 훅과 `verify`를 fsmap에 넘긴다. fsmap은 cargo·rustfmt·clippy·툴체인 설정의 무결성 검사, 환경 변수 정리, git pre-push 검증과 감사까지 하는 1회차 구현이다. 없으면 위 기본 단계로 돌고, 세션 시작 때 그 차이를 알린다.
+
+fsmap에 맡길 때 달라지는 것(fsmap 74b7ffb로 확인):
+- fsmap의 세션 시작 훅은 레포의 git `pre-push` 훅을 설치하고 그 사실을 맥락에 알린다. 클린룸(③) 보고의 SessionStart 출력에 남는다.
+- 게이트 정의는 fsmap이 작업 트리에서 읽고, 정의를 약하게 만드는 설정은 fsmap의 무결성 단계가 본다. `verify --base`는 어댑터를 고르는 데만 쓰이고, 그렇다고 stderr에 알린다.
+- `verify --json`은 fsmap의 `--json` 보고를 그대로 낸다. 종료 코드는 fsmap도 0 통과 · 1 실패 · 2 실행 불가다.
 
 새 언어는 `harness/adapters/<이름>.json` 하나로 더한다: `detect`(이 파일이 있으면 그 언어), `versions`, `env`, `edit.match`·`edit.steps`, `gate.quick`·`gate.full`, `weakening`(`added` 또는 `removed` 정규식), 선택적으로 `delegate`.
 
@@ -77,3 +82,4 @@ Rust는 fsmap이 `PATH`에 있고 `fsmap hook`을 알면 모든 훅과 `verify`�
 | 1회차 | 출발점 세션의 Rust 하네스와 fsmap이 독립 검증 라운드마다 게이트 우회(턴 중 커밋, 첫 커밋, 검사 도구 부재 시 꺼짐)와 공허한 훅 시험을 찾았다 | [기록됨] `reports/2026-10-30-verification-rounds.md`, fsmap `docs/agent-harness.md` |
 | 훅 계약 | 블록·거부·맥락의 JSON 필드(`decision: "block"`·`reason`, `hookSpecificOutput.permissionDecision: "deny"`, `additionalContext`, `systemMessage`), 명령 훅 시간 초과 기본값 600초 | [문서] https://code.claude.com/docs/en/hooks (2026-11-01 조회) |
 | 시험 | `tests/test_harness.py`: 문서화한 동작마다 시험이 있고, 장치를 하나씩 끈 변이(`tests/mutations/harness.json`)마다 지정한 시험이 실패한다. CI가 돌린다 | [확인] `python3 -I scripts/vacuity_check.py --repo . --test "python3 -m unittest tests.test_harness" --mutations tests/mutations/harness.json --jobs 4` |
+| 실제 fsmap | 가짜 실행 파일이 아니라 빌드한 fsmap으로 훅·`verify`가 넘어가고 종료 코드가 그대로 돌아온다. CI의 harness 작업이 고정 커밋을 빌드해 돌린다 | [확인] `cargo install --git https://github.com/d-j-lee/filesystemMap --rev 74b7ffb --locked && AOK_FSMAP="${CARGO_HOME:-$HOME/.cargo}/bin/fsmap" python3 -m unittest tests.test_harness.RealFsmapTests` |

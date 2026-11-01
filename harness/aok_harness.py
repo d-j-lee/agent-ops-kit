@@ -632,7 +632,16 @@ def verify(root: Path, mode: str, as_json: bool, base: str | None = None) -> int
         return 2
     d = delegate(adapter)
     if d and d.get("verify"):
-        return subprocess.run([a.replace("{mode}", mode) for a in d["verify"]], cwd=root).returncode
+        cmd = [a.replace("{mode}", mode) for a in d["verify"]]
+        if as_json:
+            if not d.get("json"):
+                print(f"verify: cannot run: {d['bin']} has no JSON report in the adapter", file=sys.stderr)
+                return 2
+            cmd += d["json"]
+        if base:  # the delegate reads its own gate definition from the work tree
+            print(f"verify: --base chose the adapter only; {d['bin']} checks the work tree's gate settings itself",
+                  file=sys.stderr)
+        return subprocess.run(cmd, cwd=root).returncode
     gate = run_gate(root, adapter, mode, float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
     if as_json:
         print(json.dumps({"adapter": adapter["name"], **gate}, ensure_ascii=False, indent=1))

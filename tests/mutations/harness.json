@@ -316,6 +316,27 @@
  },
  {
   "file": "harness/aok_harness.py",
+  "label": "verify not delegated",
+  "old": "    if d and d.get(\"verify\"):\n        cmd = ",
+  "new": "    if False:\n        cmd = ",
+  "expect": "test_verify_delegates_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "delegated verify drops --json",
+  "old": "            cmd += d[\"json\"]",
+  "new": "            pass",
+  "expect": "test_verify_delegates_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "delegated verify silent about --base",
+  "old": "        if base:  # the delegate reads its own gate definition from the work tree",
+  "new": "        if False:",
+  "expect": "test_verify_delegates_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
   "label": "install writes on a dry run",
   "old": "    if not yes:\n        print(\"dry run",
   "new": "    if False:\n        print(\"dry run",

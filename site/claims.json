@@ -719,7 +719,7 @@
   "id": "C-h8-tests",
   "claim": "⑧ 하네스의 훅 다섯 개, verify, install, Python·Rust 어댑터의 동작 시험이 모두 통과한다.",
   "grade": "확인",
-  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일",
+  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일. 실제 fsmap 시험 1개는 AOK_FSMAP가 없으면 건너뛴다",
   "evidence": [
    {
     "kind": "cmd",
@@ -748,6 +748,18 @@
    {
     "kind": "url",
     "ref": "https://code.claude.com/docs/en/hooks"
+   }
+  ]
+ },
+ {
+  "id": "C-h8-fsmap",
+  "claim": "Rust 어댑터는 빌드한 fsmap에 세션 시작 훅과 verify를 넘기고, fsmap이 git pre-push 훅을 설치하며, verify의 종료 코드(통과 0, rustfmt 위반 1)와 JSON 보고가 그대로 돌아온다.",
+  "grade": "확인",
+  "scope": "fsmap 74b7ffb, cargo 1.99.1, x86_64 Linux, 2026-11-01",
+  "evidence": [
+   {
+    "kind": "cmd",
+    "ref": "cargo install --git https://github.com/d-j-lee/filesystemMap --rev 74b7ffb --locked && AOK_FSMAP=\"${CARGO_HOME:-$HOME/.cargo}/bin/fsmap\" python3 -m unittest tests.test_harness.RealFsmapTests"
    }
   ]
  }

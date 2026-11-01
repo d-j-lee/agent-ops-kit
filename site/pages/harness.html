@@ -90,7 +90,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
             <tr><th scope="row">대상</th><td>Rust 레포 하나</td><td>언어 중립 코어 + Python·Rust 어댑터</td></tr>
             <tr><th scope="row">게이트</th><td>셸 스크립트의 단일 게이트, 이후 fsmap의 <code>verify</code>와 git pre-push 검증·감사</td><td>코어의 <code>verify</code>. 훅·사람·CI가 같은 명령</td></tr>
             <tr><th scope="row">검증에서 나온 것</th><td>라운드마다 게이트 우회와 공허한 훅 시험이 나왔다 {{grade:C-harness-log}}</td><td>그 부류를 수락 기준으로 받아 시험과 변이로 고정했다</td></tr>
-            <tr><th scope="row">관계</th><td>사용자의 Rust CLI(<a href="https://github.com/d-j-lee/filesystemMap" target="_blank" rel="noopener">d-j-lee/filesystemMap</a>)에 들어가 있다</td><td>Rust 어댑터는 fsmap이 설치돼 있으면 모든 훅과 게이트를 fsmap에 맡긴다</td></tr>
+            <tr><th scope="row">관계</th><td>사용자의 Rust CLI(<a href="https://github.com/d-j-lee/filesystemMap" target="_blank" rel="noopener">d-j-lee/filesystemMap</a>)에 들어가 있다</td><td>Rust 어댑터는 fsmap이 설치돼 있으면 모든 훅과 게이트를 fsmap에 맡긴다. 실제 fsmap으로도 시험한다 {{grade:C-h8-fsmap}}</td></tr>
           </tbody>
         </table>
       </div>
@@ -102,7 +102,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
       <ol class="flow">
         <li><span class="rn">1</span><div><h3>계획을 보인다</h3><p><code>python3 -I harness/aok_harness.py install --repo &lt;작업 레포&gt; --adapter python</code>. <code>--yes</code> 없이는 아무것도 쓰지 않고 계획만 보입니다.</p></div><span class="who">허브</span></li>
         <li><span class="rn">2</span><div><h3>사람이 확인한다</h3><p>레포의 <code>.claude/settings.json</code>을 바꾸는 일이라 S4입니다. 확인을 받은 뒤 <code>--yes</code>로 다시 돌립니다. 기존 설정은 보존되고 두 번 돌려도 훅이 겹치지 않습니다.</p></div><span class="who">사람</span></li>
-        <li><span class="rn">3</span><div><h3>PR로 올린다</h3><p><code>.aok/</code>와 <code>.claude/</code>를 커밋합니다. 훅은 다음 세션부터 돕니다. 첫 세션의 맥락이 <code>[aok-harness] adapter …</code>로 시작하는지 봅니다.</p></div><span class="who">허브 → 사람</span></li>
+        <li><span class="rn">3</span><div><h3>PR로 올린다</h3><p><code>.aok/</code>와 <code>.claude/</code>를 커밋합니다. 훅은 다음 세션부터 돕니다. 첫 세션의 맥락이 <code>[aok-harness] adapter …</code>(Rust를 fsmap에 맡기면 <code>[harness] fsmap …</code>)로 시작하는지 봅니다.</p></div><span class="who">허브 → 사람</span></li>
         <li><span class="rn">4</span><div><h3>CI에 기준 정의 잡</h3><p>기존 단계는 그대로 두고 <code>verify --mode full --base origin/main</code> 잡을 더합니다. PR이 고친 정의가 아니라 기준 브랜치의 정의로 판정합니다.</p></div><span class="who">허브</span></li>
       </ol>
       <p class="note">규범: {{doc:docs/patterns/harness.md}} · 실행 순서: {{doc:.claude/skills/aok-harness/SKILL.md}} · 코드: {{doc:harness/aok_harness.py}}</p>
@@ -122,7 +122,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
     <section id="self">
       <h2>자기 시험</h2>
       <div class="prose">
-        <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작마다 시험이 있고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. 기준을 작업 트리에서 읽게 하기, 실행 불가를 통과로 치기, 첫 커밋을 세지 않기, 푸시 거부를 끄기처럼 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
+        <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작마다 시험이 있고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. Rust 위임은 가짜 실행 파일에 더해 고정 커밋으로 빌드한 fsmap으로도 시험합니다 {{grade:C-h8-fsmap}}. 기준을 작업 트리에서 읽게 하기, 실행 불가를 통과로 치기, 첫 커밋을 세지 않기, 푸시 거부를 끄기처럼 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
       </div>
       <footer class="pagefoot">2026-11-01 작성. ⑧을 들이는 결정은 D26이다: {{doc:docs/proposals/regression-harness-hub.md}}</footer>
     </section>

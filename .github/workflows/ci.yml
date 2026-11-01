@@ -1,6 +1,6 @@
 # Runs the repo's own checks on every pull request and on main.
 #   checks:  schema/script/site/harness unit tests, the public-repo hygiene scan and the ⑦ mutation self-check (stdlib only)
-#   harness: the ⑧ harness mutation self-check
+#   harness: the ⑧ harness mutation self-check and the Rust adapter against a real fsmap
 #   console: the console's inbox rules in headless Chromium (holdout cases, get_session enrichment, snapshot fallback)
 name: CI
 
@@ -50,6 +50,11 @@ jobs:
           git config --global user.email ci@example.com && git config --global user.name ci
           python -I scripts/vacuity_check.py --repo . --jobs 4 --timeout 600 \
             --test "python -m unittest tests.test_harness" --mutations tests/mutations/harness.json
+      - name: Rust adapter against a real fsmap (pinned commit)
+        # the stubbed tests fix the contract; this checks it against the first-round harness itself
+        run: |
+          cargo install --git https://github.com/d-j-lee/filesystemMap --rev 74b7ffb --locked --root "$RUNNER_TEMP/fsmap"
+          AOK_FSMAP="$RUNNER_TEMP/fsmap/bin/fsmap" python -m unittest tests.test_harness.RealFsmapTests -v
 
   console:
     # Pinned: Playwright 1.56 ships Chromium only for the Ubuntu releases it supports (ubuntu-latest moved to 26.04).
