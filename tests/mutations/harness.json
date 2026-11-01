@@ -968,8 +968,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a pass at push time not recorded",
-  "old": "        save_state(root, session, state)\n        record_passed(target)\n        return 0\n",
-  "new": "        save_state(root, session, state)\n        return 0\n",
+  "old": "        save_state(root, session, state)\n        record_passed(target)\n        return notice(said) if said else 0\n",
+  "new": "        save_state(root, session, state)\n        return notice(said) if said else 0\n",
   "expect": "test_only_commits_the_gate_passed_can_be_pushed"
  },
  {
@@ -1913,7 +1913,7 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a pass at the end of the turn does not record the commit for the pre-push hook",
-  "old": "        if fp is not None and not touched:  # a harness change is a person's to publish: its commit is not recorded\n",
+  "old": "        if fp is not None and (not touched or reported_only):  # under \"refuse\" a person publishes it: not recorded\n",
   "new": "        if False:\n",
   "expect": "test_a_pass_at_the_end_of_the_turn_lets_the_commit_out"
  },
@@ -2102,8 +2102,8 @@
  {
   "file": "harness/aok_harness.py",
   "label": "a commit with a harness change is recorded for the pre-push hook",
-  "old": "        if fp is not None and not touched:  # a harness change",
-  "new": "        if fp is not None:  # a harness change",
+  "old": "(not touched or reported_only)",
+  "new": "(True)",
   "expect": "test_a_harness_change_in_a_worktree_is_a_persons_to_publish"
  },
  {
@@ -2399,5 +2399,40 @@
   "old": "PATH_WORDS = 1000  #",
   "new": "PATH_WORDS = 1  #",
   "expect": "test_a_worktree_a_command_names_a_path_in_is_remembered"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "report mode is ignored at the end of the turn",
+  "old": "        reported_only = cfg.get(\"protected\", \"refuse\") == \"report\"\n",
+  "new": "        reported_only = False\n",
+  "expect": "test_harness_changes_can_be_reported_instead_of_refused"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "report mode is ignored at a push",
+  "old": "    if touched and cfg.get(\"protected\", \"refuse\") == \"refuse\":\n",
+  "new": "    if touched:\n",
+  "expect": "test_harness_changes_can_be_reported_instead_of_refused"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a published harness change is not said",
+  "old": "\"pull request review and CI are its check\" if touched else None)",
+  "new": "\"pull request review and CI are its check\" if False else None)",
+  "expect": "test_harness_changes_can_be_reported_instead_of_refused"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "any protected policy is accepted",
+  "old": "    if \"protected\" in cfg and cfg[\"protected\"] not in PROTECTED_POLICIES:\n",
+  "new": "    if False:\n",
+  "expect": "test_an_unknown_protected_policy_switches_the_harness_off"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "harness changes are reported by default",
+  "old": "    if touched and cfg.get(\"protected\", \"refuse\") == \"refuse\":\n",
+  "new": "    if touched and cfg.get(\"protected\", \"report\") == \"refuse\":\n",
+  "expect": "test_push_after_a_harness_change_is_denied"
  }
 ]

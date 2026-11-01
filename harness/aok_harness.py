@@ -122,6 +122,10 @@ ADAPTER_REL = ".aok/harness/adapters"  # where install puts the adapters in a wo
 PROTECTED = (".aok/", ".claude/settings.json", ".claude/settings.local.json", ".claude/agents/aok-reviewer.md",
              ".github/workflows/")
 STRIKES = 3
+# what a session's change to the harness, its settings or the CI workflows does to publishing: "refuse" (a person
+# publishes it) or "report" (it goes out as any change and is reported; the pull request review and CI are the check,
+# for a repository whose sessions change those files as their work). Read from the base commit like the rest.
+PROTECTED_POLICIES = ("refuse", "report")
 AGENT_TASKS = ("subagent", "workflow", "teammate", "cloud session")  # background_tasks types that are the turn's work
 EDIT_BUDGET = 60.0
 GATE_BUDGET = 600.0
@@ -607,7 +611,7 @@ def read_config(root: Path, base: str | None) -> tuple[dict, str, list[str]]:
         raise HarnessError(f"{CONFIG_PATH} is not valid JSON: {e}") from e
     if not isinstance(cfg, dict):
         raise HarnessError(f"{CONFIG_PATH} must hold a JSON object")
-    unknown = set(cfg) - {"adapter", "gate", "edit", "extra", "budget"}
+    unknown = set(cfg) - {"adapter", "gate", "edit", "extra", "budget", "protected"}
     if unknown:
         raise HarnessError(f"{CONFIG_PATH}: unknown keys {sorted(unknown)}")
     check_config(cfg)
@@ -628,6 +632,8 @@ def check_config(cfg: dict) -> None:
         raise bad('edit must be {"match": [globs], "steps": [steps]}')
     if "extra" in cfg and not isinstance(cfg["extra"], list):
         raise bad("extra must be a list of steps")
+    if "protected" in cfg and cfg["protected"] not in PROTECTED_POLICIES:
+        raise bad(f"protected must be one of {', '.join(PROTECTED_POLICIES)}")
     if "budget" in cfg:
         b = cfg["budget"]
         if not isinstance(b, dict) or not set(b) <= set(BUDGET_MAX):
@@ -1284,7 +1290,8 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
         rec["last_pass"] = fp
         passed.append((rec, fp))
         touched = harness_changes(t, start, mine, before)
-        if fp is not None and not touched:  # a harness change is a person's to publish: its commit is not recorded
+        reported_only = cfg.get("protected", "refuse") == "report"
+        if fp is not None and (not touched or reported_only):  # under "refuse" a person publishes it: not recorded
             record_passed(t)
         report += [f"{where}weakened check: {w}" for w in weakenings(t, adapter, start, mine, refs)]
         report += [f"{where}harness file changed in this session: {f}" for f in touched]
@@ -1887,7 +1894,7 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
         return deny(f"the gate cannot run, so nothing is published: {e}")
     mine, _, _, start, before = tree_changes(root, state, target, base)
     touched = harness_changes(target, start, mine, before)
-    if touched:
+    if touched and cfg.get("protected", "refuse") == "refuse":
         return deny("the harness, its settings or the CI workflows changed in this session (" + ", ".join(touched[:5]) +
                     "); a person reviews and publishes such a change")
     d = delegate(adapter)
@@ -1903,18 +1910,20 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
                     "gate would check a different tree than the commit being pushed. Commit them (or remove them; a "
                     "file a check leaves behind can be ignored, but the gate also sees ignored files the commit lacks, "
                     "so CI on a clean checkout stays the check of record) in one command, then push in another")
+    said = (f"publishing a change to the harness, its settings or the CI workflows ({', '.join(touched[:5])}); the "
+            "pull request review and CI are its check" if touched else None)  # "report": out, but never quietly
     rec = tree_record(state, target, root)
     fp = fingerprint(target, cfg_text)
     if fp is not None and fp == rec.get("last_pass"):
         record_passed(target)
-        return 0
+        return notice(said) if said else 0
     gate = run_gate(target, adapter, "quick", float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
     log(root, "pre-bash", result=gate["verdict"], **({"tree": str(target)} if target != root else {}))
     if gate["verdict"] == "pass":
         rec["last_pass"] = fingerprint(target, cfg_text)
         save_state(root, session, state)
         record_passed(target)
-        return 0
+        return notice(said) if said else 0
     return deny(f"the quick gate {'failed' if gate['verdict'] == 'fail' else 'could not run'} on this tree:\n{describe(gate)}")
 
 

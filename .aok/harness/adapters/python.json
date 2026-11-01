@@ -1,0 +1,38 @@
+{
+  "name": "python",
+  "detect": ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"],
+  "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+  "versions": [["python3", "--version"], ["ruff", "--version"]],
+  "edit": {
+    "match": ["*.py"],
+    "steps": [
+      {"name": "compile", "cmd": ["python3", "-I", "-c", "import sys; compile(open(sys.argv[1], 'rb').read(), sys.argv[1], 'exec')", "{file}"]},
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "--select", "F,E9,PLE,B", "{file}"], "optional": true}
+    ]
+  },
+  "gate": {
+    "quick": [
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "--select", "F,E9,PLE,B", "."], "optional": true},
+      {"name": "test", "cmd": ["python3", "-I", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."]}
+    ],
+    "full": [
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "."], "optional": true},
+      {"name": "test", "cmd": ["python3", "-I", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."]}
+    ]
+  },
+  "test_files": ["tests/test*.py", "test_*.py", "tests/**/test*.py"],
+  "test_name_re": "test\\w*\\.py",
+  "test_package_marker": "__init__.py",
+  "shadow_check": "python-stdlib",
+  "check_config": ["pyproject.toml", "setup.cfg", "tox.ini", "ruff.toml", ".ruff.toml", ".flake8", "pytest.ini", ".coveragerc", "conftest.py", "*/conftest.py", "sitecustomize.py", "usercustomize.py"],
+  "weakening": [
+    {"name": "noqa", "added": "(?i)#\\s*(?:ruff:\\s*|flake8:\\s*)?noqa"},
+    {"name": "type-ignore", "added": "#\\s*type:\\s*ignore"},
+    {"name": "skipped-test", "added": "@(?:unittest\\.)?(?:skip(?:If|Unless)?|expectedFailure)\\b|@pytest\\.mark\\.(?:skip|xfail)|\\bself\\.skipTest\\(|\\bSkipTest\\b|\\bpytest\\.skip\\(|__unittest_skip__"},
+    {"name": "custom-test-loading", "added": "^\\s*(?:def\\s+load_tests\\b|load_tests\\s*=)"},
+    {"name": "no-cover", "added": "pragma:\\s*no\\s*cover"},
+    {"name": "assertion-removed", "removed": "^\\s*(?:with\\s+)?(?:assert\\b|self\\.assert\\w*\\(|pytest\\.raises\\(|[\\w.]+\\.assert_\\w+\\()"},
+    {"name": "test-removed-or-renamed", "removed": "^\\s*(?:async\\s+)?def\\s+test\\w*"},
+    {"name": "test-class-removed", "removed": "^\\s*class\\s+\\w+\\s*\\([^)]*TestCase"}
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "adapter": "python",
+  "protected": "report",
+  "gate": {
+    "quick": [
+      {
+        "name": "fast-tests",
+        "cmd": [
+          "python3",
+          "-B",
+          "-m",
+          "unittest",
+          "tests.test_scripts",
+          "tests.test_site",
+          "tests.test_regress_tools",
+          "tests.test_atlas"
+        ]
+      },
+      {
+        "name": "secret-scan",
+        "cmd": [
+          "python3",
+          "-I",
+          "scripts/secret_scan.py",
+          "--strict",
+          "."
+        ]
+      },
+      {
+        "name": "site",
+        "cmd": [
+          "python3",
+          "-I",
+          "scripts/build_site.py",
+          "--check"
+        ]
+      }
+    ],
+    "full": [
+      {
+        "name": "tests",
+        "cmd": [
+          "python3",
+          "-B",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ]
+      },
+      {
+        "name": "secret-scan",
+        "cmd": [
+          "python3",
+          "-I",
+          "scripts/secret_scan.py",
+          "--strict",
+          "."
+        ]
+      },
+      {
+        "name": "site",
+        "cmd": [
+          "python3",
+          "-I",
+          "scripts/build_site.py",
+          "--check"
+        ]
+      }
+    ]
+  }
+}
