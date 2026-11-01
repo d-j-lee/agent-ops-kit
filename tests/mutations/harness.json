@@ -2006,7 +2006,7 @@
   "label": "a worktree a command enters is not remembered",
   "old": "            if t is not None and t != root:\n                new |= touch_tree(root, state, t, seen=True)\n",
   "new": "            if False:\n                new |= touch_tree(root, state, t, seen=True)\n",
-  "expect": "test_a_worktree_a_command_works_in_is_remembered"
+  "expect": "test_a_worktree_from_before_the_session_is_not_its_own"
  },
  {
   "file": "harness/aok_harness.py",

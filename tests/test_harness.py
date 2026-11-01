@@ -1036,6 +1036,7 @@ class PreBashTests(Harness):
                          ("v=CLAUDE_CODE_CHILD_SESSION; env -u $v sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          # a name, or the command, put together by expansion
                          ("x=CHILD_SESSION; unset CLAUDE_CODE_$x; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("unset CLAUDE_CODE_$X; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),  # X from the environment
                          ("u=un; ${u}set CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("a=CLAUDE_CODE_CHILD; unset ${a}_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
                          ("for v in CLAUDE_CODE_CHILD_SESSION; do unset $v; done; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
@@ -1665,7 +1666,7 @@ class WorktreeTests(Harness):
         self.gitw(detached, "commit", "-qam", "someone's experiment")
         self.stub("ruff", "exit 0\n")
         self.start()  # the session starts in the project directory after that
-        self.assertIsNone(self.bash_at(wt, "ls"))
+        self.assertIsNone(self.bash_at(wt, "/bin/ls -la"))  # no word names a path there: the shell's directory does
         self.assertIsNone(self.at(wt, "stop"))  # their commit and their uncommitted file are not the session's
         self.assertIsNone(self.at(detached, "stop"))
         (wt / "README.md").write_text("notes\n")
