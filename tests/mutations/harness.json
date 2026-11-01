@@ -2,9 +2,72 @@
  {
   "file": "harness/aok_harness.py",
   "label": "baseline rewritten on every start",
-  "old": "    if payload.get(\"source\", \"startup\") == \"startup\" or \"baseline\" not in state:",
+  "old": "    if source == \"startup\" or \"baseline\" not in state:",
   "new": "    if True:",
   "expect": "test_baseline_is_kept_on_compact"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a continued session owns nothing",
+  "old": "        carried = source in (\"resume\", \"fork\") and not state.get(\"damaged\")",
+  "new": "        carried = False",
+  "expect": "test_continued_session_without_state_owns_the_changes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "damaged state restarted silently",
+  "old": "        if state.get(\"damaged\"):\n            first.append(",
+  "new": "        if False:\n            first.append(",
+  "expect": "test_damaged_state_restarts_the_baseline_with_a_notice"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "damaged state trusted",
+  "old": "    if state.get(\"damaged\"):\n        raise HarnessError(",
+  "new": "    if False:\n        raise HarnessError(",
+  "expect": "test_a_damaged_or_missing_state_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "missing baseline trusted",
+  "old": "        if is_repo(root):\n            raise HarnessError(\"this session has no baseline",
+  "new": "        if False:\n            raise HarnessError(\"this session has no baseline",
+  "expect": "test_a_damaged_or_missing_state_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "missing baseline refused without git too",
+  "old": "        if is_repo(root):\n            raise HarnessError(\"this session has no baseline",
+  "new": "        if True:\n            raise HarnessError(\"this session has no baseline",
+  "expect": "test_without_git_the_gate_runs_every_time"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "malformed baseline accepted",
+  "old": "    if b is not None and not (isinstance(b, dict)",
+  "new": "    if False and not (isinstance(b, dict)",
+  "expect": "test_a_damaged_or_missing_state_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "session id not sanitised",
+  "old": "    return re.sub(r\"[^A-Za-z0-9_.-]\", \"_\", s or \"no-session\")[:80]",
+  "new": "    return s or \"no-session\"",
+  "expect": "test_session_ids_cannot_leave_the_state_directory"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "harness git calls inherit GIT_DIR",
+  "old": "capture_output=True, env=clean_env(), timeout=60)",
+  "new": "capture_output=True, timeout=60)",
+  "expect": "test_the_harness_git_calls_ignore_redirect_variables"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "steps inherit GIT_DIR",
+  "old": "    return {k: v for k, v in os.environ.items() if k not in GIT_REDIRECT}",
+  "new": "    return dict(os.environ)",
+  "expect": "test_steps_do_not_inherit_git_redirect_variables"
  },
  {
   "file": "harness/aok_harness.py",
@@ -19,6 +82,83 @@
   "old": "    if unknown:\n        raise HarnessError",
   "new": "    if False:\n        raise HarnessError",
   "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "config shapes not checked",
+  "old": "    check_config(cfg)\n    return cfg, text, notes",
+  "new": "    return cfg, text, notes",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "gate shape not checked",
+  "old": "    if \"gate\" in cfg and not (isinstance(cfg[\"gate\"], dict)",
+  "new": "    if False and not (isinstance(cfg[\"gate\"], dict)",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "budget without an upper bound",
+  "old": "or not 1 <= v <= BUDGET_MAX[k]:",
+  "new": "or not 1 <= v:",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a boolean budget accepted",
+  "old": "            if isinstance(v, bool) or not isinstance(v, (int, float))",
+  "new": "            if not isinstance(v, (int, float))",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "edit steps not checked",
+  "old": "    where.append((\"edit.steps\", (adapter.get(\"edit\") or {}).get(\"steps\", [])))\n",
+  "new": "",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "definition from the work tree",
+  "old": "    text = base_text if base else work_text",
+  "new": "    text = work_text if work_text is not None else base_text",
+  "expect": "test_gate_definition_comes_from_the_base_commit"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a definition the base lacks is used",
+  "old": "    text = base_text if base else work_text",
+  "new": "    text = base_text if base_text is not None else work_text",
+  "expect": "test_a_definition_the_base_commit_lacks_is_not_used"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a changed definition not reported",
+  "old": "        notes.append(f\"{CONFIG_PATH} differs from the version in {base[:12]}; the gate uses that version\")",
+  "new": "        pass",
+  "expect": "test_changed_definition_and_harness_files_are_reported"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the committed definition loses its last newline",
+  "old": "f\"{base}:{CONFIG_PATH}\", strip=False) if base else None",
+  "new": "f\"{base}:{CONFIG_PATH}\") if base else None",
+  "expect": "test_an_unchanged_definition_is_not_reported"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "adapters read from the pull request",
+  "old": "    texts = {q.stem: q.read_text(encoding=\"utf-8\") for q in sorted(ADAPTER_DIR.glob(\"*.json\"))}\n    if base:",
+  "new": "    texts = {q.stem: q.read_text(encoding=\"utf-8\") for q in sorted(ADAPTER_DIR.glob(\"*.json\"))}\n    if False:",
+  "expect": "test_ci_runs_the_base_branch_harness"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "edit override ignored",
+  "old": "    if \"edit\" in cfg:\n        adapter[\"edit\"] = cfg[\"edit\"]",
+  "new": "    if False:\n        adapter[\"edit\"] = cfg[\"edit\"]",
+  "expect": "test_an_edit_override_replaces_the_adapter_checks"
  },
  {
   "file": "harness/aok_harness.py",
@@ -64,44 +204,156 @@
  },
  {
   "file": "harness/aok_harness.py",
+  "label": "post-edit: cannot-run does not block",
+  "old": "    bad = [r for r in results if r[\"status\"] in (\"fail\", \"cannot\")]",
+  "new": "    bad = [r for r in results if r[\"status\"] == \"fail\"]",
+  "expect": "test_an_edit_check_that_cannot_run_blocks_and_shares_the_budget"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "edit steps each get the whole budget",
+  "old": "        results.append(run_step(root, s, left, file=rel, env=adapter.get(\"env\")) if left > 1 else",
+  "new": "        results.append(run_step(root, s, 99, file=rel, env=adapter.get(\"env\")) if True else",
+  "expect": "test_an_edit_check_that_cannot_run_blocks_and_shares_the_budget"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "budget.edit ignored",
+  "old": "    deadline = time.monotonic() + float(cfg.get(\"budget\", {}).get(\"edit\", EDIT_BUDGET))",
+  "new": "    deadline = time.monotonic() + EDIT_BUDGET",
+  "expect": "test_an_edit_check_that_cannot_run_blocks_and_shares_the_budget"
+ },
+ {
+  "file": "harness/aok_harness.py",
   "label": "steps ignore the adapter env",
-  "old": "        p = subprocess.run(cmd, cwd=root, capture_output=True, timeout=budget, env={**clean_env(), **(env or {})},",
-  "new": "        p = subprocess.run(cmd, cwd=root, capture_output=True, timeout=budget, env=clean_env(),",
-  "expect": "test_pass_then_unchanged_tree_is_not_rerun"
+  "old": "env={**clean_env(), **(env or {})}, stdin=subprocess.DEVNULL, start_new_session=True)",
+  "new": "env=clean_env(), stdin=subprocess.DEVNULL, start_new_session=True)",
+  "expect": "test_good_edit_is_silent_and_writes_no_bytecode"
  },
  {
   "file": "harness/adapters/python.json",
   "label": "python adapter writes bytecode",
-  "old": "\"PYTHONDONTWRITEBYTECODE\": \"1\"",
-  "new": "\"AOK_UNUSED\": \"1\"",
-  "expect": "test_pass_then_unchanged_tree_is_not_rerun"
+  "old": "\"env\": {\"PYTHONDONTWRITEBYTECODE\": \"1\"}",
+  "new": "\"env\": {\"AOK_UNUSED\": \"1\"}",
+  "expect": "test_good_edit_is_silent_and_writes_no_bytecode"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "steps inherit GIT_DIR",
-  "old": "    return {k: v for k, v in os.environ.items() if k not in GIT_REDIRECT}",
-  "new": "    return dict(os.environ)",
-  "expect": "test_steps_do_not_inherit_git_redirect_variables"
+  "label": "a timeout leaves the step's children",
+  "old": "            os.killpg(p.pid, signal.SIGKILL)",
+  "new": "            p.kill()",
+  "expect": "test_a_step_that_overruns_is_cannot_and_leaves_no_process"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a timeout counts as a pass",
+  "old": "        return {\"name\": name, \"status\": \"cannot\", \"detail\": f\"timed out after {budget:g}s\"}",
+  "new": "        return {\"name\": name, \"status\": \"pass\", \"detail\": f\"timed out after {budget:g}s\"}",
+  "expect": "test_a_step_that_overruns_is_cannot_and_leaves_no_process"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "missing required tool counts as optional",
+  "old": "        return {\"name\": name, \"status\": \"missing\" if step.get(\"optional\") else \"cannot\",",
+  "new": "        return {\"name\": name, \"status\": \"missing\",",
+  "expect": "test_required_tool_missing_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "cannot folded into pass",
+  "old": "    verdict = \"cannot\" if \"cannot\" in st else \"fail\" if \"fail\" in st else \"pass\"",
+  "new": "    verdict = \"fail\" if \"fail\" in st else \"pass\"",
+  "expect": "test_required_tool_missing_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the gate stops at the first failure",
+  "old": "        results.append(run_step(root, s, left, env=adapter.get(\"env\")))",
+  "new": "        results.append(run_step(root, s, left, env=adapter.get(\"env\")))\n        if results[-1][\"status\"] == \"fail\":\n            break",
+  "expect": "test_every_step_runs_after_a_failure"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "gate budget not shared across steps",
+  "old": "        left = deadline - time.monotonic()\n        if left <= 1:",
+  "new": "        left = budget\n        if left <= 1:",
+  "expect": "test_the_gate_budget_is_shared_by_the_steps"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an empty gate passes",
+  "old": "        return {\"verdict\": \"cannot\", \"mode\": mode, \"steps\": [], \"reason\": f\"the adapter has no {mode} gate\"}",
+  "new": "        return {\"verdict\": \"pass\", \"mode\": mode, \"steps\": [], \"reason\": f\"the adapter has no {mode} gate\"}",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "background agents ignored",
+  "old": "    if agents:  # agents still work",
+  "new": "    if False:  # agents still work",
+  "expect": "test_background_agents_postpone_the_gate"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "any background task postpones the gate",
+  "old": "if isinstance(t, dict) and t.get(\"type\") in AGENT_TASKS]",
+  "new": "if isinstance(t, dict)]",
+  "expect": "test_background_agents_postpone_the_gate"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "damaged state lets the turn end",
+  "old": "        base, pending = session_base(root, state)\n    except HarnessError as e:\n        return strike(root, session, state, f\"the gate cannot run: {e}\")",
+  "new": "        base, pending = session_base(root, state)\n    except HarnessError as e:\n        return 0",
+  "expect": "test_a_damaged_or_missing_state_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "unreadable definition at stop lets the turn end",
+  "old": "            return 0\n        return strike(root, session, state, f\"the gate cannot run: {e}\")",
+  "new": "            return 0\n        return 0",
+  "expect": "test_an_unreadable_base_definition_blocks_only_a_session_with_changes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "unreadable definition blocks a session without changes",
+  "old": "        if is_repo(root) and not changed_since(root, base, pending):",
+  "new": "        if False:",
+  "expect": "test_an_unreadable_base_definition_blocks_only_a_session_with_changes"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "session that changed nothing is judged",
-  "old": "        if not mine:\n            log(root, \"stop\", result=\"skip-no-session-change\")\n            return 0\n",
+  "old": "        if not mine and fp != state.get(\"last_pass\"):\n            log(root, \"stop\", result=\"skip-no-session-change\")\n            return 0\n",
   "new": "",
   "expect": "test_session_that_changed_nothing_is_not_judged"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "a passed tree is run again",
-  "old": "        if fp == state.get(\"last_pass\"):",
+  "old": "        if fp == state.get(\"last_pass\") and state.get(\"reviewed\") == fp:",
   "new": "        if False:",
   "expect": "test_pass_then_unchanged_tree_is_not_rerun"
  },
  {
   "file": "harness/aok_harness.py",
+  "label": "a pass before a push skips the review",
+  "old": "        if fp == state.get(\"last_pass\") and state.get(\"reviewed\") == fp:",
+  "new": "        if fp == state.get(\"last_pass\"):",
+  "expect": "test_weakening_is_reported_after_a_push_passed_the_gate"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the review repeats every stop",
+  "old": "    state[\"last_pass\"], state[\"reviewed\"], state[\"strikes\"] = fp, fp, 0",
+  "new": "    state[\"last_pass\"], state[\"reviewed\"], state[\"strikes\"] = fp, None, 0",
+  "expect": "test_weakening_is_reported_after_a_push_passed_the_gate"
+ },
+ {
+  "file": "harness/aok_harness.py",
   "label": "pass recorded before the gate wrote its caches",
-  "old": "        state[\"last_pass\"], state[\"strikes\"] = fingerprint(root, cfg_text), 0",
-  "new": "        state[\"last_pass\"], state[\"strikes\"] = fp, 0",
+  "old": "        fp = fingerprint(root, cfg_text)  # the tree as the gate left it (a step may write caches)\n",
+  "new": "",
   "expect": "test_pass_then_unchanged_tree_is_not_rerun"
  },
  {
@@ -128,232 +380,582 @@
  {
   "file": "harness/aok_harness.py",
   "label": "never released",
-  "old": "    if n >= STRIKES:",
+  "old": "    if n > STRIKES:",
   "new": "    if False:",
-  "expect": "test_released_after_three_strikes_and_prompt_resets"
+  "expect": "test_three_blocks_then_released_and_prompt_resets"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "released one block early",
+  "old": "    if n > STRIKES:",
+  "new": "    if n >= STRIKES:",
+  "expect": "test_three_blocks_then_released_and_prompt_resets"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "strikes kept after release",
-  "old": "        state[\"strikes\"] = 0\n        save_state(root, session, state)\n        log(root, \"stop\", result=\"released\", strikes=n)",
-  "new": "        log(root, \"stop\", result=\"released\", strikes=n)",
-  "expect": "test_released_after_three_strikes_and_prompt_resets"
+  "old": "    if n > STRIKES:\n        state[\"strikes\"] = 0\n",
+  "new": "    if n > STRIKES:\n",
+  "expect": "test_three_blocks_then_released_and_prompt_resets"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "the last block not announced",
+  "old": "\"parent a blocked envelope) and end the turn; that end is let through.\") if n == STRIKES else \"\"",
+  "new": "\"parent a blocked envelope) and end the turn; that end is let through.\") if False else \"\"",
+  "expect": "test_three_blocks_then_released_and_prompt_resets"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "prompt does not reset",
   "old": "    if state.get(\"strikes\"):\n        state[\"strikes\"] = 0",
   "new": "    if False:\n        state[\"strikes\"] = 0",
-  "expect": "test_released_after_three_strikes_and_prompt_resets"
+  "expect": "test_three_blocks_then_released_and_prompt_resets"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "background agents ignored",
-  "old": "    if isinstance(tasks, list) and tasks:",
-  "new": "    if False:",
-  "expect": "test_background_agents_postpone_the_gate"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "gate definition from the work tree",
-  "old": "    text = base_text if base_text is not None else work_text",
-  "new": "    text = work_text if work_text is not None else base_text",
-  "expect": "test_gate_definition_comes_from_the_base_commit"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "changed definition not reported",
-  "old": "        notes.append(f\"{CONFIG_PATH} changed in this session; the gate uses the version in {base[:12]}\")",
-  "new": "        pass",
-  "expect": "test_changed_definition_and_harness_files_are_reported"
+  "label": "weakening not reported",
+  "old": "    report = notes + [f\"weakened check: {w}\" for w in weakenings(root, adapter, base, mine)]",
+  "new": "    report = list(notes)",
+  "expect": "test_pass_reports_weakened_checks"
  },
  {
   "file": "harness/aok_harness.py",
   "label": "harness changes not reported",
-  "old": "        report += [f\"harness file changed in this session: {f}\" for f in mine if f.startswith(PROTECTED)]\n",
+  "old": "    report += [f\"harness file changed in this session: {f}\"\n               for f in sorted({f for f in mine if f.startswith(PROTECTED)} | set(protected_changes(root, state)))]\n",
   "new": "",
   "expect": "test_changed_definition_and_harness_files_are_reported"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "weakening not reported",
-  "old": "        report = notes + [f\"weakened check: {w}\" for w in weakenings(root, adapter, base, mine)]",
-  "new": "        report = list(notes)",
+  "label": "removed lines not looked for",
+  "old": "            n = plus if \"added\" in r else max(0, minus - plus)",
+  "new": "            n = plus",
   "expect": "test_pass_reports_weakened_checks"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "removed assertions not looked for",
-  "old": "            lines = added if \"added\" in r else removed",
-  "new": "            lines = added",
+  "label": "a rewritten assertion counts as removed",
+  "old": "            n = plus if \"added\" in r else max(0, minus - plus)",
+  "new": "            n = plus if \"added\" in r else minus",
+  "expect": "test_a_rewritten_assertion_is_not_a_removed_one"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a moved test file not reported",
+  "old": "            found.append(f\"{old}: test file removed or moved where the tests are not collected\")",
+  "new": "            pass",
   "expect": "test_pass_reports_weakened_checks"
  },
  {
-  "file": "harness/adapters/rust.json",
-  "label": "rust allow attribute not looked for",
-  "old": "\"added\": \"#!?\\\\[\\\\s*allow\\\\s*\\\\(\"",
-  "new": "\"added\": \"XXXX\"",
-  "expect": "test_fallback_reports_rust_weakening"
- },
- {
   "file": "harness/aok_harness.py",
-  "label": "missing required tool counts as optional",
-  "old": "        return {\"name\": name, \"status\": \"missing\" if step.get(\"optional\") else \"cannot\",",
-  "new": "        return {\"name\": name, \"status\": \"missing\",",
-  "expect": "test_required_tool_missing_blocks"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "cannot folded into pass",
-  "old": "    verdict = \"cannot\" if \"cannot\" in st else \"fail\" if \"fail\" in st else \"pass\"",
-  "new": "    verdict = \"fail\" if \"fail\" in st else \"pass\"",
-  "expect": "test_required_tool_missing_blocks"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "gate stops at the first failure",
-  "old": "        results.append(run_step(root, s, left, env=adapter.get(\"env\")))",
-  "new": "        results.append(run_step(root, s, left, env=adapter.get(\"env\")))\n        if results[-1][\"status\"] == \"fail\":\n            break",
-  "expect": "test_every_step_runs_after_a_failure"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "a step that overruns passes",
-  "old": "        return {\"name\": name, \"status\": \"cannot\", \"detail\": f\"timed out after {budget:g}s\"}",
-  "new": "        return {\"name\": name, \"status\": \"pass\", \"detail\": f\"timed out after {budget:g}s\"}",
-  "expect": "test_a_step_that_overruns_is_cannot"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "missing optional tool repeated every turn",
-  "old": "        missing = [r[\"name\"] for r in gate[\"steps\"] if r[\"status\"] == \"missing\" and r[\"name\"] not in told]",
-  "new": "        missing = [r[\"name\"] for r in gate[\"steps\"] if r[\"status\"] == \"missing\"]",
-  "expect": "test_optional_tool_missing_is_reported_once"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "strikes not kept without git",
-  "old": "    return base / \"aok-harness\" / hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]",
-  "new": "    return base / \"aok-harness\" / str(os.getpid())",
-  "expect": "test_without_git_the_gate_runs_every_time"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "crash at stop lets the turn end",
-  "old": "        if event == \"stop\":\n            state = load_state(root, session)",
-  "new": "        if False:\n            state = load_state(root, session)",
-  "expect": "test_a_crash_is_reported_not_passed"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "--no-verify allowed",
-  "old": "    if NO_VERIFY.search(cmd) and re.search(r\"\\b(push|commit)\\b\", cmd):",
+  "label": "hooks-off text check dropped",
+  "old": "    if NO_VERIFY.search(cmd) and (segs is None or any(Path(sg[0]).name == \"git\" for sg in segs)):",
   "new": "    if False:",
   "expect": "test_no_verify_is_denied"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "publishing detected only as plain git push",
-  "old": "PUBLISH = re.compile(r\"\\bgit\\b(?:\\s+-[^\\s]+(?:\\s+[^\\s-][^\\s]*)?)*\\s+push\\b|\\bgh\\s+pr\\s+create\\b\")",
-  "new": "PUBLISH = re.compile(r\"\\bgit\\s+push\\b\")",
-  "expect": "test_push_of_a_failing_commit_is_denied_and_a_passing_one_allowed"
+  "label": "hooks-off text check on any command",
+  "old": "    if NO_VERIFY.search(cmd) and (segs is None or any(Path(sg[0]).name == \"git\" for sg in segs)):",
+  "new": "    if NO_VERIFY.search(cmd):",
+  "expect": "test_no_verify_is_denied"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "push after a harness change allowed",
-  "old": "    if touched:\n        return deny(",
-  "new": "    if False:\n        return deny(",
+  "label": "hooks-off text check case-sensitive",
+  "old": "NO_VERIFY = re.compile(r\"--no-verify\\b|\\bcore\\.hookspath\\b\", re.I)",
+  "new": "NO_VERIFY = re.compile(r\"--no-verify\\b|\\bcore\\.hooksPath\\b\")",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "commit -n not looked for",
+  "old": "        if sub == \"commit\" and short_flag(args, \"n\", \"mFcCt\", COMMIT_LONG_WITH_VALUE):",
+  "new": "        if False:",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "-n only as the first letter of a cluster",
+  "old": "            for j, ch in enumerate(a[1:], 1):",
+  "new": "            for j, ch in enumerate(a[1:2], 1):",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an option value read as flags",
+  "old": "                    if j == len(a) - 1:\n                        i += 1  # the value is the next word\n",
+  "new": "",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a long option value read as flags",
+  "old": "        if a in long_with_value:\n            i += 2\n            continue\n",
+  "new": "",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "flags read after --",
+  "old": "        if a == \"--\":\n            return False\n",
+  "new": "",
+  "expect": "test_no_verify_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "other refs pushed",
+  "old": "                if src not in ok_refs:",
+  "new": "                if False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "--all pushed",
+  "old": "            if {\"--all\", \"--mirror\", \"--tags\"} & set(args):",
+  "new": "            if False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "moving HEAD and publishing in one command",
+  "old": "    if publishes and movers:",
+  "new": "    if False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a pull request from another branch",
+  "old": "                    if head_ref != branch:",
+  "new": "                    if False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "sh -c not opened",
+  "old": "            if name in SHELLS and \"-c\" in seg[k + 1:]:",
+  "new": "            if False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "eval not opened",
+  "old": "            elif name == \"eval\":",
+  "new": "            elif False:",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "only a leading git counts",
+  "old": "            elif name in (\"git\", \"gh\"):\n                out.append(seg[k:])",
+  "new": "            elif name in (\"git\", \"gh\") and k == 0:\n                out.append(seg[k:])",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "newlines read as spaces",
+  "old": "    lex.whitespace = \" \\t\\r\"  # a newline separates commands",
+  "new": "    lex.whitespace = \" \\t\\r\\n\"  # a newline separates commands",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "line continuations kept",
+  "old": "shlex.shlex(cmd.replace(\"\\\\\\n\", \" \").replace(\"`\", \" ` \")",
+  "new": "shlex.shlex(cmd.replace(\"`\", \" ` \")",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "backticks not opened",
+  "old": ".replace(\"`\", \" ` \"), posix=True",
+  "new": ", posix=True",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "substitutions in double quotes not opened",
+  "old": "    inner_cmds = [a or b for a, b in SUBSTITUTION.findall(re.sub(r\"'[^']*'\", \" \", cmd))]",
+  "new": "    inner_cmds = []",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "single-quoted text read as a command",
+  "old": "SUBSTITUTION.findall(re.sub(r\"'[^']*'\", \" \", cmd))",
+  "new": "SUBSTITUTION.findall(cmd)",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an unreadable command not refused",
+  "old": "    if segs is None:\n        return bool(PUBLISH.search(cmd)), [\"the command could not be read",
+  "new": "    if segs is None:\n        return False, [\"the command could not be read",
+  "expect": "test_only_the_checked_out_tree_is_published"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "gh global options hide pr create",
+  "old": "    rest = [w for i, w in enumerate(seg[1:]) if not w.startswith(\"-\") and not (i > 0 and seg[i] in (\"-R\", \"--repo\"))]",
+  "new": "    rest = seg[1:]",
+  "expect": "test_publishing_is_recognised_through_options"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "git global option values read as the subcommand",
+  "old": "        i += 2 if seg[i] in GIT_GLOBAL_WITH_ARG else 1",
+  "new": "        i += 1",
+  "expect": "test_publishing_is_recognised_through_options"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "damaged state or definition lets a push through",
+  "old": "        return deny(f\"the gate cannot run, so nothing is published: {e}\")",
+  "new": "        return 0",
+  "expect": "test_a_damaged_or_missing_state_blocks"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "harness changes allowed to be pushed",
+  "old": "    touched = sorted({f for f in mine if f.startswith(PROTECTED)} | set(protected_changes(root, state)))",
+  "new": "    touched = []",
   "expect": "test_push_after_a_harness_change_is_denied"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "push with uncommitted changes allowed",
-  "old": "    if dirty_paths(root):\n        return deny(",
+  "label": "ignored local settings not watched",
+  "old": "    touched = sorted({f for f in mine if f.startswith(PROTECTED)} | set(protected_changes(root, state)))",
+  "new": "    touched = sorted({f for f in mine if f.startswith(PROTECTED)})",
+  "expect": "test_push_after_an_ignored_local_settings_change_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "settings.json not protected",
+  "old": "PROTECTED = (\".aok/\", \".claude/settings.json\", \".claude/settings.local.json\",",
+  "new": "PROTECTED = (\".aok/\", \".claude/settings.local.json\",",
+  "expect": "test_push_after_settings_ci_or_reviewer_changes_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "settings.local.json not protected",
+  "old": "PROTECTED = (\".aok/\", \".claude/settings.json\", \".claude/settings.local.json\",",
+  "new": "PROTECTED = (\".aok/\", \".claude/settings.json\",",
+  "expect": "test_push_after_an_ignored_local_settings_change_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "CI workflows not protected",
+  "old": "             \".github/workflows/\")",
+  "new": "             )",
+  "expect": "test_push_after_settings_ci_or_reviewer_changes_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "reviewer not protected",
+  "old": " \".claude/agents/aok-reviewer.md\",\n",
+  "new": "\n",
+  "expect": "test_push_after_settings_ci_or_reviewer_changes_is_denied"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "every settings change read as tampering",
+  "old": "    return {f: settings_hash(root / f) if f.startswith(\".claude/settings\") else file_hash(root / f) for f in sorted(files)}",
+  "new": "    return {f: file_hash(root / f) for f in sorted(files)}",
+  "expect": "test_permission_rules_claude_code_writes_are_not_tampering"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "uncommitted push allowed",
+  "old": "    if dirty:\n        return deny(",
   "new": "    if False:\n        return deny(",
   "expect": "test_push_with_uncommitted_changes_is_denied"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "failing push allowed",
-  "old": "    return deny(f\"the quick gate {'failed' if gate['verdict'] == 'fail' else 'could not run'} on this tree:\\n{describe(gate)}\")",
-  "new": "    return 0",
+  "label": "the uncommitted files not named",
+  "old": "({', '.join(dirty[:5])}{', ...' if len(dirty) > 5 else ''})",
+  "new": "",
+  "expect": "test_the_uncommitted_files_are_named"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "failing commit pushed",
+  "old": "    if gate[\"verdict\"] == \"pass\":\n        state[\"last_pass\"] = fingerprint(root, cfg_text)",
+  "new": "    if True:\n        state[\"last_pass\"] = fingerprint(root, cfg_text)",
   "expect": "test_push_of_a_failing_commit_is_denied_and_a_passing_one_allowed"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "crash at pre-bash allows the push",
-  "old": "        if event == \"pre-bash\" and PUBLISH.search(str(tool_input(payload).get(\"command\") or \"\")):",
-  "new": "        if False:",
-  "expect": "test_a_crash_denies_a_publishing_command"
- },
- {
-  "file": "harness/aok_harness.py",
-  "label": "delegate not used",
-  "old": "    d = delegate(adapter)\n    if d:\n        return relay(d, \"stop\", payload)",
-  "new": "    d = None",
+  "label": "session-start not delegated",
+  "old": "        return relay(d, \"session-start\", payload, notice)",
+  "new": "        pass",
   "expect": "test_delegates_every_hook_to_fsmap"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "delegate probe skipped",
-  "old": "        ok = subprocess.run(d[\"probe\"], capture_output=True, timeout=20, stdin=subprocess.DEVNULL).returncode == 0",
-  "new": "        ok = True",
-  "expect": "test_old_fsmap_without_hook_falls_back"
+  "label": "post-edit not delegated",
+  "old": "        return relay(d, \"post-edit\", payload, notice)",
+  "new": "        pass",
+  "expect": "test_delegates_every_hook_to_fsmap"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "verify ignores --base",
-  "old": "            base = sha\n        cfg, _, notes = read_config(root, base)",
-  "new": "            base = sha\n        cfg, _, notes = read_config(root, None)",
+  "label": "prompt not delegated",
+  "old": "    return relay(d, \"prompt\", payload, notice) if d else 0",
+  "new": "    return 0",
+  "expect": "test_delegates_every_hook_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "pre-bash not delegated",
+  "old": "        return relay(d, \"pre-bash\", payload, lambda m: deny(f\"{m}; nothing is published\"))",
+  "new": "        return 0",
+  "expect": "test_delegates_every_hook_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "stop not delegated",
+  "old": "        return relay(d, \"stop\", payload, lambda m: strike(root, session, state, m))",
+  "new": "        return 0",
+  "expect": "test_delegates_every_hook_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a crashing delegate passes",
+  "old": "    if p.returncode not in (0, 2):",
+  "new": "    if False:",
+  "expect": "test_a_failing_fsmap_is_not_a_pass"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a delegate that cannot start passes",
+  "old": "        return fail(f\"{d['bin']} hook {event} did not run ({e})\")",
+  "new": "        return 0",
+  "expect": "test_a_failing_fsmap_is_not_a_pass"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "verify ignores the delegate's exit code",
+  "old": "        return subprocess.run(cmd, cwd=root).returncode",
+  "new": "        subprocess.run(cmd, cwd=root)\n        return 0",
+  "expect": "test_verify_delegates_to_fsmap"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "verify not given --json",
+  "old": "\"json\": [\"--json\"],",
+  "new": "\"json\": [],",
+  "expect": "test_verify_delegates_to_fsmap"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a crash at pre-bash lets a push through",
+  "old": "            if PUBLISH.search(str(tool_input(payload).get(\"command\") or \"\")):\n                return deny(",
+  "new": "            if False:\n                return deny(",
+  "expect": "test_a_crash_denies_a_publishing_command"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a crash at stop lets the turn end",
+  "old": "                return strike(root, session, load_state(root, session), f\"the harness crashed: {e!r:.300}\")",
+  "new": "                return 0",
+  "expect": "test_a_crash_is_reported_not_passed"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "a crash while striking lets the turn end",
+  "old": "                return say({\"decision\": \"block\", \"reason\": f\"[aok-harness] the harness crashed ({e!r:.200}; \"",
+  "new": "                return 0 and say({\"decision\": \"block\", \"reason\": f\"[aok-harness] the harness crashed ({e!r:.200}; \"",
+  "expect": "test_a_crash_is_reported_not_passed"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "an unknown --base runs the work tree",
+  "old": "            if not sha:\n                raise HarnessError(f\"--base",
+  "new": "            if False:\n                raise HarnessError(f\"--base",
   "expect": "test_base_ref_definition"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "install skips the reviewer agent",
-  "old": "    if not reviewer.is_file():\n        reviewer.parent.mkdir",
-  "new": "    if False:\n        reviewer.parent.mkdir",
+  "label": "verify exit 2 folded into 1",
+  "old": "    return {\"pass\": 0, \"fail\": 1}.get(gate[\"verdict\"], 2)",
+  "new": "    return 0 if gate[\"verdict\"] == \"pass\" else 1",
+  "expect": "test_exit_codes"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "install replaces existing hooks of the same event",
+  "old": "            existing.extend(entries)",
+  "new": "            existing[:] = entries",
+  "expect": "test_existing_hooks_are_kept_and_not_doubled"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "install dedupes on the exact command only",
+  "old": "        if not any(is_harness_hook(c, event) for c in commands):",
+  "new": "        if not any(prefix in c for c in commands):",
+  "expect": "test_existing_hooks_are_kept_and_not_doubled"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "pre-bash hook failure lets the command run",
+  "old": "h(\"pre-bash\", onFailure=\"block\")",
+  "new": "h(\"pre-bash\")",
   "expect": "test_yes_installs_and_merges_idempotently"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "verify not delegated",
-  "old": "    if d and d.get(\"verify\"):\n        cmd = ",
-  "new": "    if False:\n        cmd = ",
-  "expect": "test_verify_delegates_to_fsmap"
+  "label": "install: PreToolUse matcher wrong",
+  "old": "\"PreToolUse\": [{\"matcher\": \"Bash\",",
+  "new": "\"PreToolUse\": [{\"matcher\": \"Bash|Edit\",",
+  "expect": "test_yes_installs_and_merges_idempotently"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "delegated verify drops --json",
-  "old": "            cmd += d[\"json\"]",
-  "new": "            pass",
-  "expect": "test_verify_delegates_to_fsmap"
+  "label": "install: Stop hook timeout below the gate budget",
+  "old": "\"pre-bash\": 900, \"stop\": 900}",
+  "new": "\"pre-bash\": 900, \"stop\": 600}",
+  "expect": "test_yes_installs_and_merges_idempotently"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "delegated verify silent about --base",
-  "old": "        if base:  # the delegate reads its own gate definition from the work tree",
+  "label": "install adds a broad allow rule",
+  "old": "    ask = perms.setdefault(\"ask\", [])\n",
+  "new": "    ask = perms.setdefault(\"ask\", [])\n    perms.setdefault(\"allow\", []).append(\"Bash(*)\")\n",
+  "expect": "test_yes_installs_and_merges_idempotently"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "install crashes on a settings file of the wrong shape",
+  "old": "    if shape:\n        print(f\"install: {settings}",
+  "new": "    if False:\n        print(f\"install: {settings}",
+  "expect": "test_bad_inputs"
+ },
+ {
+  "file": "harness/aok_harness.py",
+  "label": "install --adapter silently ignored",
+  "old": "        if have != adapter_name:",
   "new": "        if False:",
-  "expect": "test_verify_delegates_to_fsmap"
+  "expect": "test_bad_inputs"
  },
  {
   "file": "harness/aok_harness.py",
-  "label": "install writes on a dry run",
-  "old": "    if not yes:\n        print(\"dry run",
-  "new": "    if False:\n        print(\"dry run",
+  "label": "install writes without --yes",
+  "old": "    if not yes:",
+  "new": "    if False:",
   "expect": "test_dry_run_writes_nothing"
  },
  {
-  "file": "harness/aok_harness.py",
-  "label": "install adds hooks twice",
-  "old": "        if not any(prefix in c for c in commands):",
-  "new": "        if True:",
-  "expect": "test_yes_installs_and_merges_idempotently"
+  "file": "harness/adapters/python.json",
+  "label": "python noqa only in its plain form",
+  "old": "{\"name\": \"noqa\", \"added\": \"#\\\\s*(?:ruff:\\\\s*|flake8:\\\\s*)?noqa\"}",
+  "new": "{\"name\": \"noqa\", \"added\": \"#\\\\s*noqa\"}",
+  "expect": "test_pass_reports_weakened_checks"
  },
  {
-  "file": "harness/aok_harness.py",
-  "label": "install without the ask rules",
-  "old": "    for rule in (\"Edit(/.aok/**)\", \"Write(/.aok/**)\", \"Edit(/.claude/**)\", \"Write(/.claude/**)\"):",
-  "new": "    for rule in ():",
-  "expect": "test_yes_installs_and_merges_idempotently"
+  "file": "harness/adapters/python.json",
+  "label": "python type-ignore not looked for",
+  "old": "{\"name\": \"type-ignore\", \"added\": \"#\\\\s*type:\\\\s*ignore\"}",
+  "new": "{\"name\": \"type-ignore\", \"added\": \"XXXX\"}",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python expectedFailure not looked for",
+  "old": "(?:skip(?:If|Unless)?|expectedFailure)\\\\b",
+  "new": "(?:skip(?:If|Unless)?)\\\\b",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python skipIf not looked for",
+  "old": "(?:skip(?:If|Unless)?|expectedFailure)\\\\b",
+  "new": "(?:skip|expectedFailure)\\\\b",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python load_tests not looked for",
+  "old": "{\"name\": \"custom-test-loading\", \"added\": \"^\\\\s*def\\\\s+load_tests\\\\b\"}",
+  "new": "{\"name\": \"custom-test-loading\", \"added\": \"XXXX\"}",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python no-cover not looked for",
+  "old": "{\"name\": \"no-cover\", \"added\": \"pragma:\\\\s*no\\\\s*cover\"}",
+  "new": "{\"name\": \"no-cover\", \"added\": \"XXXX\"}",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python removed assertions not looked for",
+  "old": "{\"name\": \"assertion-removed\", \"removed\": \"^\\\\s*(assert\\\\b|self\\\\.assert\\\\w*\\\\(|pytest\\\\.raises\\\\()\"}",
+  "new": "{\"name\": \"assertion-removed\", \"removed\": \"XXXX\"}",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python removed or renamed tests not looked for",
+  "old": "{\"name\": \"test-removed-or-renamed\", \"removed\": \"^\\\\s*def\\\\s+test_\\\\w*\"}",
+  "new": "{\"name\": \"test-removed-or-renamed\", \"removed\": \"XXXX\"}",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python test files not known",
+  "old": "\"test_files\": [\"tests/test*.py\", \"test_*.py\", \"tests/**/test*.py\"]",
+  "new": "\"test_files\": []",
+  "expect": "test_pass_reports_weakened_checks"
+ },
+ {
+  "file": "harness/adapters/python.json",
+  "label": "python tests run without isolation",
+  "old": "{\"name\": \"test\", \"cmd\": [\"python3\", \"-I\", \"-B\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-t\", \".\"]}\n    ],\n    \"full\"",
+  "new": "{\"name\": \"test\", \"cmd\": [\"python3\", \"-B\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-t\", \".\"]}\n    ],\n    \"full\"",
+  "expect": "test_a_shadowing_unittest_module_does_not_pass_the_gate"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust allow/expect attribute not looked for",
+  "old": "\"added\": \"#!?\\\\[\\\\s*(allow|expect)\\\\s*\\\\(\"",
+  "new": "\"added\": \"#!?\\\\[\\\\s*allow\\\\s*\\\\(\"",
+  "expect": "test_fallback_reports_rust_weakening"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust ignored-test not looked for",
+  "old": "\"added\": \"#\\\\[\\\\s*ignore\\\\b\"",
+  "new": "\"added\": \"XXXX\"",
+  "expect": "test_fallback_reports_rust_weakening"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust cfg-false not looked for",
+  "old": "\"added\": \"#\\\\[\\\\s*cfg\\\\s*\\\\(\\\\s*(false|any\\\\s*\\\\(\\\\s*\\\\))\"",
+  "new": "\"added\": \"XXXX\"",
+  "expect": "test_fallback_reports_rust_weakening"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust unsafe not looked for",
+  "old": "\"added\": \"\\\\bunsafe\\\\s*(\\\\{|fn|impl)\"",
+  "new": "\"added\": \"XXXX\"",
+  "expect": "test_fallback_reports_rust_weakening"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust removed assertions not looked for",
+  "old": "\"removed\": \"^\\\\s*(debug_)?assert(_eq|_ne)?!\\\\(\"",
+  "new": "\"removed\": \"XXXX\"",
+  "expect": "test_fallback_reports_rust_weakening"
+ },
+ {
+  "file": "harness/adapters/rust.json",
+  "label": "rust removed tests not looked for",
+  "old": "\"removed\": \"^\\\\s*#\\\\[(tokio::)?test\\\\b\"",
+  "new": "\"removed\": \"XXXX\"",
+  "expect": "test_fallback_reports_rust_weakening"
  }
 ]

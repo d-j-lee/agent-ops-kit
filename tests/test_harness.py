@@ -1,7 +1,8 @@
 """Tests for the ⑧ work-repo harness core (harness/aok_harness.py). Stdlib unittest only.
 
-Every documented behaviour has a test here; tests/mutations/harness.json switches the guards
-off one by one and CI shows that the named test fails for each.
+The hooks, verify, install and both adapters are tested here. tests/mutations/harness.json
+switches the guards of the core and the adapters off one by one, and CI shows that the test named
+for each one fails. The list is chosen by hand: a guard missing from it is not shown to be tested.
 
 The tests build throw-away git repositories and call the hooks the way Claude Code does
 (payload on stdin). PATH is hermetic: python3 and git are linked into a private bin
@@ -11,6 +12,7 @@ Run from the repo root:  python3 -m unittest discover -s tests -v
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
@@ -18,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -83,13 +86,29 @@ class Harness(unittest.TestCase):
         p.write_text("#!/bin/sh\nPATH=\"$PATH:/usr/bin:/bin\"\n" + script, encoding="utf-8")  # the stub's own helpers
         p.chmod(0o755)
 
-    def hook(self, event, payload=None, extra_env=None):
+    def hook(self, event, payload=None, extra_env=None, core=None, code=0):
         payload = {"session_id": "s1", **(payload or {})}
         env = {**self.env, "CLAUDE_PROJECT_DIR": str(self.repo), **(extra_env or {})}
-        p = subprocess.run([sys.executable, "-I", str(CORE), "hook", event], input=json.dumps(payload),
+        p = subprocess.run([sys.executable, "-I", str(core or CORE), "hook", event], input=json.dumps(payload),
                            capture_output=True, text=True, env=env, timeout=300)
-        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.returncode, code, p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
         return json.loads(p.stdout) if p.stdout.strip() else None
+
+    def faulty_core(self, function):
+        """A copy of the core whose `function` raises: the crash paths are tested on the real handler code."""
+        kit = self.tmp / f"faulty-{function}"
+        shutil.copytree(CORE.parent, kit, ignore=shutil.ignore_patterns("__pycache__"))
+        src = (kit / "aok_harness.py").read_text(encoding="utf-8")
+        fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == function)
+        lines = src.splitlines(keepends=True)
+        first = fn.body[0].lineno - 1  # the docstring or first statement; the raise goes before it
+        lines.insert(first, " " * fn.body[0].col_offset + 'raise RuntimeError("injected fault")\n')
+        (kit / "aok_harness.py").write_text("".join(lines), encoding="utf-8")
+        return kit / "aok_harness.py"
+
+    def state_file(self, session="s1"):
+        return self.repo / ".git" / "aok-harness" / f"session-{session}.json"
 
     def start(self, source="startup"):
         return self.hook("session-start", {"source": source})
@@ -148,6 +167,39 @@ class SessionStartTests(Harness):
         self.assertIn("OFF", out["systemMessage"])
         self.assertIn("cannot pick an adapter", out["systemMessage"])
 
+    def test_continued_session_without_state_owns_the_changes(self):
+        self.python_repo()
+        self.write("pkg/__init__.py", ADD_BAD)  # left by the session this one continues
+        self.stub("ruff", "exit 0\n")
+        ctx = self.hook("session-start", {"source": "fork", "session_id": "f1"})["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("continues another (fork)", ctx)
+        self.assertTrue(self.blocked(self.hook("stop", {"session_id": "f1"})))
+        self.hook("session-start", {"source": "startup", "session_id": "n1"})  # a new session: not its change
+        self.assertIsNone(self.hook("stop", {"session_id": "n1"}))
+
+    def test_damaged_state_restarts_the_baseline_with_a_notice(self):
+        self.python_repo()
+        self.start()
+        self.state_file().write_text("[]", encoding="utf-8")
+        ctx = self.start(source="compact")["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("state was damaged", ctx)
+        self.assertEqual(json.loads(self.state_file().read_text())["baseline"]["head"], self.git("rev-parse", "HEAD").strip())
+
+    def test_the_harness_git_calls_ignore_redirect_variables(self):
+        self.python_repo()
+        other = self.tmp / "other"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other, env=self.env, check=True)
+        subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "o"], cwd=other, env=self.env, check=True)
+        self.hook("session-start", {"source": "startup"}, extra_env={"GIT_DIR": str(other / ".git")})
+        self.assertEqual(json.loads(self.state_file().read_text())["baseline"]["head"], self.git("rev-parse", "HEAD").strip())
+
+    def test_session_ids_cannot_leave_the_state_directory(self):
+        self.python_repo()
+        self.hook("session-start", {"source": "startup", "session_id": "../../../escape"})
+        self.assertEqual([q.name for q in (self.repo / ".git" / "aok-harness").glob("session-*")], ["session-.._.._.._escape.json"])
+        self.assertFalse(list(self.tmp.glob("*escape*")))
+
     def test_unknown_adapter_and_bad_config(self):
         self.python_repo(config={"adapter": "cobol"})
         self.assertIn("unknown adapter 'cobol'", self.start()["systemMessage"])
@@ -185,6 +237,26 @@ class PostEditTests(Harness):
         outside.write_text("def x(\n", encoding="utf-8")
         self.assertIsNone(self.hook("post-edit", {"tool_name": "Write", "tool_input": {"file_path": str(outside)}}))
 
+    def test_an_edit_check_that_cannot_run_blocks_and_shares_the_budget(self):
+        slow = {"name": "slow", "cmd": ["python3", "-c", "import time; time.sleep(2)"]}
+        self.python_repo(config={"adapter": "python", "budget": {"edit": 3},
+                                 "edit": {"match": ["*.py"], "steps": [{"name": "lint", "cmd": ["no-such-linter", "{file}"]},
+                                                                      slow, slow]}})
+        self.start()
+        out = self.edit("pkg/__init__.py")
+        self.assertTrue(self.blocked(out))
+        self.assertIn("[lint] cannot: no-such-linter not found", out["reason"])
+        self.assertIn("[slow] cannot: edit budget used up", out["reason"])  # 2 s + 2 s does not fit in 3 s
+
+    def test_an_edit_override_replaces_the_adapter_checks(self):
+        self.python_repo(config={"adapter": "python", "edit": {"match": ["*.md"], "steps": [
+            {"name": "md", "cmd": ["python3", "-c", "import sys; sys.exit('bad markdown')"]}]}})
+        self.start()
+        self.write("pkg/__init__.py", "def add(a, b)\n")
+        self.assertIsNone(self.edit("pkg/__init__.py"))  # *.py is no longer matched
+        self.write("README.md", "x\n")
+        self.assertIn("[md] fail", self.edit("README.md")["reason"])
+
     def test_optional_tool_runs_when_present(self):
         self.python_repo()
         self.start()
@@ -213,21 +285,24 @@ class StopTests(Harness):
         self.assertTrue(self.blocked(out))
         self.assertIn("[test] fail", out["reason"])
         self.assertIn("AssertionError", out["reason"])
-        self.assertIn("Try 1 of 3", out["reason"])
+        self.assertIn("Block 1 of 3.", out["reason"])
+        self.assertNotIn("last block", out["reason"])
 
-    def test_released_after_three_strikes_and_prompt_resets(self):
+    def test_three_blocks_then_released_and_prompt_resets(self):
         self.python_repo()
         self.start()
         self.write("pkg/__init__.py", ADD_BAD)
-        self.assertTrue(self.blocked(self.stop()))
-        self.assertTrue(self.blocked(self.stop(stop_hook_active=True)))
+        self.assertIn("Block 1 of 3.", self.stop()["reason"])
+        self.assertIn("Block 2 of 3.", self.stop(stop_hook_active=True)["reason"])
+        third = self.stop(stop_hook_active=True)
+        self.assertIn("Block 3 of 3. This is the last block", third["reason"])  # said while Claude can still report
         out = self.stop(stop_hook_active=True)
         self.assertNotIn("decision", out)
-        self.assertIn("did NOT pass after 3 tries", out["systemMessage"])
-        self.assertIn("Try 1 of 3", self.stop()["reason"])  # the count starts again
-        self.assertIn("Try 2 of 3", self.stop()["reason"])
+        self.assertIn("did NOT pass after 3 blocked attempts", out["systemMessage"])
+        self.assertIn("Block 1 of 3.", self.stop()["reason"])  # the count starts again
+        self.assertIn("Block 2 of 3.", self.stop()["reason"])
         self.hook("prompt", {"prompt": "go on"})
-        self.assertIn("Try 1 of 3", self.stop()["reason"])
+        self.assertIn("Block 1 of 3.", self.stop()["reason"])
 
     def test_pass_then_unchanged_tree_is_not_rerun(self):
         # a step that leaves a cache behind, as linters do: the tree it leaves is the one that passed
@@ -263,22 +338,53 @@ class StopTests(Harness):
 
     def test_first_commit_of_an_empty_repository_counts(self):
         self.python_repo(commit=False)
+        self.write("pkg/__init__.py", ADD_BAD)  # there before the session, committed by it unchanged
         self.start()
-        self.write("pkg/__init__.py", ADD_BAD)
         self.git("add", "-A")
         self.git("commit", "-qm", "first")
         self.assertTrue(self.blocked(self.stop()))
 
     def test_pass_reports_weakened_checks(self):
         self.python_repo()
+        self.write("tests/test_more.py", TEST.replace("def test_add", "def test_more"))
+        self.write("tests/test_gone.py", TEST.replace("def test_add", "def test_gone"))
+        self.write("tests/test_keep.py", TEST.replace("def test_add", "def test_keep"))  # the gate still runs a test
+        self.git("add", "-A")
+        self.git("commit", "-qm", "more tests")
+        self.start()
+        self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa  # type: ignore  # pragma: no cover")
+                   + "# ruff: noqa\n")
+        self.write("tests/test_add.py", TEST.replace("        self.assertEqual(add(1, 2), 3)\n", "        pass\n")
+                   .replace("    def test_add", "    @unittest.expectedFailure\n    def test_add")
+                   + "\n\ndef load_tests(loader, tests, pattern):\n    return unittest.TestSuite()\n")
+        self.write("tests/test_more.py", TEST.replace("def test_add", "def xtest_more")
+                   .replace("    def ", "    @unittest.skipIf(True, 'later')\n    def "))
+        self.git("mv", "tests/test_gone.py", "tests/check_gone.py")
+        msg = self.stop()["systemMessage"]
+        self.assertIn("gate passed", msg)
+        for item in ("pkg/__init__.py: noqa ×2", "pkg/__init__.py: type-ignore ×1", "pkg/__init__.py: no-cover ×1",
+                     "tests/test_add.py: assertion-removed ×1", "tests/test_add.py: skipped-test ×1",
+                     "tests/test_add.py: custom-test-loading ×1", "tests/test_more.py: test-removed-or-renamed ×1",
+                     "tests/test_more.py: skipped-test ×1",
+                     "tests/test_gone.py: test file removed or moved where the tests are not collected"):
+            self.assertIn(item, msg)
+
+    def test_a_rewritten_assertion_is_not_a_removed_one(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write("tests/test_add.py", TEST.replace("3)", "3, 'add is plain addition')"))
+        self.assertIsNone(self.stop(), "a stronger assertion is not a weakened check")
+
+    def test_weakening_is_reported_after_a_push_passed_the_gate(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
         self.start()
         self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa"))
-        self.write("tests/test_add.py", TEST.replace("        self.assertEqual(add(1, 2), 3)\n", "        pass\n"))
-        out = self.stop()
-        msg = out["systemMessage"]
-        self.assertIn("gate passed", msg)
-        self.assertIn("pkg/__init__.py: noqa ×1", msg)
-        self.assertIn("tests/test_add.py: assertion-removed ×1", msg)
+        self.git("commit", "-qam", "quiet")
+        self.assertIsNone(self.bash("git push"))  # the gate passes here first
+        self.assertIn("pkg/__init__.py: noqa ×1", self.stop()["systemMessage"])
+        self.assertIsNone(self.stop())  # reviewed once
 
     def test_gate_definition_comes_from_the_base_commit(self):
         self.python_repo(config={"adapter": "python"})
@@ -295,8 +401,53 @@ class StopTests(Harness):
         self.start()
         self.write(".aok/harness.json", json.dumps({"adapter": "python", "extra": []}))
         msg = self.stop()["systemMessage"]
-        self.assertIn(".aok/harness.json changed in this session", msg)
+        self.assertIn(".aok/harness.json differs from the version in", msg)
         self.assertIn("harness file changed in this session: .aok/harness.json", msg)
+
+    def test_an_unchanged_definition_is_not_reported(self):
+        self.python_repo()
+        self.write(".aok/harness.json", '{\n  "adapter": "python"\n}\n')  # as install writes it, last newline included
+        self.git("add", "-A")
+        self.git("commit", "-qm", "harness")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        self.assertIsNone(self.stop())
+
+    def test_a_definition_the_base_commit_lacks_is_not_used(self):
+        self.python_repo()  # no .aok/harness.json committed: the adapter is detected
+        self.start()
+        self.write(".aok/harness.json", json.dumps({"adapter": "python", "gate": {"quick": [{"name": "ok", "cmd": ["python3", "-c", "pass"]}]}}))
+        self.write("pkg/__init__.py", ADD_BAD)
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("[test] fail", out["reason"])
+
+    def test_an_unreadable_base_definition_blocks_only_a_session_with_changes(self):
+        self.python_repo(config={"adapter": "cobol"})
+        self.start()
+        self.assertIsNone(self.stop())  # nothing of this session's to judge
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("the gate cannot run: unknown adapter 'cobol'", out["reason"])
+        self.git("commit", "-qam", "x")
+        self.assertIn("gate cannot run", self.bash("git push")["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_damaged_or_missing_state_blocks(self):
+        self.python_repo()
+        self.start()
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        self.state_file().write_text(json.dumps({"baseline": {"head": 12345, "pending": []}}), encoding="utf-8")
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("session state", out["reason"])
+        self.assertIn("damaged", out["reason"])
+        self.git("commit", "-qam", "x")
+        self.assertIn("damaged", self.bash("git push")["hookSpecificOutput"]["permissionDecisionReason"])
+        self.state_file().unlink()
+        self.assertIn("no baseline", self.stop()["reason"])
+        self.assertIn("no baseline", self.bash("git push")["hookSpecificOutput"]["permissionDecisionReason"])
 
     def test_required_tool_missing_blocks(self):
         self.python_repo(config={"adapter": "python", "extra": [{"name": "lint", "cmd": ["no-such-linter"]}]})
@@ -322,8 +473,13 @@ class StopTests(Harness):
         self.python_repo()
         self.start()
         self.write("pkg/__init__.py", ADD_BAD)
-        self.assertIsNone(self.stop(background_tasks=[{"id": "x", "type": "subagent"}]))
+        out = self.stop(background_tasks=[{"id": "x", "type": "subagent", "status": "running"}])
+        self.assertFalse(self.blocked(out))
+        self.assertIn("background agents are still working (subagent)", out["systemMessage"])
         self.assertEqual(self.log()[-1]["result"], "skip-background")
+        # a shell or monitor left running is not the turn's work: it must not switch the gate off
+        self.assertTrue(self.blocked(self.stop(background_tasks=[{"id": "y", "type": "shell", "command": "sleep 999"},
+                                                                  {"id": "z", "type": "monitor"}])))
         self.assertTrue(self.blocked(self.stop(background_tasks=[])))
 
     def test_steps_do_not_inherit_git_redirect_variables(self):
@@ -341,18 +497,22 @@ class StopTests(Harness):
         self.start()
         self.assertIsNone(self.stop())
         self.write("pkg/__init__.py", ADD_BAD)
-        self.assertIn("Try 1 of 3", self.stop()["reason"])
-        self.assertIn("Try 2 of 3", self.stop()["reason"])  # strikes kept in XDG_STATE_HOME
+        self.assertIn("Block 1 of 3.", self.stop()["reason"])
+        self.assertIn("Block 2 of 3.", self.stop()["reason"])  # strikes kept in XDG_STATE_HOME
 
     def test_a_crash_is_reported_not_passed(self):
         self.python_repo()
         self.start()
-        self.write("pkg/__init__.py", ADD_BAD)
-        bad = self.repo / ".git" / "aok-harness" / "session-s1.json"
-        bad.write_text(json.dumps({"baseline": {"head": 12345, "pending": []}}), encoding="utf-8")
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        out = self.hook("stop", core=self.faulty_core("changed_since"))
+        self.assertTrue(self.blocked(out))
+        self.assertIn("the harness crashed: RuntimeError('injected fault')", out["reason"])
+        bad = self.state_file()
+        bad.unlink()
+        bad.mkdir()  # the state itself cannot be read or written: still a block, not a silent end
         out = self.stop()
         self.assertTrue(self.blocked(out))
-        self.assertIn("crashed", out["reason"])
+        self.assertIn("the gate did not run", out["reason"])
 
 
 class PreBashTests(Harness):
@@ -364,16 +524,68 @@ class PreBashTests(Harness):
     def test_no_verify_is_denied(self):
         self.python_repo()
         self.start()
-        self.assertTrue(self.denied(self.bash("git commit -m x --no-verify")))
-        self.assertTrue(self.denied(self.bash("git -c core.hooksPath=/dev/null push")))
+        for cmd in ("git commit -m x --no-verify", "git -c core.hooksPath=/dev/null push", "git commit -n -m x",
+                    "git commit -nm x", "git commit -am x -n", "git commit -vnm x", "git config core.hooksPath /dev/null",
+                    "git -c CORE.HOOKSPATH=x commit -m y", "git push '--no-verify'", 'sh -c "git commit -n -m x"'):
+            out = self.bash(cmd)
+            self.assertTrue(self.denied(out), cmd)
+            self.assertIn("hooks off", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
+        for cmd in ("git commit -m -n", "git commit --message -n", "git commit -- -n", "git log -n 3",
+                    "grep -i hookspath .git/config"):
+            self.assertIsNone(self.bash(cmd), cmd)
 
     def test_push_with_uncommitted_changes_is_denied(self):
         self.python_repo()
         self.start()
         self.write("pkg/__init__.py", ADD_OK + "\n")
-        out = self.bash("git add -A && git commit -m x && git push")
+        out = self.bash("git push")
         self.assertTrue(self.denied(out))
         self.assertIn("uncommitted", out["hookSpecificOutput"]["permissionDecisionReason"])
+        out = self.bash("git add -A && git commit -m x && git push")
+        self.assertTrue(self.denied(out))
+        self.assertIn("commit and publishing in one command", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIsNone(self.bash('git commit -am "docs: say git push in the readme"'))  # not publishing
+
+    def test_only_the_checked_out_tree_is_published(self):
+        self.python_repo()
+        self.git("branch", "bad")
+        self.start()
+        reason = lambda out: out["hookSpecificOutput"]["permissionDecisionReason"]  # noqa: E731
+        for cmd, why in (("git push origin bad", "push the checked-out branch only"),
+                         ("git push origin bad:main", "push the checked-out branch only"),
+                         ("git push --all origin", "no --all"),
+                         ("git merge bad && git push", "merge and publishing in one command"),
+                         ("gh pr create --fill --head bad", "open the pull request from the checked-out branch"),
+                         ('bash -c "git push origin bad"', "push the checked-out branch only"),
+                         ('git push "origin', "could not be read"),
+                         # wrappers, substitutions and line breaks must not hide the push
+                         ("git status\ngit push origin bad", "push the checked-out branch only"),
+                         ("git \\\n  push origin bad", "push the checked-out branch only"),
+                         ("env FOO=1 git push origin bad", "push the checked-out branch only"),
+                         ("FOO=1 time git push origin bad", "push the checked-out branch only"),
+                         ("sudo -u me git push origin bad", "push the checked-out branch only"),
+                         ('echo "$(git push origin bad)"', "push the checked-out branch only"),
+                         ("echo `git push origin bad`", "push the checked-out branch only"),
+                         ('eval "git push origin bad"', "push the checked-out branch only"),
+                         ("(cd . && git push origin bad)", "push the checked-out branch only"),
+                         ('xargs -I{} sh -c "git push origin bad"', "push the checked-out branch only"),
+                         ("git commit -n -m x", "hooks off")):
+            out = self.bash(cmd)
+            self.assertTrue(self.denied(out), cmd)
+            self.assertIn(why, reason(out), cmd)
+        for cmd in ("echo '$(git push origin bad)'", 'git commit -m "fix the push logic"', "git log --grep push"):
+            self.assertIsNone(self.bash(cmd), cmd)  # quoted text and other git commands are not publishing
+
+    def test_publishing_is_recognised_through_options(self):
+        self.python_repo()
+        self.start()
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "bad")
+        for cmd in ("gh -R o/r pr create --fill", "gh --repo o/r pr create --fill", 'git -C "/tmp/my dir" push',
+                    "git push origin main", "git push origin HEAD:refs/heads/main"):
+            out = self.bash(cmd)
+            self.assertTrue(self.denied(out), cmd)
+            self.assertIn("[test] fail", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
 
     def test_push_of_a_failing_commit_is_denied_and_a_passing_one_allowed(self):
         self.python_repo()
@@ -397,14 +609,69 @@ class PreBashTests(Harness):
         self.assertTrue(self.denied(out))
         self.assertIn(".aok/harness.json", out["hookSpecificOutput"]["permissionDecisionReason"])
 
+    def test_push_after_an_ignored_local_settings_change_is_denied(self):
+        self.python_repo()
+        self.write(".gitignore", ".claude/settings.local.json\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ignore local settings")
+        self.start()
+        self.write(".claude/settings.local.json", json.dumps({"disableAllHooks": True}))
+        self.assertEqual(self.git("status", "--porcelain"), "")  # git does not show it
+        out = self.bash("git push")
+        self.assertTrue(self.denied(out))
+        self.assertIn(".claude/settings.local.json", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_permission_rules_claude_code_writes_are_not_tampering(self):
+        self.python_repo()
+        self.write(".gitignore", ".claude/settings.local.json\n")
+        self.write(".claude/settings.local.json", json.dumps({"permissions": {"allow": []}}))
+        self.stub("ruff", "exit 0\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-qm", "ignore local settings")
+        self.start()
+        # the user chose "don't ask again": Claude Code adds the rule to the local settings
+        self.write(".claude/settings.local.json", json.dumps({"permissions": {"allow": ["Bash(npm test)"]}}))
+        self.assertIsNone(self.bash("git push"))
+
+    def test_push_after_settings_ci_or_reviewer_changes_is_denied(self):
+        for rel in (".claude/settings.json", ".github/workflows/ci.yml", ".claude/agents/aok-reviewer.md"):
+            with self.subTest(rel=rel):
+                shutil.rmtree(self.repo)
+                self.repo.mkdir()
+                self.python_repo()
+                self.start()
+                self.write(rel, "{}\n")
+                self.git("add", "-A")
+                self.git("commit", "-qm", "config")
+                out = self.bash("git push")
+                self.assertTrue(self.denied(out))
+                self.assertIn(rel, out["hookSpecificOutput"]["permissionDecisionReason"])
+
     def test_a_crash_denies_a_publishing_command(self):
         self.python_repo()
         self.start()
-        (self.repo / ".git" / "aok-harness" / "session-s1.json").write_text(
-            json.dumps({"baseline": {"head": 12345, "pending": []}}), encoding="utf-8")
-        out = self.bash("git push")
+        core = self.faulty_core("changed_since")
+        out = self.hook("pre-bash", {"tool_name": "Bash", "tool_input": {"command": "git push"}}, core=core)
         self.assertTrue(self.denied(out))
-        self.assertIn("crashed", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn("the harness crashed (RuntimeError('injected fault'))", out["hookSpecificOutput"]["permissionDecisionReason"])
+        core = self.faulty_core("hooks_off")
+        out = self.hook("pre-bash", {"tool_name": "Bash", "tool_input": {"command": 'sh -c "git push"'}}, core=core)
+        self.assertTrue(self.denied(out))  # recognised as publishing even when the crash came before the parsing
+        self.assertIsNone(self.hook("pre-bash", {"tool_name": "Bash", "tool_input": {"command": "ls"}}, core=core))
+
+    def test_a_shadowing_unittest_module_does_not_pass_the_gate(self):
+        self.python_repo()
+        self.start()
+        self.write("unittest.py", "import sys\nsys.exit(0)\n")
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.assertIn("[test] fail", self.stop()["reason"])
+
+    def test_the_uncommitted_files_are_named(self):
+        self.python_repo()
+        self.start()
+        self.write("report.xml", "<x/>\n")  # a file a check left behind
+        reason = self.bash("git push")["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("uncommitted changes (report.xml)", reason)
 
 
 class VerifyTests(Harness):
@@ -421,6 +688,28 @@ class VerifyTests(Harness):
         code, out = self.verify()
         self.assertEqual(code, 2)
         self.assertIn("unknown keys", out)
+        for bad, why in (({"gate": []}, "gate must be"), ({"budget": 5}, "budget must be"),
+                         ({"budget": {"gate": "abc"}}, "budget.gate must be"), ({"budget": {"gate": 1800}}, "from 1 to 840"),
+                         ({"budget": {"edit": 0}}, "budget.edit must be"), ({"budget": {"gate": True}}, "budget.gate"),
+                         ({"edit": {"steps": [{"cmd": []}]}}, "edit.steps"), ({"extra": {}}, "extra must be"),
+                         ({"adapter": 3}, "adapter must be")):
+            self.write(".aok/harness.json", json.dumps({"adapter": "python", **bad}))
+            code, out = self.verify()
+            self.assertEqual(code, 2, bad)
+            self.assertIn(why, out, bad)
+            self.assertNotIn("Traceback", out, bad)
+        self.write(".aok/harness.json", json.dumps({"adapter": "python", "gate": {"quick": []}}))
+        code, out = self.verify("--mode", "quick")
+        self.assertEqual(code, 2)
+        self.assertIn("the adapter has no quick gate", out)
+        self.write(".aok/harness.json", json.dumps({"adapter": "python"}))
+        self.write(".aok/harness/adapters/python.json", "{broken")  # a committed adapter copy is what --base reads
+        self.git("add", "-A")
+        self.git("commit", "-qm", "broken adapter")
+        code, out = self.verify("--base", "HEAD")
+        self.assertEqual(code, 2)
+        self.assertIn("an adapter is not valid JSON", out)
+        self.assertNotIn("Traceback", out)
 
     def test_base_ref_definition(self):
         self.python_repo(config={"adapter": "python"})
@@ -439,12 +728,47 @@ class VerifyTests(Harness):
         self.assertEqual(code, 1)
         self.assertEqual([(s["name"], s["status"]) for s in report["steps"]], [("ruff", "missing"), ("test", "fail"), ("later", "pass")])
 
-    def test_a_step_that_overruns_is_cannot(self):
-        slow = {"name": "slow", "cmd": ["python3", "-c", "import time; time.sleep(30)"]}
-        self.python_repo(config={"adapter": "python", "extra": [slow], "budget": {"gate": 3}})
+    def test_a_step_that_overruns_is_cannot_and_leaves_no_process(self):
+        pidfile = self.tmp / "child.pid"
+        spawn = ("import subprocess, sys, time; c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+                 f"open({str(pidfile)!r}, 'w').write(str(c.pid)); time.sleep(60)")
+        self.python_repo(config={"adapter": "python", "extra": [{"name": "slow", "cmd": ["python3", "-c", spawn]}],
+                                 "budget": {"gate": 4}})
         code, out = self.verify("--mode", "quick", "--json")
         self.assertEqual(code, 2)
         self.assertEqual(json.loads(out)["steps"][-1]["status"], "cannot")
+        pid = int(pidfile.read_text())
+        time.sleep(0.2)
+        alive = Path(f"/proc/{pid}").exists() and "zombie" not in Path(f"/proc/{pid}/status").read_text().lower()
+        self.assertFalse(alive, "the step's own child must not outlive the timeout")
+
+    def test_the_gate_budget_is_shared_by_the_steps(self):
+        slow = {"name": "slow", "cmd": ["python3", "-c", "import time; time.sleep(2)"]}
+        self.python_repo(config={"adapter": "python", "gate": {"quick": [slow, slow, slow]}, "budget": {"gate": 3}})
+        code, out = self.verify("--mode", "quick", "--json")
+        self.assertEqual(code, 2)
+        self.assertIn("cannot", [s["status"] for s in json.loads(out)["steps"]][1:])
+
+    def test_ci_runs_the_base_branch_harness(self):
+        # what the runbook tells CI to do: the base branch's core, adapters and definition judge the pull request
+        self.python_repo()
+        code, out = InstallTests.install(self, "--adapter", "python", "--yes")
+        self.assertEqual(code, 0, out)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "harness")
+        self.git("checkout", "-qb", "pr")
+        loose = {"name": "python", "detect": ["pyproject.toml"], "gate": {"quick": [], "full": [{"name": "ok", "cmd": ["true"]}]}}
+        self.write(".aok/harness/adapters/python.json", json.dumps(loose))
+        core = self.repo / ".aok/harness/aok_harness.py"
+        core.write_text(core.read_text().replace('return {"pass": 0, "fail": 1}.get(gate["verdict"], 2)', "return 0"))
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "loosen and break")
+        base_core = self.tmp / "base-core.py"
+        base_core.write_text(self.git("show", "main:.aok/harness/aok_harness.py"))
+        p = subprocess.run([sys.executable, "-I", str(base_core), "verify", "--root", str(self.repo), "--base", "main"],
+                           capture_output=True, text=True, env=self.env, timeout=300)
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("[test] fail", p.stdout)
 
 
 class RustAdapterTests(Harness):
@@ -459,12 +783,35 @@ class RustAdapterTests(Harness):
         self.rust_repo()
         record = self.tmp / "fsmap.log"
         self.stub("fsmap", f'echo "$*" >> {record}\ncase "$*" in "hook --help") exit 0;; esac\n'
-                           f'cat >> {record}\necho \'{{"decision": "block", "reason": "from fsmap"}}\'\n')
+                           f'cat >> {record}\necho\necho \'{{"decision": "block", "reason": "from fsmap"}}\'\n')
+        self.start()
+        self.write("src/lib.rs", "pub fn f() { }\n")
+        self.edit("src/lib.rs")
+        self.hook("prompt", {"prompt": "go"})
+        self.bash("git push")
+        self.assertEqual(self.stop(), {"decision": "block", "reason": "from fsmap"})
+        calls = [ln for ln in record.read_text().splitlines() if ln.startswith("hook ") and ln != "hook --help"]
+        self.assertEqual(calls, ["hook session-start", "hook post-edit", "hook prompt", "hook pre-bash", "hook stop"])
+        self.assertIn('"session_id": "s1"', record.read_text())
+
+    def test_a_failing_fsmap_is_not_a_pass(self):
+        self.rust_repo()
+        self.stub("fsmap", 'case "$*" in "hook --help") exit 0;; esac\necho "thread main panicked" >&2\nexit 101\n')
+        self.assertIn("fsmap hook session-start failed (exit 101)", self.start()["systemMessage"])
+        self.write("src/lib.rs", "pub fn f() { }\n")
         out = self.stop()
-        self.assertEqual(out, {"decision": "block", "reason": "from fsmap"})
-        log = record.read_text()
-        self.assertIn("hook stop", log)
-        self.assertIn('"session_id": "s1"', log)
+        self.assertTrue(self.blocked(out))
+        self.assertIn("fsmap hook stop failed (exit 101): thread main panicked", out["reason"])
+        self.git("commit", "-qam", "x")
+        out = self.bash("git push")
+        self.assertTrue(self.denied(out))
+        self.assertIn("nothing is published", out["hookSpecificOutput"]["permissionDecisionReason"])
+        # answers the probe, then is gone when the hook itself starts
+        self.stub("fsmap", 'case "$*" in "hook --help") rm -f "$0"; exit 0;; esac\nexit 0\n')
+        self.write("src/lib.rs", "pub fn f() {  }\n")
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("fsmap hook stop did not run", out["reason"])
 
     def test_verify_delegates_to_fsmap(self):
         self.rust_repo()
@@ -497,10 +844,17 @@ class RustAdapterTests(Harness):
 
     def test_fallback_reports_rust_weakening(self):
         self.rust_repo()
+        self.write("tests/t.rs", "#[test]\nfn t() {\n    assert_eq!(1, 1);\n}\n#[test]\nfn u() {}\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "tests")
         self.stub("cargo", "exit 0\n")
         self.start()
-        self.write("src/lib.rs", "#[allow(dead_code)]\npub fn f() {}\n")
-        self.assertIn("src/lib.rs: allow-attribute ×1", self.stop()["systemMessage"])
+        self.write("src/lib.rs", "#[allow(dead_code)]\n#[expect(unused)]\npub fn f() { unsafe { } }\n#[cfg(any())]\nfn g() {}\n")
+        self.write("tests/t.rs", "#[test]\n#[ignore]\nfn t() {\n}\n")
+        msg = self.stop()["systemMessage"]
+        for item in ("src/lib.rs: allow-attribute ×2", "src/lib.rs: unsafe ×1", "src/lib.rs: cfg-false ×1",
+                     "tests/t.rs: ignored-test ×1", "tests/t.rs: assertion-removed ×1", "tests/t.rs: test-removed ×1"):
+            self.assertIn(item, msg)
 
 
 @unittest.skipUnless(os.environ.get("AOK_FSMAP"), "set AOK_FSMAP to a built fsmap (d-j-lee/filesystemMap) to run")
@@ -532,7 +886,15 @@ class RealFsmapTests(Harness):
         code, out = self.verify("--mode", "quick", "--json")
         self.assertEqual(code, 0, out)
         self.assertEqual(json.loads(out)["mode"], "quick")
+        self.write("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 {\n    b + a\n}\n")
+        for answer in (self.edit("src/lib.rs"), self.hook("prompt", {"prompt": "go"}), self.bash("git status"), self.stop()):
+            self.assertIsNone(answer)  # every event reaches fsmap and comes back as fsmap answered, not as a relay failure
+        self.git("commit", "-qam", "swap")
+        self.assertIsNone(self.bash("git push"))
         self.write("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 {\n    a +  b\n}\n")  # not rustfmt-clean
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("fsmap verify failed", out["reason"])
         code, out = self.verify("--mode", "quick")
         self.assertEqual(code, 1, out)
 
@@ -562,6 +924,10 @@ class InstallTests(Harness):
         self.assertIn("Edit(/.aok/**)", s["permissions"]["ask"])
         self.assertEqual(len(s["hooks"]["Stop"]), 1)
         self.assertEqual(s["hooks"]["PostToolUse"][0]["matcher"], "Edit|Write|MultiEdit")
+        pre = s["hooks"]["PreToolUse"][0]
+        self.assertEqual((pre["matcher"], pre["hooks"][0]["onFailure"]), ("Bash", "block"))
+        self.assertGreaterEqual(s["hooks"]["Stop"][0]["hooks"][0]["timeout"], 840 + 60)  # the gate budget fits
+        self.assertNotIn("allow", s["permissions"])  # install never widens what runs without asking
         self.assertTrue((self.repo / ".aok/harness/aok_harness.py").is_file())
         self.assertTrue((self.repo / ".aok/harness/adapters/python.json").is_file())
         self.assertEqual(json.loads((self.repo / ".aok/harness.json").read_text()), {"adapter": "python"})
@@ -580,11 +946,35 @@ class InstallTests(Harness):
         p = subprocess.run(["/bin/sh", "-c", cmd], input='{"session_id": "s9"}', text=True, capture_output=True, env=env)
         self.assertEqual(json.loads(p.stdout)["decision"], "block")
 
+    def test_existing_hooks_are_kept_and_not_doubled(self):
+        self.python_repo()
+        mine = {"type": "command", "command": "echo mine"}
+        self.write(".claude/settings.json", json.dumps({"hooks": {"Stop": [{"hooks": [mine]}]}}))
+        self.install("--adapter", "python", "--yes")
+        s = json.loads((self.repo / ".claude/settings.json").read_text())
+        stop = s["hooks"]["Stop"][1]["hooks"][0]
+        self.assertEqual(s["hooks"]["Stop"][0]["hooks"], [mine])
+        stop["command"] = stop["command"].replace("python3 -I", "python3.13 -I")  # a person changed the interpreter
+        (self.repo / ".claude/settings.json").write_text(json.dumps(s))
+        self.install("--adapter", "python", "--yes")
+        self.assertEqual(len(json.loads((self.repo / ".claude/settings.json").read_text())["hooks"]["Stop"]), 2)
+
     def test_bad_inputs(self):
         self.python_repo()
         self.assertEqual(self.install("--adapter", "cobol")[0], 2)
         self.write(".claude/settings.json", "{oops")
         self.assertEqual(self.install("--adapter", "python", "--yes")[0], 2)
+        for bad in ({"hooks": []}, {"hooks": {"Stop": {}}}, {"permissions": {"ask": "x"}}, []):
+            self.write(".claude/settings.json", json.dumps(bad))
+            code, out = self.install("--adapter", "python", "--yes")
+            self.assertEqual(code, 2, bad)
+            self.assertIn("merge by hand", out)
+            self.assertNotIn("Traceback", out)
+        self.write(".claude/settings.json", "{}")
+        self.write(".aok/harness.json", json.dumps({"adapter": "python"}))
+        code, out = self.install("--adapter", "rust")
+        self.assertEqual(code, 2)
+        self.assertIn("already sets adapter 'python'", out)
 
 
 if __name__ == "__main__":

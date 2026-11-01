@@ -1,123 +1,33 @@
 {
   "name": "python",
-  "detect": [
-    "pyproject.toml",
-    "setup.py",
-    "setup.cfg",
-    "requirements.txt"
-  ],
-  "env": {
-    "PYTHONDONTWRITEBYTECODE": "1"
-  },
-  "versions": [
-    [
-      "python3",
-      "--version"
-    ],
-    [
-      "ruff",
-      "--version"
-    ]
-  ],
+  "detect": ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"],
+  "env": {"PYTHONDONTWRITEBYTECODE": "1"},
+  "versions": [["python3", "--version"], ["ruff", "--version"]],
   "edit": {
-    "match": [
-      "*.py"
-    ],
+    "match": ["*.py"],
     "steps": [
-      {
-        "name": "compile",
-        "cmd": [
-          "python3",
-          "-I",
-          "-c",
-          "import sys; compile(open(sys.argv[1], 'rb').read(), sys.argv[1], 'exec')",
-          "{file}"
-        ]
-      },
-      {
-        "name": "ruff",
-        "cmd": [
-          "ruff",
-          "check",
-          "--quiet",
-          "--select",
-          "F,E9,PLE,B",
-          "{file}"
-        ],
-        "optional": true
-      }
+      {"name": "compile", "cmd": ["python3", "-I", "-c", "import sys; compile(open(sys.argv[1], 'rb').read(), sys.argv[1], 'exec')", "{file}"]},
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "--select", "F,E9,PLE,B", "{file}"], "optional": true}
     ]
   },
   "gate": {
     "quick": [
-      {
-        "name": "ruff",
-        "cmd": [
-          "ruff",
-          "check",
-          "--quiet",
-          "--select",
-          "F,E9,PLE,B",
-          "."
-        ],
-        "optional": true
-      },
-      {
-        "name": "test",
-        "cmd": [
-          "python3",
-          "-m",
-          "unittest",
-          "discover",
-          "-s",
-          "tests"
-        ]
-      }
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "--select", "F,E9,PLE,B", "."], "optional": true},
+      {"name": "test", "cmd": ["python3", "-I", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."]}
     ],
     "full": [
-      {
-        "name": "ruff",
-        "cmd": [
-          "ruff",
-          "check",
-          "--quiet",
-          "."
-        ],
-        "optional": true
-      },
-      {
-        "name": "test",
-        "cmd": [
-          "python3",
-          "-m",
-          "unittest",
-          "discover",
-          "-s",
-          "tests"
-        ]
-      }
+      {"name": "ruff", "cmd": ["ruff", "check", "--quiet", "."], "optional": true},
+      {"name": "test", "cmd": ["python3", "-I", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."]}
     ]
   },
+  "test_files": ["tests/test*.py", "test_*.py", "tests/**/test*.py"],
   "weakening": [
-    {
-      "name": "noqa",
-      "added": "#\\s*noqa"
-    },
-    {
-      "name": "type-ignore",
-      "added": "#\\s*type:\\s*ignore"
-    },
-    {
-      "name": "skipped-test",
-      "added": "@(unittest\\.skip|pytest\\.mark\\.(skip|xfail))|\\bself\\.skipTest\\("
-    },
-    {
-      "name": "no-cover",
-      "added": "pragma:\\s*no\\s*cover"
-    },
-    {
-      "name": "assertion-removed",
-      "removed": "^\\s*(assert\\b|self\\.assert\\w*\\(|pytest\\.raises\\()"
-    }
+    {"name": "noqa", "added": "#\\s*(?:ruff:\\s*|flake8:\\s*)?noqa"},
+    {"name": "type-ignore", "added": "#\\s*type:\\s*ignore"},
+    {"name": "skipped-test", "added": "@(?:unittest\\.)?(?:skip(?:If|Unless)?|expectedFailure)\\b|@pytest\\.mark\\.(?:skip|xfail)|\\bself\\.skipTest\\(|\\bSkipTest\\b|\\bpytest\\.skip\\("},
+    {"name": "custom-test-loading", "added": "^\\s*def\\s+load_tests\\b"},
+    {"name": "no-cover", "added": "pragma:\\s*no\\s*cover"},
+    {"name": "assertion-removed", "removed": "^\\s*(assert\\b|self\\.assert\\w*\\(|pytest\\.raises\\()"},
+    {"name": "test-removed-or-renamed", "removed": "^\\s*def\\s+test_\\w*"}
   ]
 }

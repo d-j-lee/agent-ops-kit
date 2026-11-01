@@ -30,11 +30,13 @@
       {"name": "deny", "cmd": ["cargo", "deny", "check"], "optional": true}
     ]
   },
+  "test_files": ["tests/*.rs"],
   "weakening": [
-    {"name": "allow-attribute", "added": "#!?\\[\\s*allow\\s*\\("},
+    {"name": "allow-attribute", "added": "#!?\\[\\s*(allow|expect)\\s*\\("},
     {"name": "ignored-test", "added": "#\\[\\s*ignore\\b"},
     {"name": "cfg-false", "added": "#\\[\\s*cfg\\s*\\(\\s*(false|any\\s*\\(\\s*\\))"},
     {"name": "unsafe", "added": "\\bunsafe\\s*(\\{|fn|impl)"},
-    {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("}
+    {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("},
+    {"name": "test-removed", "removed": "^\\s*#\\[(tokio::)?test\\b"}
   ]
 }
