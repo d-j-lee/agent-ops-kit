@@ -166,6 +166,16 @@ class SessionStartTests(Harness):
         out = self.start()
         self.assertIn("OFF", out["systemMessage"])
         self.assertIn("cannot pick an adapter", out["systemMessage"])
+        self.assertIn("OFF", out["hookSpecificOutput"]["additionalContext"])  # Claude is told too, not only the user
+
+    def test_python_is_detected_by_any_of_its_files(self):
+        for marker in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
+            with self.subTest(marker=marker):
+                shutil.rmtree(self.repo)
+                self.repo.mkdir()
+                self.write(marker, "\n")
+                self.git("init", "-q", "-b", "main")
+                self.assertIn("adapter python", self.start()["hookSpecificOutput"]["additionalContext"])
 
     def test_continued_session_without_state_owns_the_changes(self):
         self.python_repo()
@@ -218,6 +228,13 @@ class PostEditTests(Harness):
         self.assertTrue(self.blocked(out))
         self.assertIn("pkg/__init__.py", out["reason"])
         self.assertIn("SyntaxError", out["reason"])
+
+    def test_every_edit_tool_is_checked(self):
+        self.python_repo()
+        self.start()
+        self.write("pkg/__init__.py", "def add(a, b)\n")
+        for tool in ("Edit", "Write", "MultiEdit"):
+            self.assertTrue(self.blocked(self.edit("pkg/__init__.py", tool=tool)), tool)
 
     def test_good_edit_is_silent_and_writes_no_bytecode(self):
         self.python_repo()
@@ -287,6 +304,7 @@ class StopTests(Harness):
         self.assertIn("AssertionError", out["reason"])
         self.assertIn("Block 1 of 3.", out["reason"])
         self.assertNotIn("last block", out["reason"])
+        self.assertIn("tell the user instead of editing unrelated code", out["reason"])
 
     def test_three_blocks_then_released_and_prompt_resets(self):
         self.python_repo()
@@ -343,6 +361,10 @@ class StopTests(Harness):
         self.git("add", "-A")
         self.git("commit", "-qm", "first")
         self.assertTrue(self.blocked(self.stop()))
+        self.stub("ruff", "exit 0\n")
+        self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa"))
+        self.git("commit", "-qam", "fixed, quietly")
+        self.assertIn("pkg/__init__.py: noqa ×1", self.stop()["systemMessage"])  # the first commit's lines are read too
 
     def test_pass_reports_weakened_checks(self):
         self.python_repo()
@@ -368,6 +390,126 @@ class StopTests(Harness):
                      "tests/test_more.py: skipped-test ×1",
                      "tests/test_gone.py: test file removed or moved where the tests are not collected"):
             self.assertIn(item, msg)
+
+    def test_more_weakening_forms_are_reported(self):
+        self.python_repo()
+        base = {"t_plain": "    def test_a(self):\n        assert add(1, 2) == 3\n",
+                "t_raises": "    def test_a(self):\n        with self.assertRaises(TypeError):\n            add(1)\n",
+                "t_mock": "    def test_a(self):\n        m = mock.Mock()\n        m(1)\n        m.assert_called_once_with(1)\n",
+                "t_pyraises": "    def test_a(self):\n        with pytest.raises(TypeError):\n            add(1)\n",
+                "t_camel": "    def testAdd(self):\n        self.assertEqual(add(1, 2), 3)\n",
+                "t_async": "    async def test_a(self):\n        self.assertEqual(add(1, 2), 3)\n",
+                "t_class": "    def test_a(self):\n        self.assertEqual(add(1, 2), 3)\n"}
+        head_ = "import unittest\nfrom unittest import mock\nfrom pkg import add\ntry:\n    import pytest\nexcept ImportError:\n    pytest = None\n\n\nclass T(unittest.TestCase):\n"
+        for name, body in base.items():
+            self.write(f"tests/{name}.py", head_ + body)
+        self.write("tests/test_keep.py", TEST.replace("def test_add", "def test_keep"))
+        self.git("add", "-A")
+        self.git("commit", "-qm", "tests")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        weakened = {"t_plain": base["t_plain"].replace("        assert add(1, 2) == 3\n", "        pass\n"),
+                    "t_raises": "    def test_a(self):\n        pass\n",
+                    "t_mock": base["t_mock"].replace("        m.assert_called_once_with(1)\n", ""),
+                    "t_pyraises": "    def test_a(self):\n        pass\n",
+                    "t_camel": base["t_camel"].replace("testAdd", "xtestAdd"),
+                    "t_async": base["t_async"].replace("async def test_a", "async def check_a"),
+                    "t_class": base["t_class"]}
+        for name, body in weakened.items():
+            self.write(f"tests/{name}.py", (head_.replace("(unittest.TestCase)", "") if name == "t_class" else head_) + body)
+        self.write("tests/test_skips.py", "import unittest\ntry:\n    import pytest\nexcept ImportError:\n    pytest = None\n"
+                   "if pytest:\n    @pytest.mark.skip\n    def test_a():\n        pass\n\n"
+                   "    @pytest.mark.xfail\n    def test_b():\n        pass\n\n"
+                   "    def test_c():\n        pytest.skip('later')\n\n\n"
+                   "class T(unittest.TestCase):\n    __unittest_skip__ = True\n\n"
+                   "    @unittest.skipUnless(False, 'x')\n    def test_d(self):\n        self.skipTest('x')\n\n"
+                   "    def test_e(self):\n        raise unittest.SkipTest('x')\n\n\nload_tests = None\n")
+        self.write("pkg/__init__.py", ADD_OK + "# flake8: noqa\nX = 1  # NOQA\n")
+        self.write("pyproject.toml", '[project]\nname = "x"\n\n[tool.ruff.lint.per-file-ignores]\n"pkg/*" = ["F"]\n')
+        msg = self.stop()["systemMessage"]
+        for item in ("tests/t_plain.py: assertion-removed ×1", "tests/t_raises.py: assertion-removed ×1",
+                     "tests/t_mock.py: assertion-removed ×1", "tests/t_pyraises.py: assertion-removed ×1",
+                     "tests/t_camel.py: test-removed-or-renamed ×1", "tests/t_async.py: test-removed-or-renamed ×1",
+                     "tests/t_class.py: test-class-removed ×1", "tests/test_skips.py: skipped-test ×7",
+                     "tests/test_skips.py: custom-test-loading ×1", "pkg/__init__.py: noqa ×2",
+                     "check settings changed in this session, review what they switch off: pyproject.toml"):
+            self.assertIn(item, msg)
+
+    def test_a_test_file_moved_where_it_is_not_collected_is_reported(self):
+        for dest, reported in (("tests/sub/test_more.py", True), ("tests/test-more.py", True),
+                               ("tests/pkg2/test_more.py", False)):
+            with self.subTest(dest=dest):
+                shutil.rmtree(self.repo)
+                self.repo.mkdir()
+                self.python_repo()
+                self.write("tests/test_more.py", TEST.replace("def test_add", "def test_more"))
+                self.write("tests/pkg2/__init__.py", "")
+                self.git("add", "-A")
+                self.git("commit", "-qm", "more")
+                self.stub("ruff", "exit 0\n")
+                self.start()
+                (self.repo / dest).parent.mkdir(parents=True, exist_ok=True)
+                self.git("mv", "tests/test_more.py", dest)
+                out = self.stop()
+                msg = (out or {}).get("systemMessage", "")
+                self.assertEqual("tests/test_more.py: test file removed or moved where the tests are not collected" in msg,
+                                 reported, msg)
+
+    def test_a_merged_side_branch_is_the_sessions(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.git("checkout", "-qb", "side")
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "broken on the side")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge side", "side")
+        self.assertTrue(self.blocked(self.stop()))  # the session's own merge is judged
+        self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa"))
+        self.git("checkout", "-qb", "side2")
+        self.git("commit", "-qam", "quiet on the side")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge side2", "side2")
+        self.assertIn("pkg/__init__.py: noqa ×1", self.stop()["systemMessage"])
+
+    def test_a_branch_from_before_the_session_is_not_its_own(self):
+        self.python_repo()
+        self.git("checkout", "-qb", "theirs")
+        self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa"))
+        self.git("commit", "-qam", "someone else's")
+        self.git("checkout", "-q", "main")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.git("merge", "-q", "--no-ff", "-m", "merge theirs", "theirs")
+        out = self.stop()  # HEAD moved, so the tree is judged; the noqa is not this session's
+        self.assertNotIn("noqa", (out or {}).get("systemMessage", ""))
+        self.assertEqual(self.log()[-1]["result"], "pass")
+
+    def test_file_names_that_are_not_utf8_do_not_break_the_hooks(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        (self.repo / os.fsdecode(b"caf\xe9.txt")).write_text("x\n", encoding="utf-8")
+        self.assertIn("adapter python", self.start()["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(self.stop())
+        self.assertIn("uncommitted changes", self.bash("git push")["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_new_untracked_test_file_is_read(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write("tests/test_new.py", TEST.replace("    def test_add", "    @unittest.skip('later')\n    def test_add"))
+        self.assertIn("tests/test_new.py: skipped-test ×1", self.stop()["systemMessage"])
+
+    def test_ignored_harness_changes_are_reported_at_the_end(self):
+        self.python_repo()
+        self.write(".gitignore", ".claude/settings.local.json\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ignore local settings")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write(".claude/settings.local.json", json.dumps({"env": {"PATH": "/tmp"}}))
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        self.assertIn("harness file changed in this session: .claude/settings.local.json", self.stop()["systemMessage"])
 
     def test_a_rewritten_assertion_is_not_a_removed_one(self):
         self.python_repo()
@@ -416,8 +558,9 @@ class StopTests(Harness):
 
     def test_a_definition_the_base_commit_lacks_is_not_used(self):
         self.python_repo()  # no .aok/harness.json committed: the adapter is detected
-        self.start()
         self.write(".aok/harness.json", json.dumps({"adapter": "python", "gate": {"quick": [{"name": "ok", "cmd": ["python3", "-c", "pass"]}]}}))
+        ctx = self.start()["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("applies to sessions that start after it is committed", ctx)
         self.write("pkg/__init__.py", ADD_BAD)
         out = self.stop()
         self.assertTrue(self.blocked(out))
@@ -438,6 +581,9 @@ class StopTests(Harness):
         self.python_repo()
         self.start()
         self.write("pkg/__init__.py", ADD_OK + "\n")
+        head_ = self.git("rev-parse", "HEAD").strip()
+        self.state_file().write_text(json.dumps({"baseline": {"head": head_, "pending": {}, "protected": []}}), encoding="utf-8")
+        self.assertIn("damaged", self.stop()["reason"])  # a baseline whose protected hashes are not a mapping
         self.state_file().write_text(json.dumps({"baseline": {"head": 12345, "pending": []}}), encoding="utf-8")
         out = self.stop()
         self.assertTrue(self.blocked(out))
@@ -473,9 +619,10 @@ class StopTests(Harness):
         self.python_repo()
         self.start()
         self.write("pkg/__init__.py", ADD_BAD)
-        out = self.stop(background_tasks=[{"id": "x", "type": "subagent", "status": "running"}])
-        self.assertFalse(self.blocked(out))
-        self.assertIn("background agents are still working (subagent)", out["systemMessage"])
+        for kind in ("subagent", "workflow", "teammate", "cloud session"):
+            out = self.stop(background_tasks=[{"id": "x", "type": kind, "status": "running"}])
+            self.assertFalse(self.blocked(out), kind)
+            self.assertIn(f"background agents are still working ({kind})", out["systemMessage"])
         self.assertEqual(self.log()[-1]["result"], "skip-background")
         # a shell or monitor left running is not the turn's work: it must not switch the gate off
         self.assertTrue(self.blocked(self.stop(background_tasks=[{"id": "y", "type": "shell", "command": "sleep 999"},
@@ -490,12 +637,14 @@ class StopTests(Harness):
         self.assertEqual(code, 0, out)
 
     def test_steps_do_not_inherit_git_redirect_variables(self):
-        check = {"name": "env", "cmd": ["python3", "-c", "import os, sys; sys.exit(1 if 'GIT_DIR' in os.environ else 0)"]}
+        names = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                 "GIT_COMMON_DIR", "GIT_NAMESPACE")
+        check = {"name": "env", "cmd": ["python3", "-c", f"import os, sys; sys.exit(any(n in os.environ for n in {names!r}))"]}
         self.python_repo(config={"adapter": "python", "extra": [check]})
         self.stub("ruff", "exit 0\n")
         self.start()
         self.write("pkg/__init__.py", ADD_OK + "\n")
-        self.assertIsNone(self.hook("stop", {}, extra_env={"GIT_DIR": str(self.repo / ".git")}))
+        self.assertIsNone(self.hook("stop", {}, extra_env={n: str(self.repo / ".git") for n in names}))
 
     def test_without_git_the_gate_runs_every_time(self):
         self.python_repo(commit=False)
@@ -533,14 +682,17 @@ class PreBashTests(Harness):
     def test_no_verify_is_denied(self):
         self.python_repo()
         self.start()
-        for cmd in ("git commit -m x --no-verify", "git -c core.hooksPath=/dev/null push", "git commit -n -m x",
+        for cmd in ('git commit --no-"verify" -m x', "git commit --no-verif -m x", "git push --no-veri",
+                    "git config core.hooks\\Path /dev/null", 'git -c core."hooksPath"=/dev/null commit -m x',
+                    "git commit -m x --no-verify", "git -c core.hooksPath=/dev/null push", "git commit -n -m x",
+                    'git commit --no-verify -m "unbalanced',
                     "git commit -nm x", "git commit -am x -n", "git commit -vnm x", "git config core.hooksPath /dev/null",
                     "git -c CORE.HOOKSPATH=x commit -m y", "git push '--no-verify'", 'sh -c "git commit -n -m x"'):
             out = self.bash(cmd)
             self.assertTrue(self.denied(out), cmd)
             self.assertIn("hooks off", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
         for cmd in ("git commit -m -n", "git commit --message -n", "git commit -- -n", "git log -n 3",
-                    "grep -i core.hookspath .git/config"):
+                    "grep -i core.hookspath .git/config", "git commit --no-verbose -m x"):
             self.assertIsNone(self.bash(cmd), cmd)
 
     def test_push_with_uncommitted_changes_is_denied(self):
@@ -578,12 +730,29 @@ class PreBashTests(Harness):
                          ('eval "git push origin bad"', "push the checked-out branch only"),
                          ("(cd . && git push origin bad)", "push the checked-out branch only"),
                          ('xargs -I{} sh -c "git push origin bad"', "push the checked-out branch only"),
+                         ('echo "it\'s $(git push origin bad:main) and that\'s it"', "push the checked-out branch only"),
+                         ("git push origin `git rev-parse bad`:main", "push the checked-out branch only"),
+                         ("git -c remote.origin.push=refs/heads/bad:refs/heads/main push origin", "changes what git sends"),
+                         ("git push --branches origin", "no --all"),
+                         ("git push --mirror origin", "no --all"),
+                         ("git push --tags origin", "no --all"),
+                         ("gh pr create --fill -H bad", "open the pull request from the checked-out branch"),
+                         ("gh pr create --fill --head=bad", "open the pull request from the checked-out branch"),
+                         ("gh pr create --fill -Hbad", "open the pull request from the checked-out branch"),
+                         ("gh pr new --fill --head bad", "open the pull request from the checked-out branch"),
+                         ('gh pr create --title "x', "could not be read"),
+                         ("env -u CLAUDECODE git push", "CLAUDECODE"),
                          ("git commit -n -m x", "hooks off")):
             out = self.bash(cmd)
             self.assertTrue(self.denied(out), cmd)
             self.assertIn(why, reason(out), cmd)
         for cmd in ("echo '$(git push origin bad)'", 'git commit -m "fix the push logic"', "git log --grep push"):
             self.assertIsNone(self.bash(cmd), cmd)  # quoted text and other git commands are not publishing
+        for mover in ("merge", "rebase", "reset", "checkout", "switch", "commit", "cherry-pick", "pull", "am", "revert",
+                      "stash", "update-ref", "symbolic-ref", "branch", "tag", "restore", "worktree", "filter-branch",
+                      "replace"):
+            out = self.bash(f"git {mover} x && git push")
+            self.assertIn(f"{mover} and publishing in one command", reason(out), mover)
 
     def test_publishing_is_recognised_through_options(self):
         self.python_repo()
@@ -608,6 +777,10 @@ class PreBashTests(Harness):
         self.git("commit", "-qam", "good")
         self.assertIsNone(self.bash("gh pr create --fill"))
         self.assertIsNone(self.bash("git push origin main\necho pushed"))  # the next line is not one of push's refs
+        for cmd in ("git push origin main 2>&1", "git push -u origin main > push.log", "git push -o ci.skip origin main",
+                    "git push --push-option ci.skip origin main", "git push origin @:main", "git push origin +main",
+                    "git push origin refs/heads/main"):
+            self.assertIsNone(self.bash(cmd), cmd)  # redirections, option values and @ are not refs
         self.assertEqual(self.log()[-1], {**self.log()[-1], "event": "pre-bash", "result": "pass"})
 
     def test_push_after_a_harness_change_is_denied(self):
@@ -630,6 +803,32 @@ class PreBashTests(Harness):
         out = self.bash("git push")
         self.assertTrue(self.denied(out))
         self.assertIn(".claude/settings.local.json", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_hook_and_env_changes_in_local_settings_are_denied(self):
+        for change in ({"hooks": {}}, {"env": {"PATH": "/tmp"}}, {"disableAllHooks": True}):
+            with self.subTest(change=change):
+                shutil.rmtree(self.repo)
+                self.repo.mkdir()
+                self.python_repo()
+                self.write(".gitignore", ".claude/settings.local.json\n")
+                self.write(".claude/settings.local.json", json.dumps({"permissions": {"allow": []}}))
+                self.git("add", ".gitignore")
+                self.git("commit", "-qm", "ignore local settings")
+                self.start()
+                self.write(".claude/settings.local.json", json.dumps({"permissions": {"allow": []}, **change}))
+                self.assertTrue(self.denied(self.bash("git push")), change)
+
+    def test_a_worktree_watches_the_main_checkouts_local_settings(self):
+        self.python_repo()
+        wt = self.tmp / "wt"
+        self.git("worktree", "add", "-q", str(wt), "-b", "feature")
+        main, self.repo = self.repo, wt
+        self.start()
+        (main / ".claude").mkdir(exist_ok=True)
+        (main / ".claude" / "settings.local.json").write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
+        out = self.bash("git push")
+        self.assertTrue(self.denied(out))
+        self.assertIn("settings.local.json", out["hookSpecificOutput"]["permissionDecisionReason"])
 
     def test_permission_rules_claude_code_writes_are_not_tampering(self):
         self.python_repo()
@@ -684,6 +883,92 @@ class PreBashTests(Harness):
         self.assertIn("uncommitted changes (report.xml)", reason)
 
 
+class PushHookTests(Harness):
+    """The git pre-push hook the session start installs: inside Claude Code only commits the gate passed go out,
+    however the push names them."""
+
+    def remote_repo(self):
+        self.python_repo()
+        remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], env=self.env, check=True)
+        self.git("remote", "add", "origin", str(remote))
+        self.git("push", "-q", "origin", "main")
+        return remote
+
+    def push(self, *args, claude=True):
+        env = {**self.env, **({"CLAUDECODE": "1"} if claude else {})}
+        return subprocess.run(["git", *args], cwd=self.repo, env=env, capture_output=True, text=True)
+
+    def remote_head(self, remote):
+        return subprocess.run(["git", "rev-parse", "main"], cwd=remote, env=self.env, capture_output=True, text=True).stdout.strip()
+
+    def test_the_hook_is_installed_and_announced(self):
+        self.python_repo()
+        self.assertIn("git pre-push hook", self.start()["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("aok-harness pre-push", (self.repo / ".git" / "hooks" / "pre-push").read_text())
+        self.start(source="compact")  # refreshing keeps one hook
+        self.assertEqual((self.repo / ".git" / "hooks" / "pre-push").read_text().count("aok-harness pre-push"), 1)
+
+    def test_only_commits_the_gate_passed_can_be_pushed(self):
+        remote = self.remote_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write("pkg/__init__.py", ADD_OK + "\n")
+        self.git("commit", "-qam", "good")
+        self.assertIsNone(self.bash("git push origin main"))  # the gate passes and records the commit
+        self.assertEqual(self.push("push", "-q", "origin", "main").returncode, 0)
+        self.git("checkout", "-qb", "bad")
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "bad")
+        self.git("checkout", "-q", "main")
+        good = self.remote_head(remote)
+        for args in (["-c", "remote.origin.push=refs/heads/bad:refs/heads/main", "push", "origin"],
+                     ["push", "origin", "bad:main"]):
+            p = self.push(*args)
+            self.assertNotEqual(p.returncode, 0, args)
+            self.assertIn("[aok-harness] push refused", p.stderr, args)
+            self.assertEqual(self.remote_head(remote), good, args)
+        self.git("update-ref", "refs/heads/main", "bad")  # moved in an earlier command
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "main").stderr)
+        self.assertEqual(self.push("push", "-q", "origin", "main", claude=False).returncode, 0)  # a person may
+        self.assertNotEqual(self.remote_head(remote), good)
+        self.assertEqual(self.push("push", "-q", "origin", "bad:old", claude=False).returncode, 0)
+        self.assertEqual(self.push("push", "-q", "origin", ":old").returncode, 0)  # a deletion sends no commit
+
+    def test_a_pass_on_a_dirty_tree_does_not_clear_the_commit(self):
+        remote = self.remote_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "bad")
+        self.write("pkg/__init__.py", ADD_OK)  # fixed in the work tree only: the gate passes, the commit is still bad
+        self.assertIsNone(self.stop())
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "main").stderr)
+        self.assertNotEqual(self.remote_head(remote), self.git("rev-parse", "HEAD").strip())
+
+    def test_a_changed_hook_stops_publishing(self):
+        self.python_repo()
+        self.start()
+        (self.repo / ".git" / "hooks" / "pre-push").write_text("#!/bin/sh\nexit 0\n")
+        out = self.bash("git push")
+        self.assertTrue(self.denied(out))
+        self.assertIn("pre-push hook was removed or changed", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_hook_that_is_not_the_harnesss_is_left_alone(self):
+        self.python_repo()
+        theirs = "#!/bin/sh\necho theirs\n"
+        (self.repo / ".git" / "hooks").mkdir(exist_ok=True)
+        (self.repo / ".git" / "hooks" / "pre-push").write_text(theirs)
+        self.assertIn("not the harness's", self.start()["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual((self.repo / ".git" / "hooks" / "pre-push").read_text(), theirs)
+
+    def test_no_hook_when_core_hooks_path_is_set(self):
+        self.python_repo()
+        self.git("config", "core.hooksPath", ".husky")
+        self.assertIn("core.hooksPath is set", self.start()["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse((self.repo / ".husky").exists())
+
+
 class VerifyTests(Harness):
     def test_exit_codes(self):
         self.python_repo()
@@ -702,6 +987,10 @@ class VerifyTests(Harness):
                          ({"budget": {"gate": "abc"}}, "budget.gate must be"), ({"budget": {"gate": 1800}}, "from 1 to 840"),
                          ({"budget": {"edit": 0}}, "budget.edit must be"), ({"budget": {"gate": True}}, "budget.gate"),
                          ({"edit": {"steps": [{"cmd": []}]}}, "edit.steps"), ({"extra": {}}, "extra must be"),
+                         ({"budget": {"edit": 101}}, "from 1 to 100"),
+                         ({"extra": [{"name": "x", "cmd": ["true"], "optional": "no"}]}, "optional true or false"),
+                         ({"extra": [{"name": 3, "cmd": ["true"]}]}, "a name that is a string"),
+                         ({"edit": {"match": [1], "steps": []}}, "edit.match must be"),
                          ({"adapter": 3}, "adapter must be")):
             self.write(".aok/harness.json", json.dumps({"adapter": "python", **bad}))
             code, out = self.verify()
@@ -802,11 +1091,30 @@ class RustAdapterTests(Harness):
         self.write("src/lib.rs", "pub fn f() { }\n")
         self.edit("src/lib.rs")
         self.hook("prompt", {"prompt": "go"})
+        self.bash("cargo build")  # not publishing: fsmap still sees it
         self.bash("git push")
         self.assertEqual(self.stop(), {"decision": "block", "reason": "from fsmap"})
         calls = [ln for ln in record.read_text().splitlines() if ln.startswith("hook ") and ln != "hook --help"]
-        self.assertEqual(calls, ["hook session-start", "hook post-edit", "hook prompt", "hook pre-bash", "hook stop"])
+        self.assertEqual(calls, ["hook session-start", "hook post-edit", "hook prompt", "hook pre-bash", "hook pre-bash",
+                                 "hook stop"])
         self.assertIn('"session_id": "s1"', record.read_text())
+
+    def test_the_delegates_block_comes_back_with_its_reason(self):
+        self.rust_repo()
+        self.stub("fsmap", 'case "$*" in "hook --help") exit 0;; "hook stop") echo "fmt is off" >&2; exit 2;; esac\nexit 0\n')
+        self.start()
+        env = {**self.env, "CLAUDE_PROJECT_DIR": str(self.repo)}
+        p = subprocess.run([sys.executable, "-I", str(CORE), "hook", "stop"], input='{"session_id": "s1"}',
+                           capture_output=True, text=True, env=env, timeout=120)
+        self.assertEqual(p.returncode, 2)  # Claude Code reads exit 2 as a block, with stderr as the reason
+        self.assertIn("fmt is off", p.stderr)
+
+    def test_a_delegate_that_hangs_is_cut_off(self):
+        self.rust_repo()
+        self.stub("fsmap", 'case "$*" in "hook --help") exit 0;; "hook prompt") sleep 40;; esac\nexit 0\n')
+        self.start()
+        out = self.hook("prompt", {"prompt": "go"})  # the prompt hook has 30 s; the delegate gets 24 of them
+        self.assertIn("fsmap hook prompt did not run", out["systemMessage"])
 
     def test_a_failing_fsmap_is_not_a_pass(self):
         self.rust_repo()
@@ -855,6 +1163,32 @@ class RustAdapterTests(Harness):
         self.assertTrue(self.blocked(out))
         self.assertIn("[clippy] fail", out["reason"])
         self.assertNotIn("[fmt] fail", out["reason"])
+
+    def test_rust_quick_gate_checks_format_and_denies_warnings(self):
+        self.rust_repo()
+        self.stub("cargo", 'case "$1" in fmt) echo "Diff in src/lib.rs"; exit 1;; clippy) case "$*" in *"-D warnings"*) '
+                           'echo "error: unused"; exit 101;; esac;; esac\nexit 0\n')
+        code, out = self.verify("--mode", "quick")
+        self.assertEqual(code, 1)
+        self.assertIn("fail  fmt", out)
+        self.assertIn("fail  clippy", out)
+
+    def test_more_rust_weakening_forms_are_reported(self):
+        self.rust_repo()
+        self.write("tests/t.rs", "#[test]\nfn t() {\n    assert!(true);\n    assert_ne!(1, 2);\n    debug_assert!(true);\n}\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "tests")
+        self.stub("cargo", "exit 0\n")
+        self.start()
+        self.write("src/lib.rs", "#![cfg_attr(all(), allow(warnings))]\npub fn f() {}\nunsafe fn g() {}\n"
+                   "struct S;\nunsafe impl Send for S {}\n#[cfg(false)]\nfn h() {}\n#[cfg(not(all()))]\nfn i() {}\n")
+        self.write("tests/t.rs", "#[test]\n#[cfg_attr(all(), ignore)]\nfn t() {\n}\n")
+        self.write(".cargo/config.toml", "[target.'cfg(all())']\nrunner = \"true\"\n")
+        msg = self.stop()["systemMessage"]
+        for item in ("src/lib.rs: allow-attribute ×1", "src/lib.rs: unsafe ×2", "src/lib.rs: cfg-false ×2",
+                     "tests/t.rs: ignored-test ×1", "tests/t.rs: assertion-removed ×3",
+                     "check settings changed in this session, review what they switch off: .cargo/config.toml"):
+            self.assertIn(item, msg)
 
     def test_fallback_reports_rust_weakening(self):
         self.rust_repo()
@@ -946,6 +1280,9 @@ class InstallTests(Harness):
         self.assertTrue((self.repo / ".aok/harness/adapters/python.json").is_file())
         self.assertEqual(json.loads((self.repo / ".aok/harness.json").read_text()), {"adapter": "python"})
         self.assertTrue((self.repo / ".claude/agents/aok-reviewer.md").is_file())
+        self.assertEqual(set(s["hooks"]), {"SessionStart", "UserPromptSubmit", "PostToolUse", "PreToolUse", "Stop"})
+        for rule in ("Edit(/.aok/**)", "Write(/.aok/**)", "Edit(/.claude/**)", "Write(/.claude/**)"):
+            self.assertIn(rule, s["permissions"]["ask"])
 
     def test_installed_copy_answers_hooks(self):
         self.python_repo()
@@ -984,11 +1321,29 @@ class InstallTests(Harness):
             self.assertEqual(code, 2, bad)
             self.assertIn("merge by hand", out)
             self.assertNotIn("Traceback", out)
+        (self.repo / ".claude" / "settings.json").write_bytes(b'{"model": "caf\xe9"}')  # not UTF-8
+        code, out = self.install("--adapter", "python", "--yes")
+        self.assertEqual(code, 2, out)
+        self.assertNotIn("Traceback", out)
+        self.write(".claude/settings.json", json.dumps({"disableAllHooks": True}))
+        code, out = self.install("--adapter", "python", "--yes")
+        self.assertEqual(code, 2)
+        self.assertIn("disableAllHooks", out)
         self.write(".claude/settings.json", "{}")
         self.write(".aok/harness.json", json.dumps({"adapter": "python"}))
         code, out = self.install("--adapter", "rust")
         self.assertEqual(code, 2)
         self.assertIn("already sets adapter 'python'", out)
+
+    def test_installing_again_from_the_installed_copy(self):
+        self.python_repo()
+        self.write(".claude/settings.local.json", json.dumps({"disableAllHooks": True}))
+        code, out = self.install("--adapter", "python", "--yes")
+        self.assertEqual(code, 0, out)
+        self.assertIn("warning: ", out)  # the local settings switch the hooks off
+        p = subprocess.run([sys.executable, "-I", str(self.repo / ".aok/harness/aok_harness.py"), "install", "--repo",
+                            str(self.repo), "--adapter", "python", "--yes"], capture_output=True, text=True, env=self.env)
+        self.assertEqual(p.returncode, 0, p.stderr)
 
 
 if __name__ == "__main__":

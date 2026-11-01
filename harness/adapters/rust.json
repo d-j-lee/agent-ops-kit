@@ -31,10 +31,11 @@
     ]
   },
   "test_files": ["tests/*.rs"],
+  "check_config": [".cargo/config.toml", ".cargo/config", "*/.cargo/config.toml", "Cargo.toml", "*/Cargo.toml", "rust-toolchain", "rust-toolchain.toml", "clippy.toml", ".clippy.toml", "rustfmt.toml", ".rustfmt.toml", "deny.toml", "build.rs", "*/build.rs"],
   "weakening": [
-    {"name": "allow-attribute", "added": "#!?\\[\\s*(allow|expect)\\s*\\("},
-    {"name": "ignored-test", "added": "#\\[\\s*ignore\\b"},
-    {"name": "cfg-false", "added": "#\\[\\s*cfg\\s*\\(\\s*(false|any\\s*\\(\\s*\\))"},
+    {"name": "allow-attribute", "added": "#!?\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?(?:allow|expect)\\s*\\("},
+    {"name": "ignored-test", "added": "#\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?ignore\\b"},
+    {"name": "cfg-false", "added": "#!?\\[\\s*cfg\\s*\\(\\s*(?:false|any\\s*\\(\\s*\\)|not\\s*\\(\\s*all\\s*\\(\\s*\\)\\s*\\))"},
     {"name": "unsafe", "added": "\\bunsafe\\s*(\\{|fn|impl)"},
     {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("},
     {"name": "test-removed", "removed": "^\\s*#\\[(tokio::)?test\\b"}

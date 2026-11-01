@@ -16,6 +16,9 @@ Commands
                         commit: CI passes the base branch). Exit 0 passed, 1 a step failed,
                         2 the gate could not run (a required tool missing, a
                         step timed out, the configuration unreadable)
+  git-pre-push          git's pre-push hook (session-start installs it): inside Claude
+                        Code, refuse to push any commit the gate has not passed on a
+                        clean tree
   install --repo DIR --adapter NAME [--yes]
                         copy the harness into DIR/.aok/harness and add the hooks
                         to DIR/.claude/settings.json. Without --yes it only
@@ -24,8 +27,9 @@ Commands
 
 What the hooks do
   session-start  On `startup`, or when this session id has no usable state yet,
-                 record the baseline (HEAD, hashes of files already changed, hashes
-                 of the harness files). A session that continues another one
+                 record the baseline (HEAD, the refs that exist, hashes of files
+                 already changed and of the harness files) and install the git
+                 pre-push hook in the git directory. A session that continues another one
                  (resume or fork without state) counts every changed file as its
                  own. Tell Claude which adapter and tool versions are active, or
                  that the harness is OFF and why.
@@ -50,13 +54,16 @@ What the hooks do
                  leaves the gate to the real end; a background shell does not
                  count.
   prompt         The user wrote: reset the strike count.
-  pre-bash       Deny a git command that switches git hooks off (--no-verify,
-                 commit -n, core.hooksPath). For a command that publishes (git
-                 push, gh pr create): deny it when it publishes anything but the
-                 checked-out branch, moves HEAD in the same command, when the
-                 harness files, its settings or the CI workflows changed in this
-                 session, when uncommitted changes mean the gate would not see
-                 what is pushed, or when the quick gate fails or cannot run.
+  pre-bash       Deny a git command that switches git hooks off (--no-verify and
+                 its abbreviations, commit -n, core.hooksPath). For a command that
+                 publishes (git push, gh pr create): deny it when it publishes
+                 anything but the checked-out branch, moves HEAD or a branch in
+                 the same command, changes CLAUDECODE, when the pre-push hook was
+                 changed, the harness files, its settings or the CI workflows
+                 changed in this session, when uncommitted changes mean the gate
+                 would not see what is pushed, or when the quick gate fails or
+                 cannot run. A pass records the commit for the pre-push hook,
+                 which then judges what git actually sends.
 
 The gate definition (.aok/harness.json) and the adapters copied into
 .aok/harness/adapters are read from the commit the session started on, not from
@@ -106,9 +113,15 @@ GIT_REDIRECT = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECT
                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE")
 # fallback when a command cannot be split into words: anything that looks like publishing counts as publishing
 PUBLISH = re.compile(r"\bgit\b(?:\s+\S+)*?\s+push\b|\bgh\b(?:\s+\S+)*?\s+pr\s+create\b")
-NO_VERIFY = re.compile(r"--no-verify\b|\bcore\.hookspath\b", re.I)  # git config keys ignore case
+# git takes any unambiguous prefix of a long option (--no-veri), and its config keys ignore case
+NO_VERIFY = re.compile(r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])|hookspath", re.I)
 GIT_GLOBAL_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"}
-MOVES_HEAD = {"merge", "rebase", "reset", "checkout", "switch", "commit", "cherry-pick", "pull", "am", "revert", "stash"}
+# commands that move HEAD or the branches a push sends: run in the same command as a push, the gate saw another tree
+MOVES_HEAD = {"merge", "rebase", "reset", "checkout", "switch", "commit", "cherry-pick", "pull", "am", "revert", "stash",
+              "update-ref", "symbolic-ref", "branch", "tag", "restore", "worktree", "filter-branch", "replace"}
+PUSH_ALL = {"--all", "--branches", "--mirror", "--tags", "--follow-tags"}
+PUSH_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+REDIRECT = re.compile(r"^\d*(?:>>?|<<?<?|>&|<&|&>>?|>\|)(.*)$")  # an operator, with its target attached or not
 SHELLS = {"bash", "sh", "zsh", "dash"}
 
 
@@ -122,9 +135,11 @@ def clean_env() -> dict:
     return {k: v for k, v in os.environ.items() if k not in GIT_REDIRECT}
 
 
-def git(root: Path, *args: str, binary: bool = False, strip: bool = True):
+def git(root: Path, *args: str, binary: bool = False, strip: bool = True, stdin: str | None = None):
     try:
-        p = subprocess.run(["git", *args], cwd=root, capture_output=True, env=clean_env(), timeout=60)
+        p = subprocess.run(["git", *args], cwd=root, capture_output=True, env=clean_env(), timeout=60,
+                           input=stdin.encode() if stdin is not None else None,
+                           stdin=None if stdin is not None else subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if p.returncode != 0:
@@ -187,6 +202,20 @@ def settings_hash(path: Path) -> str:
     return "settings:" + hashlib.sha256(json.dumps(watched, sort_keys=True).encode()).hexdigest()
 
 
+def is_settings(f: str) -> bool:
+    parts = Path(f).parts
+    return len(parts) >= 2 and parts[-2] == ".claude" and parts[-1].startswith("settings")
+
+
+def main_checkout(root: Path) -> Path | None:
+    """The main checkout of a linked worktree (Claude Code reads its local settings from there), else None."""
+    common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    own = git(root, "rev-parse", "--absolute-git-dir")
+    if common and own and Path(common) != Path(own) and Path(common).name == ".git":
+        return Path(common).parent
+    return None
+
+
 def protected_hashes(root: Path) -> dict[str, str]:
     """Hashes of every PROTECTED file, ignored ones included (git status does not show those)."""
     files: set[str] = set()
@@ -197,7 +226,10 @@ def protected_hashes(root: Path) -> dict[str, str]:
                 files |= {q.relative_to(root).as_posix() for q in d.rglob("*") if q.is_file() or q.is_symlink()}
         else:
             files.add(entry)
-    return {f: settings_hash(root / f) if f.startswith(".claude/settings") else file_hash(root / f) for f in sorted(files)}
+    main = main_checkout(root)
+    if main is not None:
+        files.add(str(main / ".claude" / "settings.local.json"))
+    return {f: settings_hash(root / f) if is_settings(f) else file_hash(root / f) for f in sorted(files)}
 
 
 def protected_changes(root: Path, state: dict) -> list[str]:
@@ -249,6 +281,106 @@ def load_state(root: Path, session: str) -> dict:
     return data
 
 
+PASSED_MAX = 500
+HOOK_MARK = "# aok-harness pre-push"
+
+
+def passed_commits(root: Path) -> list[str]:
+    try:
+        data = json.loads((state_dir(root) / "passed.json").read_text(encoding="utf-8"))
+        return [c for c in data if isinstance(c, str)] if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def record_passed(root: Path) -> None:
+    """HEAD passed the gate on a clean tree: its commit may be pushed (the pre-push hook checks this list)."""
+    h = head(root)
+    if not h or dirty_paths(root):
+        return
+    commits = [c for c in passed_commits(root) if c != h] + [h]
+    d = state_dir(root)
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / f".passed.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps(commits[-PASSED_MAX:]), encoding="utf-8")
+    tmp.replace(d / "passed.json")
+
+
+def hooks_dir(root: Path) -> Path | None:
+    """Where git looks for this repository's hooks; None when core.hooksPath hands them to something else."""
+    if git(root, "config", "--get", "core.hooksPath"):
+        return None
+    d = git(root, "rev-parse", "--git-path", "hooks")
+    return (root / d).resolve() if d else None
+
+
+def pre_push_script() -> str:
+    return ("#!/bin/sh\n"
+            f"{HOOK_MARK}: inside Claude Code, only commits the AOK harness gate passed may be pushed.\n"
+            "# Outside Claude Code (a person in a terminal) it does nothing.\n"
+            '[ -n "$CLAUDECODE" ] || exit 0\n'
+            f'exec python3 -I {shlex.quote(str(Path(__file__).resolve()))} git-pre-push "$@"\n')
+
+
+def ensure_pre_push(root: Path) -> str:
+    """Install or refresh the harness's git pre-push hook (in the git directory, not the work tree). The line to tell."""
+    d = hooks_dir(root)
+    if d is None:
+        return ("core.hooksPath is set, so the harness does not install its git pre-push hook; pushes are checked "
+                "only by reading the command.")
+    hook = d / "pre-push"
+    try:
+        if hook.exists() and HOOK_MARK not in hook.read_text(encoding="utf-8", errors="replace"):
+            return (f"A git pre-push hook that is not the harness's is installed ({hook}); pushes are checked only by "
+                    "reading the command.")
+        if not hook.exists() or hook.read_text(encoding="utf-8") != pre_push_script():
+            d.mkdir(parents=True, exist_ok=True)
+            hook.write_text(pre_push_script(), encoding="utf-8")
+            hook.chmod(0o755)
+        (state_dir(root) / "pre-push.installed").write_text(str(hook), encoding="utf-8")
+    except OSError as e:
+        return f"The harness could not install its git pre-push hook ({e}); pushes are checked only by reading the command."
+    return ("A git pre-push hook (in the git directory, not the work tree) refuses, inside Claude Code, a push of any "
+            "commit the gate has not passed.")
+
+
+def pre_push_problem(root: Path) -> str | None:
+    """Why the installed pre-push hook can no longer be trusted, else None."""
+    marker = state_dir(root) / "pre-push.installed"
+    if not marker.is_file():
+        return None
+    d = hooks_dir(root)
+    try:
+        intact = d is not None and (d / "pre-push").read_text(encoding="utf-8") == pre_push_script()
+    except OSError:
+        intact = False
+    return None if intact else ("the harness's git pre-push hook was removed or changed (or core.hooksPath set); "
+                                "start a new session to restore it")
+
+
+def git_pre_push(root: Path) -> int:
+    """git's pre-push hook: each line on stdin is `<local ref> <local sha> <remote ref> <remote sha>`."""
+    passed = set(passed_commits(root))
+    refused = []
+    for line in sys.stdin.read().splitlines():
+        parts = line.split()
+        if len(parts) != 4 or set(parts[1]) == {"0"}:  # a deletion sends no commit
+            continue
+        if parts[1] not in passed:
+            refused.append(f"{parts[0]} -> {parts[2]} ({parts[1][:12]})")
+    if refused:
+        print("[aok-harness] push refused: the gate has not passed these commits in this repository: " +
+              ", ".join(refused) + ". Check the commit out and let the gate pass (end the turn, or push from it), "
+              "then push. A person can push from a terminal outside Claude Code.", file=sys.stderr)
+        return 1
+    return 0
+
+
+def start_refs(state: dict) -> list[str]:
+    refs = (state.get("baseline") or {}).get("refs")
+    return [r for r in refs if isinstance(r, str)] if isinstance(refs, list) else []
+
+
 def session_base(root: Path, state: dict) -> tuple[str | None, dict]:
     """The session's base commit and the files already changed when it started. Raises when the state cannot be
     trusted: then nothing says which changes are the session's or which commit's gate definition applies."""
@@ -268,7 +400,7 @@ def save_state(root: Path, session: str, state: dict) -> None:
     d = state_dir(root)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".session-{safe_id(session)}.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.write_text(json.dumps(state, ensure_ascii=True, indent=1), encoding="utf-8")
     tmp.replace(d / f"session-{safe_id(session)}.json")
 
 
@@ -277,8 +409,8 @@ def log(root: Path, event: str, **fields) -> None:
         d = state_dir(root)
         d.mkdir(parents=True, exist_ok=True)
         with open(d / "log.jsonl", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"t": round(time.time(), 3), "event": event, **fields}, ensure_ascii=False) + "\n")
-    except OSError:
+            f.write(json.dumps({"t": round(time.time(), 3), "event": event, **fields}, ensure_ascii=True) + "\n")
+    except (OSError, ValueError):
         pass
 
 
@@ -388,8 +520,13 @@ def load_adapter(root: Path, cfg: dict, base: str | None = None, notes: list[str
     for label, steps in where:
         for s in steps:
             if not isinstance(s, dict) or not isinstance(s.get("cmd"), list) or not s["cmd"] \
-                    or not all(isinstance(x, str) for x in s["cmd"]):
-                raise HarnessError(f"{label}: each step needs a non-empty cmd list of strings: {s!r:.80}")
+                    or not all(isinstance(x, str) for x in s["cmd"]) \
+                    or not isinstance(s.get("optional", False), bool) or not isinstance(s.get("name", ""), str):
+                raise HarnessError(f"{label}: each step needs a non-empty cmd list of strings, a name that is a string "
+                                   f"and optional true or false: {s!r:.80}")
+    match = (adapter.get("edit") or {}).get("match", [])
+    if not isinstance(match, list) or not all(isinstance(m, str) for m in match):
+        raise HarnessError(f"edit.match must be a list of file patterns: {match!r:.80}")
     return adapter
 
 
@@ -461,14 +598,18 @@ def describe(gate: dict) -> str:
 
 # ---------------------------------------------------------------- session changes
 
-def changed_since(root: Path, base: str | None, pending: dict) -> list[str]:
-    """Files this session changed: its own commits since base, plus dirty files whose content moved since first seen.
+def own_revs(base: str | None, refs: list[str] | None) -> str:
+    """git --stdin revisions of the session's own commits: from HEAD, none that the base or any ref at session start
+    (other branches, remote-tracking refs) already reached. A branch the session made and merged is its own; a branch
+    that was there before is not. Commits fetched during the session and merged in count as its own (a limit)."""
+    return "\n".join(["HEAD", *[f"^{r}" for r in sorted(set(refs or []) | ({base} if base else set()))]]) + "\n"
 
-    Own commits are the first-parent, non-merge commits since base: what a merge brought in (a merged main) is
-    not this session's. A rebase onto newer upstream commits still counts them (a limit)."""
+
+def changed_since(root: Path, base: str | None, pending: dict, refs: list[str] | None = None) -> list[str]:
+    """Files this session changed: its own commits (own_revs), plus dirty files whose content moved since first seen."""
     out: set[str] = set()
     if base:
-        names = git(root, "log", "--format=", "--name-only", "--no-merges", "--first-parent", f"{base}..HEAD")
+        names = git(root, "log", "--format=", "--name-only", "--no-merges", "--stdin", stdin=own_revs(base, refs))
         out |= set(filter(None, (names or "").splitlines()))
     elif head(root):  # started before the first commit: the session made it, so all of it is the session's
         out |= set(filter(None, (git(root, "ls-tree", "-r", "--name-only", "HEAD") or "").splitlines()))
@@ -498,7 +639,8 @@ def name_status(root: Path, rev: str) -> tuple[dict[str, str], list[str]]:
     return renames, deleted
 
 
-def changed_lines(root: Path, base: str | None, f: str, renames: dict[str, str]) -> tuple[list[str], list[str]]:
+def changed_lines(root: Path, base: str | None, f: str, renames: dict[str, str],
+                  refs: list[str] | None = None) -> tuple[list[str], list[str]]:
     """Lines the session added and removed in f: its own commits since base (following a rename) plus the work tree."""
     def split(diff: str) -> tuple[list[str], list[str]]:
         lines = diff.splitlines()
@@ -509,8 +651,8 @@ def changed_lines(root: Path, base: str | None, f: str, renames: dict[str, str])
             return (root / f).read_text(encoding="utf-8", errors="replace").splitlines(), []
         except OSError:
             return [], []
-    added, removed = split(git(root, "log", "-p", "-U0", "--format=", "--no-merges", "--first-parent", "--follow",
-                               f"{base}..HEAD", "--", f, strip=False) or "")
+    added, removed = split(git(root, "log", "-p", "-U0", "--format=", "--no-merges", "--follow", "--stdin", "--", f,
+                               strip=False, stdin=own_revs(base, refs)) or "")
     src = renames.get(f)
     a2, r2 = split(git(root, "diff", "-M", "-U0", "HEAD", "--", *([src] if src else []), f, strip=False) or "")
     if not a2 and not r2 and git(root, "cat-file", "-e", f"HEAD:{src or f}") is None and (root / f).is_file():
@@ -518,18 +660,34 @@ def changed_lines(root: Path, base: str | None, f: str, renames: dict[str, str])
     return added + a2, removed + r2
 
 
-def weakenings(root: Path, adapter: dict, base: str | None, files: list[str]) -> list[str]:
+def test_file(adapter: dict, path: str, root: Path | None = None) -> bool:
+    """Whether the test runner collects path: it matches test_files and test_name_re, and (with root) every directory
+    on the way holds test_package_marker (unittest does not look into a directory that is not a package)."""
+    if not any(fnmatch.fnmatch(path, g) for g in adapter.get("test_files", [])):
+        return False
+    name_re = adapter.get("test_name_re")
+    if name_re and not re.fullmatch(name_re, Path(path).name):
+        return False
+    marker = adapter.get("test_package_marker")
+    if marker and root is not None:
+        return all((root / d / marker).is_file() for d in Path(path).parents if str(d) != ".")
+    return True
+
+
+def weakenings(root: Path, adapter: dict, base: str | None, files: list[str], refs: list[str] | None = None) -> list[str]:
     rules = adapter.get("weakening", [])
     if not files:
         return []
     found = []
     renames, deleted = name_status(root, base) if base else ({}, [])
-    tests = adapter.get("test_files", [])
-    for old in sorted(deleted + [o for n, o in renames.items() if not any(fnmatch.fnmatch(n, g) for g in tests)]):
-        if any(fnmatch.fnmatch(old, g) for g in tests):
+    for old in sorted(deleted + [o for n, o in renames.items() if not test_file(adapter, n, root)]):
+        if test_file(adapter, old):
             found.append(f"{old}: test file removed or moved where the tests are not collected")
+    settings = sorted(f for f in files if any(fnmatch.fnmatch(f, g) for g in adapter.get("check_config", [])))
+    if settings:
+        found.append(f"check settings changed in this session, review what they switch off: {', '.join(settings)}")
     for f in files:
-        added, removed = changed_lines(root, base, f, renames)
+        added, removed = changed_lines(root, base, f, renames, refs)
         for r in rules:
             rx = re.compile(r.get("added") or r.get("removed"))
             plus = sum(1 for ln in added if rx.search(ln))
@@ -550,7 +708,7 @@ def tool_input(payload: dict) -> dict:
 
 def say(obj: dict | None) -> int:
     if obj:
-        print(json.dumps(obj, ensure_ascii=False))
+        print(json.dumps(obj, ensure_ascii=True))  # a file name that is not UTF-8 must not break the answer
     return 0
 
 
@@ -589,9 +747,10 @@ def on_session_start(root: Path, payload: dict, session: str) -> int:
                          "counted as this session's.")
         # a resume or fork without state carries on someone's work: every changed file counts as this session's
         carried = source in ("resume", "fork") and not state.get("damaged")
+        refs = (git(root, "for-each-ref", "--format=%(objectname)") or "").split()
         state = {"baseline": {"head": head(root), "at": time.time(),
                               "pending": {} if carried else {p: file_hash(root / p) for p in dirty_paths(root)},
-                              "protected": protected_hashes(root)},
+                              "protected": protected_hashes(root), "refs": sorted(set(refs))},
                  "strikes": 0, "last_pass": None}
         save_state(root, session, state)
         if carried and dirty_paths(root):
@@ -614,6 +773,8 @@ def on_session_start(root: Path, payload: dict, session: str) -> int:
     if adapter.get("delegate"):
         lines.append(f"{adapter['delegate']['bin']} is not installed, so the basic {adapter['name']} steps run instead; "
                      "its fuller checks (configuration integrity, push audit) are off.")
+    if is_repo(root):
+        lines.append(ensure_pre_push(root))
     lines += first + notes
     lines.append("Do not weaken a check to get green (suppressions, skipped tests, removed assertions, editing .aok/ or "
                  ".claude/settings.json); the user sees such changes. The gate blocks at most three times in a row; at the "
@@ -680,7 +841,7 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
         cfg, cfg_text, notes = read_config(root, base)
         adapter = load_adapter(root, cfg, base, notes)
     except HarnessError as e:
-        if is_repo(root) and not changed_since(root, base, pending):  # nothing of this session's to judge
+        if is_repo(root) and head(root) == base and not changed_since(root, base, pending, start_refs(state)):
             log(root, "stop", result="skip-no-session-change", error=str(e)[:200])
             return 0
         return strike(root, session, state, f"the gate cannot run: {e}")
@@ -694,8 +855,8 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
         if fp == state.get("last_pass") and state.get("reviewed") == fp:
             log(root, "stop", result="skip-unchanged")
             return 0
-        mine = changed_since(root, base, pending)
-        if not mine and fp != state.get("last_pass"):
+        mine = changed_since(root, base, pending, start_refs(state))
+        if not mine and fp != state.get("last_pass") and head(root) == base:  # HEAD moved (a merge): judge the tree
             log(root, "stop", result="skip-no-session-change")
             return 0
     if fp is None or fp != state.get("last_pass"):  # passed before a push in this turn: only its review is due
@@ -708,7 +869,9 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
                           "there, tell the user instead of editing unrelated code.")
         fp = fingerprint(root, cfg_text)  # the tree as the gate left it (a step may write caches)
     state["last_pass"], state["reviewed"], state["strikes"] = fp, fp, 0
-    report = notes + [f"weakened check: {w}" for w in weakenings(root, adapter, base, mine)]
+    if fp is not None:
+        record_passed(root)
+    report = notes + [f"weakened check: {w}" for w in weakenings(root, adapter, base, mine, start_refs(state))]
     report += [f"harness file changed in this session: {f}"
                for f in sorted({f for f in mine if f.startswith(PROTECTED)} | set(protected_changes(root, state)))]
     told = set(state.get("told_missing", []))
@@ -758,6 +921,44 @@ SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 SEPARATORS = set(";&|()\n")
 
 
+def outside_single_quotes(cmd: str) -> str:
+    """The command with the inside of single-quoted strings blanked: the shell runs $(...) and backticks everywhere
+    else, double quotes included (where an apostrophe is just a character)."""
+    out, quote, i = [], None, 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if quote == "'":
+            out.append(" " if ch != "'" else ch)
+            quote = None if ch == "'" else quote
+        elif ch == "\\" and quote != "'" and i + 1 < len(cmd):
+            out.append(cmd[i:i + 2])
+            i += 1
+        elif ch in "'\"" and quote is None:
+            quote = ch
+            out.append(ch)
+        elif ch == '"' and quote == '"':
+            quote = None
+            out.append(ch)
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def drop_redirections(seg: list[str]) -> list[str]:
+    out, skip = [], False
+    for w in seg:
+        if skip:
+            skip = False
+            continue
+        m = REDIRECT.match(w)
+        if m:
+            skip = not m.group(1)  # `> log`: the target is the next word
+            continue
+        out.append(w)
+    return out
+
+
 def command_segments(cmd: str, depth: int = 0) -> list[list[str]] | None:
     """Every git or gh invocation the command may run, as word lists that start with git or gh.
 
@@ -784,9 +985,9 @@ def command_segments(cmd: str, depth: int = 0) -> list[list[str]] | None:
         else:
             cur.append(w)
     segs.append(cur)
-    inner_cmds = [a or b for a, b in SUBSTITUTION.findall(re.sub(r"'[^']*'", " ", cmd))]
+    inner_cmds = [a or b for a, b in SUBSTITUTION.findall(outside_single_quotes(cmd))]
     out: list[list[str]] = []
-    for seg in filter(None, segs):
+    for seg in filter(None, (drop_redirections(sg) for sg in segs)):
         for k, w in enumerate(seg):
             name = Path(w).name
             if name in SHELLS and "-c" in seg[k + 1:]:
@@ -815,13 +1016,28 @@ def git_subcommand(seg: list[str]) -> tuple[str | None, list[str]]:
 
 
 def gh_pr_create(seg: list[str]) -> list[str] | None:
-    """The arguments of `gh [global flags] pr create ...`, else None."""
+    """The arguments of `gh [global flags] pr create|new ...`, else None."""
     if not seg or Path(seg[0]).name != "gh":
         return None
     rest = [w for i, w in enumerate(seg[1:]) if not w.startswith("-") and not (i > 0 and seg[i] in ("-R", "--repo"))]
-    if rest[:2] != ["pr", "create"]:
+    if len(rest) < 2 or rest[0] != "pr" or rest[1] not in ("create", "new"):
         return None
-    return seg[seg.index("create") + 1:]
+    return seg[seg.index(rest[1]) + 1:]
+
+
+def gh_head(args: list[str]) -> str | None:
+    """The branch of `--head X`, `--head=X`, `-H X` or `-HX`, as gh reads it (owner:branch → branch)."""
+    for i, w in enumerate(args):
+        value = None
+        if w in ("--head", "-H") and i + 1 < len(args):
+            value = args[i + 1]
+        elif w.startswith("--head="):
+            value = w.split("=", 1)[1]
+        elif w.startswith("-H") and len(w) > 2:
+            value = w[2:]
+        if value is not None:
+            return value.split(":")[-1]
+    return None
 
 
 COMMIT_LONG_WITH_VALUE = {"--message", "--file", "--author", "--date", "--template", "--reuse-message",
@@ -858,6 +1074,11 @@ def hooks_off(cmd: str) -> str | None:
     if NO_VERIFY.search(cmd) and (segs is None or any(Path(sg[0]).name == "git" for sg in segs)):
         return "this command switches git hooks off (--no-verify / core.hooksPath); run it without that"
     for seg in segs or []:
+        if Path(seg[0]).name != "git":
+            continue
+        # the words as the shell hands them to git: quotes and backslashes are gone (--no-"verify", core.hooks\Path)
+        if any(NO_VERIFY.fullmatch(w.split("=", 1)[0].rsplit(".", 1)[-1]) or "hookspath" in w.lower() for w in seg[1:]):
+            return "this command switches git hooks off (--no-verify / core.hooksPath); run it without that"
         sub, args = git_subcommand(seg)
         if sub == "commit" and short_flag(args, "n", "mFcCt", COMMIT_LONG_WITH_VALUE):  # commit -n is --no-verify (push -n is a dry run)
             return "this commit switches git hooks off (-n is --no-verify); run it without that"
@@ -872,7 +1093,7 @@ def publish_problems(root: Path, cmd: str) -> tuple[bool, list[str]]:
         return bool(PUBLISH.search(cmd)), ["the command could not be read (unbalanced quotes); publish in a plain command"] \
             if PUBLISH.search(cmd) else []
     branch = git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""
-    ok_refs = {"HEAD", branch, f"refs/heads/{branch}"} - {""}
+    ok_refs = {"HEAD", "@", branch, f"refs/heads/{branch}"} - {""}
     publishes, problems, movers = False, [], []
     for seg in segs:
         sub, args = git_subcommand(seg)
@@ -880,9 +1101,20 @@ def publish_problems(root: Path, cmd: str) -> tuple[bool, list[str]]:
             movers.append(sub)
         if sub == "push":
             publishes = True
-            if {"--all", "--mirror", "--tags"} & set(args):
-                problems.append("push the checked-out branch only (no --all, --mirror or --tags): the gate checked that tree")
-            positional = [a for a in args if not a.startswith("-")]
+            config = [seg[i + 1] for i in range(len(seg) - 1) if seg[i] == "-c"]
+            if any(c.lower().startswith(("remote.", "push.", "branch.")) for c in config):
+                problems.append("this push changes what git sends (-c remote.* / push.* / branch.*); push without that")
+            if PUSH_ALL & set(args) or any(a.startswith(tuple(f"{o}=" for o in PUSH_ALL)) for a in args):
+                problems.append("push the checked-out branch only (no --all, --branches, --mirror or --tags): the gate "
+                                "checked that tree")
+            positional, i = [], 0
+            while i < len(args):
+                if args[i] in PUSH_WITH_VALUE:
+                    i += 2
+                    continue
+                if not args[i].startswith("-"):
+                    positional.append(args[i])
+                i += 1
             for ref in positional[1:]:
                 src = ref.lstrip("+").split(":", 1)[0]
                 if src not in ok_refs:
@@ -891,12 +1123,10 @@ def publish_problems(root: Path, cmd: str) -> tuple[bool, list[str]]:
         pr = gh_pr_create(seg)
         if pr is not None:
             publishes = True
-            for flag in ("--head", "-H"):
-                if flag in pr and pr.index(flag) + 1 < len(pr):
-                    head_ref = pr[pr.index(flag) + 1].split(":")[-1]
-                    if head_ref != branch:
-                        problems.append(f"open the pull request from the checked-out branch: --head {head_ref!r} is not "
-                                        f"{branch or 'HEAD'}")
+            head_ref = gh_head(pr)
+            if head_ref is not None and head_ref != branch:
+                problems.append(f"open the pull request from the checked-out branch: --head {head_ref!r} is not "
+                                f"{branch or 'HEAD'}")
     if publishes and movers:
         problems.append(f"{', '.join(sorted(set(movers)))} and publishing in one command: the gate sees the tree before "
                         "the command runs. Run them first, then publish in its own command")
@@ -916,18 +1146,26 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
     if off:
         return deny(off)
     publishes, problems = publish_problems(root, cmd)
-    if not publishes:
-        return 0
+    state = load_state(root, session)
+    if not publishes:  # a delegate (fsmap) judges every command; the core only publishing ones
+        try:
+            base, _ = session_base(root, state)
+            cfg, _, _ = read_config(root, base)
+            d = delegate(load_adapter(root, cfg, base))
+        except HarnessError:
+            return 0
+        return relay(d, "pre-bash", payload, lambda m: notice(m)) if d else 0
+    if re.search(r"\bCLAUDECODE\b", cmd):
+        problems.append("this command changes CLAUDECODE, which the git pre-push hook reads; publish without that")
     if problems:
         return deny("; ".join(problems))
-    state = load_state(root, session)
     try:
         base, pending = session_base(root, state)
         cfg, cfg_text, _ = read_config(root, base)
         adapter = load_adapter(root, cfg, base)
     except HarnessError as e:
         return deny(f"the gate cannot run, so nothing is published: {e}")
-    mine = changed_since(root, base, pending)
+    mine = changed_since(root, base, pending, start_refs(state))
     touched = sorted({f for f in mine if f.startswith(PROTECTED)} | set(protected_changes(root, state)))
     if touched:
         return deny("the harness, its settings or the CI workflows changed in this session (" + ", ".join(touched[:5]) +
@@ -935,6 +1173,9 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
     d = delegate(adapter)
     if d:
         return relay(d, "pre-bash", payload, lambda m: deny(f"{m}; nothing is published"))
+    hook_problem = pre_push_problem(root)
+    if hook_problem:
+        return deny(hook_problem)
     dirty = dirty_paths(root)
     if dirty:
         return deny(f"there are uncommitted changes ({', '.join(dirty[:5])}{', ...' if len(dirty) > 5 else ''}), so the "
@@ -942,12 +1183,14 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
                     "ignore files a check leaves behind) in one command, then push in another")
     fp = fingerprint(root, cfg_text)
     if fp is not None and fp == state.get("last_pass"):
+        record_passed(root)
         return 0
     gate = run_gate(root, adapter, "quick", float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
     log(root, "pre-bash", result=gate["verdict"])
     if gate["verdict"] == "pass":
         state["last_pass"] = fingerprint(root, cfg_text)
         save_state(root, session, state)
+        record_passed(root)
         return 0
     return deny(f"the quick gate {'failed' if gate['verdict'] == 'fail' else 'could not run'} on this tree:\n{describe(gate)}")
 
@@ -1075,8 +1318,8 @@ def install(repo: Path, adapter_name: str, yes: bool) -> int:
     prefix = 'python3 -I "$CLAUDE_PROJECT_DIR/.aok/harness/aok_harness.py"'
     try:
         current = json.loads(settings.read_text(encoding="utf-8")) if settings.is_file() else {}
-    except json.JSONDecodeError as e:
-        print(f"install: {settings} is not valid JSON ({e}); merge by hand", file=sys.stderr)
+    except (ValueError, OSError) as e:  # not JSON, not UTF-8, unreadable
+        print(f"install: {settings} cannot be read as JSON ({e}); merge by hand", file=sys.stderr)
         return 2
     merged = json.loads(json.dumps(current))
     shape = [] if isinstance(merged, dict) else ["the file is not a JSON object"]
@@ -1087,6 +1330,10 @@ def install(repo: Path, adapter_name: str, yes: bool) -> int:
             shape.append('"permissions.ask" is not a list')
     if shape:
         print(f"install: {settings}: {'; '.join(shape)}; merge by hand", file=sys.stderr)
+        return 2
+    if merged.get("disableAllHooks") is True:
+        print(f"install: {settings} sets disableAllHooks: true, so no hook would run; remove it (with the person's "
+              "agreement) and run install again", file=sys.stderr)
         return 2
     if config.is_file():
         try:
@@ -1116,17 +1363,26 @@ def install(repo: Path, adapter_name: str, yes: bool) -> int:
             f"{'keep' if config.is_file() else 'write'} {config} ({{\"adapter\": \"{adapter_name}\"}})",
             f"{'merge into' if settings.is_file() else 'create'} {settings}: hooks for SessionStart, UserPromptSubmit, "
             "PostToolUse(Edit|Write|MultiEdit), PreToolUse(Bash), Stop; ask before editing .aok/ and .claude/"]
+    local = repo / ".claude" / "settings.local.json"
+    try:
+        if local.is_file() and json.loads(local.read_text(encoding="utf-8")).get("disableAllHooks") is True:
+            plan.append(f"warning: {local} sets disableAllHooks: true; the hooks will not run while it does")
+    except (ValueError, OSError, AttributeError):
+        plan.append(f"warning: {local} cannot be read; check that it does not switch hooks off")
     print("install plan:\n  " + "\n  ".join(plan))
     if not yes:
         print("dry run: nothing written. Changing a repository's .claude/settings.json needs a person's "
               "confirmation (AOK S4); run again with --yes after they agree.")
         return 0
+    def copy(src: Path, dst: Path) -> None:
+        if src.resolve() != dst.resolve():  # installing again from the installed copy itself
+            shutil.copy2(src, dst)
     (target / "adapters").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(Path(__file__).resolve(), target / "aok_harness.py")
+    copy(Path(__file__), target / "aok_harness.py")
     for a in ADAPTER_DIR.glob("*.json"):
-        shutil.copy2(a, target / "adapters" / a.name)
+        copy(a, target / "adapters" / a.name)
     (target / "agents").mkdir(exist_ok=True)
-    shutil.copy2(HERE / "agents" / "aok-reviewer.md", target / "agents" / "aok-reviewer.md")
+    copy(HERE / "agents" / "aok-reviewer.md", target / "agents" / "aok-reviewer.md")
     if not config.is_file():
         config.write_text(json.dumps({"adapter": adapter_name}, indent=2) + "\n", encoding="utf-8")
     if not reviewer.is_file():
@@ -1148,6 +1404,8 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--mode", choices=("quick", "full"), default="full")
     v.add_argument("--json", action="store_true")
     v.add_argument("--base", metavar="REF", help="read the gate definition from this commit (e.g. origin/main in CI)")
+    gp = sub.add_parser("git-pre-push", help="git's pre-push hook (installed by session-start; reads git's ref lines)")
+    gp.add_argument("remote", nargs="*", help="the remote's name and URL, as git passes them")
     i = sub.add_parser("install", help="install into a work repository (dry run without --yes)")
     i.add_argument("--repo", required=True)
     i.add_argument("--adapter", required=True)
@@ -1157,6 +1415,8 @@ def main(argv: list[str] | None = None) -> int:
         return hook(args.event)
     if args.cmd == "verify":
         return verify(Path(args.root).resolve(), args.mode, args.json, args.base)
+    if args.cmd == "git-pre-push":
+        return git_pre_push(Path(git(Path.cwd(), "rev-parse", "--show-toplevel") or "."))  # git runs hooks at the top
     return install(Path(args.repo), args.adapter, args.yes)
 
 
