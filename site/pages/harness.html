@@ -44,11 +44,11 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
         <table class="when">
           <thead><tr><th scope="col">순간</th><th scope="col">훅</th><th scope="col">하는 일</th></tr></thead>
           <tbody>
-            <tr><th scope="row">세션 시작</th><td><code>SessionStart</code></td><td>새 세션에서만 기준(HEAD, 이미 바뀐 파일의 해시)을 기록하고, 어댑터와 실제 도구 판을 알린다. 하네스를 쓸 수 없으면 "OFF"와 이유를 사용자에게 보인다</td></tr>
-            <tr><th scope="row">편집 직후</th><td><code>PostToolUse</code></td><td>어댑터가 맡는 파일이면 그 파일에 편집 검사(Python: 컴파일·ruff, Rust: <code>cargo check</code>). 실패는 Claude에게 돌아간다</td></tr>
-            <tr><th scope="row">턴 종료</th><td><code>Stop</code></td><td>이 세션이 트리를 바꿨고 이미 통과한 트리가 아니면 quick 게이트. 실패와 실행 불가 모두 막는다. 3번 연속 막히면 놓아 주고 "통과하지 않았다"고 알린다. 통과하면 이 세션이 약하게 만든 검사와 하네스 자체의 변경을 보고한다</td></tr>
-            <tr><th scope="row">사용자 입력</th><td><code>UserPromptSubmit</code></td><td>막힌 횟수를 0으로</td></tr>
-            <tr><th scope="row">게시 명령</th><td><code>PreToolUse</code></td><td><code>git push</code>·<code>gh pr create</code>를 막는다: 훅을 끄는 옵션, 이 세션의 하네스·설정 변경, 커밋하지 않은 변경, quick 게이트 실패나 실행 불가</td></tr>
+            <tr><th scope="row">세션 시작</th><td><code>SessionStart</code></td><td>새 세션이거나 쓸 수 있는 상태가 없을 때 기준(HEAD, 이미 바뀐 파일과 하네스 파일의 해시)을 기록하고, 어댑터와 실제 도구 판을 알린다. 상태 없이 이어받은 세션은 이미 바뀐 파일도 자기 것으로 센다. 하네스를 쓸 수 없으면 "OFF"와 이유를 사용자에게 보인다</td></tr>
+            <tr><th scope="row">편집 직후</th><td><code>PostToolUse</code></td><td>어댑터가 맡는 파일이면 그 파일에 편집 검사(Python: 컴파일·ruff, Rust: <code>cargo check</code>). 실패와 실행 불가는 Claude에게 돌아간다</td></tr>
+            <tr><th scope="row">턴 종료</th><td><code>Stop</code></td><td>이 세션이 트리를 바꿨고 이미 통과·보고한 트리가 아니면 quick 게이트. 실패, 실행 불가, 손상되거나 없는 세션 상태 모두 막는다. 연달아 최대 3번 막고, 세 번째에 "마지막"이라고 알린 뒤 그다음 종료는 놓아 주며 "통과하지 않았다"고 사용자에게 알린다. 통과하면(푸시 전 게이트가 먼저 통과했어도) 이 세션이 약하게 만든 검사와 하네스 파일의 변경을 보고한다. 백그라운드 에이전트가 돌면 진짜 끝으로 미룬다</td></tr>
+            <tr><th scope="row">사용자 입력</th><td><code>UserPromptSubmit</code></td><td>막힌 횟수를 0으로. 위임 중이면 fsmap에도 넘긴다</td></tr>
+            <tr><th scope="row">셸 명령</th><td><code>PreToolUse</code></td><td>git 훅을 끄는 명령(<code>--no-verify</code>, <code>commit -n</code>, <code>core.hooksPath</code>)을 거부한다. <code>git push</code>·<code>gh pr create</code>는 체크아웃한 브랜치가 아닌 게시, 같은 명령 안의 HEAD 이동, 이 세션의 하네스·설정·CI 변경, 커밋하지 않은 변경, quick 게이트 실패나 실행 불가에서 거부한다</td></tr>
           </tbody>
         </table>
       </div>
@@ -59,20 +59,20 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
       <h2>설계의 축</h2>
       <div class="split">
         <div class="box">
-          <h3>판정받는 쪽이 기준을 못 바꾼다</h3>
+          <h3>판정받는 쪽이 정의를 못 바꾼다</h3>
           <ul>
-            <li>게이트 정의는 세션이 시작된 커밋의 <code>.aok/harness.json</code>에서 읽는다. 작업 트리에서 바꾼 정의는 쓰이지 않고 보고된다</li>
-            <li><code>.aok/</code>·<code>.claude/settings*.json</code>을 바꾼 세션의 푸시는 막고 사람에게 넘긴다</li>
-            <li>CI는 기준 브랜치의 정의로 돈다(<code>verify --base origin/main</code>)</li>
+            <li>게이트 정의와 레포에 복사된 어댑터는 세션이 시작된 커밋의 것을 쓴다. 작업 트리에서 바꾼 정의는 쓰이지 않고 보고된다. 기준 커밋에 없던 정의는 커밋한 뒤의 세션부터 쓴다</li>
+            <li>하네스 파일, <code>.claude/settings*.json</code>의 훅·환경 키, 리뷰어, CI 워크플로를 바꾼 세션의 푸시는 막고 사람에게 넘긴다</li>
+            <li>CI는 기준 브랜치의 코어·어댑터·정의로 돈다. 코어를 기준 브랜치에서 꺼내 <code>verify --base origin/main</code>으로 돌린다</li>
           </ul>
         </div>
         <div class="box">
           <h3>닫힌 실패, 그리고 출구</h3>
           <ul>
-            <li>필수 도구가 없거나, 단계가 시간을 넘기거나, 설정을 읽을 수 없거나, 하네스가 죽으면 통과로 치지 않는다</li>
+            <li>필수 도구가 없거나, 단계가 시간을 넘기거나, 설정을 읽을 수 없거나, 세션 상태가 손상됐거나, 위임한 fsmap이 실패하거나, 하네스가 죽으면 통과로 치지 않는다. 푸시 전 훅은 시작조차 못 해도 명령을 막는다 {{grade:C-hook-doc}}</li>
             <li>선택 도구가 없으면 건너뛰되 세션에 한 번 알린다</li>
-            <li>3번 막히면 놓아 준다. 막힌 자식이 예산을 태우며 맴돌지 않고 AOK/1 <code>blocked</code>로 보고하게 한다</li>
-            <li>세션이 아무것도 바꾸지 않았으면 판정하지 않는다. 남이 남긴 실패는 그 세션의 것이 아니다</li>
+            <li>연달아 3번 막은 뒤 놓아 준다. 세 번째에 "마지막"이라고 알려, 막힌 자식이 예산을 태우며 맴돌지 않고 그 턴 안에 AOK/1 <code>blocked</code>로 보고하게 한다</li>
+            <li>아무것도 바꾸지 않은 세션은 판정하지 않는다. 무엇이든 바꾼 세션은 트리 전체로 판정받아 원래 있던 실패에도 막히고, 그때는 고치지 말고 사용자에게 말하라는 안내가 붙는다</li>
           </ul>
         </div>
       </div>
@@ -103,7 +103,7 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
         <li><span class="rn">1</span><div><h3>계획을 보인다</h3><p><code>python3 -I harness/aok_harness.py install --repo &lt;작업 레포&gt; --adapter python</code>. <code>--yes</code> 없이는 아무것도 쓰지 않고 계획만 보입니다.</p></div><span class="who">허브</span></li>
         <li><span class="rn">2</span><div><h3>사람이 확인한다</h3><p>레포의 <code>.claude/settings.json</code>을 바꾸는 일이라 S4입니다. 확인을 받은 뒤 <code>--yes</code>로 다시 돌립니다. 기존 설정은 보존되고 두 번 돌려도 훅이 겹치지 않습니다.</p></div><span class="who">사람</span></li>
         <li><span class="rn">3</span><div><h3>PR로 올린다</h3><p><code>.aok/</code>와 <code>.claude/</code>를 커밋합니다. 훅은 다음 세션부터 돕니다. 첫 세션의 맥락이 <code>[aok-harness] adapter …</code>(Rust를 fsmap에 맡기면 <code>[harness] fsmap …</code>)로 시작하는지 봅니다.</p></div><span class="who">허브 → 사람</span></li>
-        <li><span class="rn">4</span><div><h3>CI에 기준 정의 잡</h3><p>기존 단계는 그대로 두고 <code>verify --mode full --base origin/main</code> 잡을 더합니다. PR이 고친 정의가 아니라 기준 브랜치의 정의로 판정합니다.</p></div><span class="who">허브</span></li>
+        <li><span class="rn">4</span><div><h3>CI에 기준 브랜치 잡</h3><p>기존 단계는 그대로 두고, 기준 브랜치에서 꺼낸 코어로 <code>verify --mode full --base origin/main</code>을 도는 잡을 더합니다. PR이 하네스를 고쳤어도 기준 브랜치의 코어·어댑터·정의가 판정합니다.</p></div><span class="who">허브</span></li>
       </ol>
       <p class="note">규범: {{doc:docs/patterns/harness.md}} · 실행 순서: {{doc:.claude/skills/aok-harness/SKILL.md}} · 코드: {{doc:harness/aok_harness.py}}</p>
     </section>
@@ -111,10 +111,11 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
     <section id="limits">
       <h2>한계</h2>
       <div class="anti">
-        <div><b>가드레일이지 보안 경계가 아니다</b><span>에이전트는 코어 파일, 상태 디렉터리, 로컬 설정을 고칠 수 있습니다. <code>ask</code> 규칙과 푸시 거부가 그런 변경을 사람 앞에 드러내고, 깨끗한 체크아웃에서 기준 정의로 도는 CI가 정본 게이트입니다.</span></div>
-        <div><b>게시 명령 읽기는 휴리스틱</b><span><code>git … push</code>와 <code>gh pr create</code>를 정규식으로 찾습니다. 별칭, 스크립트 파일, API·MCP 도구로 하는 게시는 보지 못합니다. git 자체의 pre-push 훅으로 보는 방식은 fsmap(1회차)에 있습니다.</span></div>
+        <div><b>가드레일이지 보안 경계가 아니다</b><span>에이전트는 코어 파일, 상태 디렉터리, 로컬 설정을 고칠 수 있습니다. 손상되거나 지워진 상태는 막지만 꾸민 상태는 알아보지 못합니다. <code>ask</code> 규칙, 푸시 거부, 통과 보고가 그런 변경을 사람 앞에 드러내고, 기준 브랜치의 코어로 도는 CI가 정본 게이트입니다.</span></div>
+        <div><b>게시 명령 읽기는 휴리스틱</b><span>명령을 셸 단어로 나눠 <code>git … push</code>와 <code>gh … pr create</code>를 찾습니다. 별칭, 스크립트 파일, <code>gh api</code>·MCP 도구로 하는 게시는 보지 못합니다. git 자체의 pre-push 훅으로 보는 방식은 fsmap(1회차)에 있습니다.</span></div>
+        <div><b>무엇이 세션의 것인가</b><span>리베이스로 올라온 남의 커밋, 세션이 건드린 파일에 원래 있던 커밋 안 된 억제 주석은 세션의 것으로 보고될 수 있습니다. 시험 첫 줄의 <code>return</code>처럼 정규식으로 잡을 수 없는 약화는 보지 못합니다.</span></div>
         <div><b>원격 자식에서 도는지</b><span>레포의 훅은 레포 하나로 연 클라우드 세션에서 적용된다고 문서에 적혀 있습니다 <span class="g g-doc">문서</span>. 원격 자식 세션에서 실제로 도는지는 아직 시험하지 않았습니다 <span class="g g-unk">미확인</span>. 그 전에는 사람이 여는 세션에 먼저 씁니다.</span></div>
-        <div><b>백그라운드 작업</b><span>Stop 입력에 <code>background_tasks</code>가 있으면 게이트를 미룹니다. 이 필드는 공식 문서에서 찾지 못했고 fsmap이 실제 세션 기록에서 본 것입니다 <span class="g g-rec">기록됨</span>.</span></div>
+        <div><b>백그라운드 작업</b><span>Stop 입력의 <code>background_tasks</code>는 문서에 있는 필드입니다 <span class="g g-doc">문서</span>. 그중 에이전트 유형이 돌 때만 게이트를 미루고, 백그라운드 셸은 미루는 이유가 아닙니다. 에이전트가 끝난 뒤 그 턴에 Stop이 다시 오는지는 확인하지 않았습니다 <span class="g g-unk">미확인</span>. 푸시 전 게이트는 미루지 않습니다.</span></div>
         <div><b>레포 코드를 실행한다</b><span>시험과 빌드 스크립트가 돕니다. 믿지 않는 레포에는 켜지 않습니다.</span></div>
       </div>
     </section>
@@ -122,9 +123,10 @@ description: 자식이 코드를 고치는 레포 안에서 편집 직후 검사
     <section id="self">
       <h2>자기 시험</h2>
       <div class="prose">
-        <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작마다 시험이 있고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. Rust 위임은 가짜 실행 파일에 더해 고정 커밋으로 빌드한 fsmap으로도 시험합니다 {{grade:C-h8-fsmap}}. 기준을 작업 트리에서 읽게 하기, 실행 불가를 통과로 치기, 첫 커밋을 세지 않기, 푸시 거부를 끄기처럼 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
+        <p>훅 다섯 개, <code>verify</code>, <code>install</code>, 두 어댑터의 동작을 시험하고 {{fig:h8.tests}}가 통과합니다 {{grade:C-h8-tests}}. Rust 위임은 가짜 실행 파일에 더해 고정 커밋으로 빌드한 fsmap으로도 훅 다섯 개를 모두 시험합니다 {{grade:C-h8-fsmap}}. 정의를 작업 트리에서 읽게 하기, 실행 불가나 fsmap 패닉을 통과로 치기, 다른 브랜치 푸시를 허용하기, 약화 규칙 하나를 지우기처럼 코어와 어댑터의 장치를 하나씩 끈 {{fig:h8.muts}}마다 지정한 시험이 실패합니다 {{grade:C-h8-muts}}. CI가 별도 잡으로 돌립니다. 변이 목록: {{doc:tests/mutations/harness.json}}</p>
+        <p>이 목록은 두 번째 검증에서 늘었습니다. 독립 검증자 둘이 첫 판에서 다른 ref 푸시, PR이 고친 어댑터로 도는 CI, 손상된 상태에서의 무응답, fsmap 패닉 통과 같은 우회와, 목록 밖에서 공허한 장치 수십 곳을 찾았습니다 {{grade:C-h8-round}}. 고친 뒤 반례마다 시험과 변이를 더했습니다.</p>
       </div>
-      <footer class="pagefoot">2026-11-01 작성. ⑧을 들이는 결정은 D26이다: {{doc:docs/proposals/regression-harness-hub.md}}</footer>
+      <footer class="pagefoot">2026-11-01 작성, 같은 날 두 번째 검증 반영. ⑧을 들이는 결정은 D26이다: {{doc:docs/proposals/regression-harness-hub.md}}</footer>
     </section>
   </main>
 </div>
