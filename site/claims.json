@@ -411,7 +411,7 @@
   "id": "C-wa-abs",
   "claim": "같은 ZK 편집 훅의 원본 쪽 중앙값은 날과 호출 방식에 따라 143~278ms로 달랐다.",
   "grade": "기록됨",
-  "scope": "10-30 192ms, 10-31 143~153ms(원자료 없음), 11-01 240~278ms(A/A 포함, 원자료 있음). 10-30은 python -c, 이후는 python -I -c",
+  "scope": "10-30 192ms, 10-31 143~153ms(원자료 없음), 11-01 241~278ms(A/A 포함, 원자료 있음). 10-30은 python -c, 이후는 python -I -c",
   "evidence": [
    {
     "kind": "file",
@@ -545,8 +545,8 @@
  },
  {
   "id": "C-sim-inproc",
-  "claim": "같은 프로세스 안의 색인 읽기와 질의만 비교하면 ZK 180→128ms라서, 프로세스 단위 차이 173ms 중 약 121ms(70%)는 Python 기동과 import다.",
-  "grade": "도출",
+  "claim": "같은 프로세스 안의 색인 읽기와 질의만 비교하면 ZK 180→128ms라서, 프로세스 단위 차이 173ms 중 단계 밖에서 생긴 약 121ms(70%)는 대부분 Python 기동과 import로 본다(단계 밖에는 결과 200줄 출력과 종료도 들어 있다).",
+  "grade": "추론",
   "scope": "C-sim-proc와 같은 실행의 단계별 시간에서 계산",
   "evidence": [
    {
@@ -699,7 +699,7 @@
   "id": "C-self-muts",
   "claim": "⑦ 도구와 허브 빌드에서 변이 목록에 올린 보호 장치를 하나씩 끈 변이마다, 그 변이를 잡도록 지정한 시험이 실패한다(diffcheck 28개, vacuity_check 21개, build_site 55개).",
   "grade": "확인",
-  "scope": "이 저장소, CI의 checks 작업과 같은 명령. 변이 목록은 작성자가 골랐다",
+  "scope": "이 저장소, CI의 checks 작업과 같은 검사(CI는 python -I, --jobs 4, --timeout 300). 변이 목록은 작성자가 골랐다",
   "evidence": [
    {
     "kind": "cmd",

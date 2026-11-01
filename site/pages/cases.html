@@ -45,7 +45,7 @@ description: work-atlas 훅 지연, docbench 문서 비교, Rust 도구 도입�
         </div>
         <div class="log-item">
           <span class="tag">1단계 · Python 그대로</span>
-          <div><p>3개 파일 30줄 패치(색인 한 번만 짓기, 지연 import, YAML C 로더, Rust로 구현된 orjson)로, 원본과 패치를 번갈아 21회 잰 중앙값이 편집 훅 {{fig:wa.edit}}, 프롬프트 훅 {{fig:wa.prompt}} 줄었습니다(LANG·ZK, 두 번 측정). 같은 원본끼리 잰 A/A는 {{fig:wa.aa}}였으니 잡음 바닥보다 훨씬 큰 변화입니다. 앞선 날의 측정도 편집 {{fig:wa.history.edit}}, 프롬프트 {{fig:wa.history.prompt}}로 같은 범위였습니다. 반면 같은 명령의 절대 중앙값은 날마다 {{fig:wa.abs}}로 달랐습니다.</p>
+          <div><p>3개 파일 30줄 패치(색인 한 번만 짓기, 지연 import, YAML C 로더, Rust로 구현된 orjson)로, 원본과 패치를 번갈아 21회 잰 중앙값이 편집 훅 {{fig:wa.edit}}, 프롬프트 훅 {{fig:wa.prompt}} 줄었습니다(LANG·ZK, 두 번 측정). 같은 원본끼리 잰 A/A는 {{fig:wa.aa}}였으니 잡음 바닥보다 훨씬 큰 변화입니다. 앞선 날의 측정은 편집 {{fig:wa.history.edit}}, 프롬프트 {{fig:wa.history.prompt}}로 범위가 겹칩니다. 반면 같은 훅의 절대 중앙값은 날과 호출 방식에 따라 {{fig:wa.abs}}로 달랐습니다.</p>
           <p>회귀 고정: 훅 출력 4종이 바이트 단위로 같고 두 번째 실행에서도 같았습니다. 같은 기준 시각으로 지은 모델 파일도 바이트 단위로 같았고, 테스트 {{fig:wa.tests}}는 orjson이 있을 때와 없을 때 모두 통과했습니다. 전체 빌드는 쌍마다 {{fig:wa.build}} 줄었는데, 훅과 달리 폭이 측정마다 크게 흔들렸습니다. orjson이 거부하는 입력은 표준 <code>json</code>으로 다시 읽게 해 경계 입력의 결과·오류가 원본과 같습니다. 남는 차이(64비트를 넘는 정수를 float로 읽음)는 패치 설명에 적었습니다. work-atlas 규칙(엔진 변경은 사람 합의)에 따라 <a href="https://github.com/d-j-lee/work-atlas/pull/1" target="_blank" rel="noopener">PR #1</a>로 올렸습니다.</p></div>
         </div>
         <div class="log-item">

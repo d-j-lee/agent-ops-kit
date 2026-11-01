@@ -79,8 +79,22 @@
  {
   "file": "scripts/vacuity_check.py",
   "label": "non-finite timeout accepted",
-  "old": "    if not math.isfinite(args.timeout) or args.timeout <= 0 or args.jobs < 1:",
-  "new": "    if args.timeout <= 0 or args.jobs < 1:",
+  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "no timeout ceiling",
+  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:",
+  "new": "    if not math.isfinite(args.timeout) or not 0 < args.timeout or args.jobs < 1:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "unreadable mutations file is a traceback",
+  "old": "        except OSError as e:\n            raise UsageError(f\"cannot read mutations file {args.mutations}: {e}\") from e\n",
+  "new": "",
   "expect": "test_usage_errors"
  },
  {
@@ -100,15 +114,22 @@
  {
   "file": "scripts/vacuity_check.py",
   "label": "--ignore not honoured",
-  "old": "    ignore = [] if args.ignore == [\"none\"] else DEFAULT_IGNORE + (args.ignore or [])",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
   "new": "    ignore = DEFAULT_IGNORE",
   "expect": "test_ignore_adds_to_the_defaults"
  },
  {
   "file": "scripts/vacuity_check.py",
   "label": "--ignore replaces the defaults",
-  "old": "    ignore = [] if args.ignore == [\"none\"] else DEFAULT_IGNORE + (args.ignore or [])",
-  "new": "    ignore = [] if args.ignore == [\"none\"] else (args.ignore or DEFAULT_IGNORE)",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
+  "new": "    ignore = [n for n in given if n != \"none\"] or DEFAULT_IGNORE",
+  "expect": "test_ignore_adds_to_the_defaults"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "'none' with other names keeps the defaults",
+  "old": "    ignore = [n for n in given if n != \"none\"] + ([] if \"none\" in given else DEFAULT_IGNORE)",
+  "new": "    ignore = [] if given == [\"none\"] else [n for n in given if n != \"none\"] + DEFAULT_IGNORE",
   "expect": "test_ignore_adds_to_the_defaults"
  },
  {
@@ -142,8 +163,15 @@
  {
   "file": "scripts/vacuity_check.py",
   "label": "expect type not checked",
-  "old": "            if \"expect\" in m and not isinstance(m[\"expect\"], str):\n                raise UsageError(f\"mutation #{i}: expect must be a string\")\n",
-  "new": "",
+  "old": "            if \"expect\" in m and (not isinstance(m[\"expect\"], str) or not m[\"expect\"].strip()):",
+  "new": "            if False:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/vacuity_check.py",
+  "label": "empty expect accepted",
+  "old": "            if \"expect\" in m and (not isinstance(m[\"expect\"], str) or not m[\"expect\"].strip()):",
+  "new": "            if \"expect\" in m and not isinstance(m[\"expect\"], str):",
   "expect": "test_usage_errors"
  }
 ]

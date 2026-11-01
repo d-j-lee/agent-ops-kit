@@ -6,12 +6,16 @@ compares what they did. It is built to refuse the ways a "same output" check
 fools itself:
 
   failed           a side exited non-zero (unless --allow-fail) or timed out
-                   (always). A tool error that keeps a side from running at all
-                   is not a verdict: it exits 2.
+                   (always), or printed the placeholder <N> itself while
+                   --normalize is used (the comparison would be ambiguous). A
+                   tool error that keeps a side from running at all is not a
+                   verdict: it exits 2.
   empty            a side printed nothing or only whitespace, or nothing but
                    <N> placeholders is left after normalization (e.g. a reused
                    session id made a hook stay silent, or a --normalize regex
-                   ate everything). Fails unless --allow-empty.
+                   ate everything). With --stderr, stdout and stderr together:
+                   a hook that answers on stderr alone is not empty. Fails
+                   unless --allow-empty.
   nondeterministic a side did something different on a second run
                    (--determinism). Pin the clock, seed or session state, or
                    --normalize it.
@@ -58,7 +62,8 @@ Exit codes:
   0  identical (in the compared parts, after the listed normalizations)
   1  differs, empty, failed or nondeterministic
   2  usage or tool error: the check could not run (bad option, command not
-     found or not executable, missing --cwd or --stdin file)
+     found or not executable, missing --cwd, missing or unreadable --stdin
+     file, --timeout outside (0, 86400])
 
 Stdlib only; safe to run with `python3 -I`.
 """
@@ -79,6 +84,7 @@ from pathlib import Path
 
 NONCE = "{nonce}"
 DIFF_HEAD_LINES = 40
+MAX_TIMEOUT = 86400.0  # a day per invocation; larger values overflow the clock in subprocess
 
 
 class UsageError(Exception):
@@ -162,7 +168,10 @@ def check(args) -> dict:
         p = Path(args.stdin)
         if not p.is_file():
             raise UsageError(f"stdin file not found: {args.stdin}")
-        stdin_data = p.read_bytes()
+        try:
+            stdin_data = p.read_bytes()
+        except OSError as e:
+            raise UsageError(f"cannot read stdin file {args.stdin}: {e}") from e
     try:
         patterns = [re.compile(r) for r in args.normalize]
     except re.error as e:
@@ -195,6 +204,13 @@ def check(args) -> dict:
             report[name]["stderr_normalized_counts"] = sides[name]["err_counts"]
 
     failed = empty = nondet = False
+    if patterns:
+        for name in ("base", "cand"):
+            if b"<N>" in raw[name]["out"] or (args.stderr and b"<N>" in raw[name]["err"]):
+                # a literal <N> would be indistinguishable from a replaced match
+                report["problems"].append(f"{name} printed the placeholder <N> itself; the normalized comparison "
+                                          "would be ambiguous")
+                failed = True
     for name in ("base", "cand"):
         r = raw[name]
         if r["timeout"]:
@@ -207,14 +223,14 @@ def check(args) -> dict:
         for name in ("base", "cand"):
             if raw[name]["timeout"]:
                 continue
-            if not raw[name]["out"].strip():
-                report["problems"].append(f"empty output: {name} printed nothing or only whitespace")
+            # with --stderr a side is empty only when stdout and stderr both are (a hook may answer on stderr alone)
+            keys = ["out", "err"] if args.stderr else ["out"]
+            what = "stdout and stderr" if args.stderr else "stdout"
+            if all(not raw[name][k].strip() for k in keys):
+                report["problems"].append(f"empty output: {name} printed nothing or only whitespace ({what})")
                 empty = True
-            elif not sides[name]["out"].replace("<N>", "").strip():
-                report["problems"].append(f"empty output: {name} has nothing left after normalization (only <N>)")
-                empty = True
-            if args.stderr and raw[name]["err"].strip() and not sides[name]["err"].replace("<N>", "").strip():
-                report["problems"].append(f"empty output: {name} stderr has nothing left after normalization (only <N>)")
+            elif patterns and all(not sides[name][k].replace("<N>", "").strip() for k in keys):
+                report["problems"].append(f"empty output: {name} has nothing left after normalization, only <N> ({what})")
                 empty = True
 
     if args.determinism:
@@ -235,7 +251,8 @@ def check(args) -> dict:
         diff_lines.append(f"exit code: base {b['exit']} · cand {c['exit']}")
     if b["counts"] != c["counts"] or b.get("err_counts") != c.get("err_counts"):
         # the same text after normalization but a different number of replacements is a different output
-        diff_lines.append(f"normalization counts: base {b['counts']} · cand {c['counts']}")
+        diff_lines.append(f"normalization counts: base {b['counts']} · cand {c['counts']}"
+                          + (f" (stderr: base {b['err_counts']} · cand {c['err_counts']})" if "err_counts" in b else ""))
     for label, key in (("stdout", "out"), ("stderr", "err")):
         if key in b and b[key] != c[key]:
             diff_lines += [show(d) for d in difflib.unified_diff(
@@ -319,8 +336,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.timing < 0:
         print("error: --timing must be >= 0", file=sys.stderr)
         return 2
-    if not math.isfinite(args.timeout) or args.timeout <= 0:
-        print("error: --timeout must be a finite number > 0", file=sys.stderr)
+    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:
+        print(f"error: --timeout must be a number of seconds in (0, {MAX_TIMEOUT:g}]", file=sys.stderr)
         return 2
     try:
         report = check(args)

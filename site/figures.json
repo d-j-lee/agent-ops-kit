@@ -176,15 +176,15 @@
   "claim": "C-res-metr2"
  },
  "bench.loop": {
-  "text": "2.05–2.26 s",
+  "text": "2.05~2.26 s",
   "claim": "C-bench-bridge"
  },
  "bench.re": {
-  "text": "1.15–1.42 s",
+  "text": "1.15~1.42 s",
   "claim": "C-bench-bridge"
  },
  "bench.rs": {
-  "text": "131–170 ms",
+  "text": "131~170 ms",
   "claim": "C-bench-bridge"
  },
  "bench.x.re": {

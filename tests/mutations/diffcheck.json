@@ -9,14 +9,14 @@
  {
   "file": "scripts/diffcheck.py",
   "label": "whitespace-only output is not empty",
-  "old": "            if not raw[name][\"out\"].strip():",
-  "new": "            if not raw[name][\"out\"]:",
+  "old": "            if all(not raw[name][k].strip() for k in keys):",
+  "new": "            if all(not raw[name][k] for k in keys):",
   "expect": "test_whitespace_only_is_empty"
  },
  {
   "file": "scripts/diffcheck.py",
   "label": "drop the empty-after-normalization guard",
-  "old": "            elif not sides[name][\"out\"].replace(\"<N>\", \"\").strip():",
+  "old": "            elif patterns and all(not sides[name][k].replace(\"<N>\", \"\").strip() for k in keys):",
   "new": "            elif False:",
   "expect": "test_normalizing_everything_is_empty"
  },
@@ -148,10 +148,38 @@
  },
  {
   "file": "scripts/diffcheck.py",
-  "label": "stderr normalized away is not empty",
-  "old": "            if args.stderr and raw[name][\"err\"].strip() and not sides[name][\"err\"].replace(\"<N>\", \"\").strip():",
-  "new": "            if False:",
+  "label": "stderr not part of the output under --stderr",
+  "old": "            keys = [\"out\", \"err\"] if args.stderr else [\"out\"]",
+  "new": "            keys = [\"out\"]",
+  "expect": "test_stderr_counts_as_output_under_stderr"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "stderr alone decides emptiness",
+  "old": "            keys = [\"out\", \"err\"] if args.stderr else [\"out\"]",
+  "new": "            keys = [\"err\"] if args.stderr else [\"out\"]",
   "expect": "test_stderr_normalized_away_is_empty"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "a literal <N> not flagged",
+  "old": "            if b\"<N>\" in raw[name][\"out\"] or (args.stderr and b\"<N>\" in raw[name][\"err\"]):",
+  "new": "            if False:",
+  "expect": "test_literal_placeholder_is_ambiguous"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "unreadable stdin file is a traceback",
+  "old": "        except OSError as e:\n            raise UsageError(f\"cannot read stdin file {args.stdin}: {e}\") from e\n",
+  "new": "        except ValueError:\n            pass\n",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "stderr counts left out of the message",
+  "old": "                          + (f\" (stderr: base {b['err_counts']} · cand {c['err_counts']})\" if \"err_counts\" in b else \"\"))",
+  "new": "                          )",
+  "expect": "test_normalization_counts_must_match"
  },
  {
   "file": "scripts/diffcheck.py",
@@ -184,8 +212,15 @@
  {
   "file": "scripts/diffcheck.py",
   "label": "non-finite timeout accepted",
-  "old": "    if not math.isfinite(args.timeout) or args.timeout <= 0:",
-  "new": "    if args.timeout <= 0:",
+  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:",
+  "new": "    if not 0 < args.timeout <= MAX_TIMEOUT:",
+  "expect": "test_usage_errors"
+ },
+ {
+  "file": "scripts/diffcheck.py",
+  "label": "no timeout ceiling",
+  "old": "    if not math.isfinite(args.timeout) or not 0 < args.timeout <= MAX_TIMEOUT:",
+  "new": "    if not math.isfinite(args.timeout) or not 0 < args.timeout:",
   "expect": "test_usage_errors"
  },
  {

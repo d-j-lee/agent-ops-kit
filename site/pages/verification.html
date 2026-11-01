@@ -203,7 +203,7 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
       <div class="tpls">
         <div class="tpl">
           <header><b>교차검증 — 사실·수치·인용</b><span class="kind" style="color:var(--cross)">cross</span><button class="copy" type="button" data-target="t1">복사</button></header>
-<pre id="t1">독립 검증자로서 아래 문서의 사실 주장을 출처와 대조해 줘. 문서 작성 과정은 모르는 상태로 판단한다.
+<pre class="prompt" id="t1">독립 검증자로서 아래 문서의 사실 주장을 출처와 대조해 줘. 문서 작성 과정은 모르는 상태로 판단한다.
 
 대상: &lt;파일 경로 또는 붙여 넣은 글&gt;
 범위: 숫자·날짜·인용·"연구에 따르면" 같은 주장 전부. 의견·제안은 제외.
@@ -218,7 +218,7 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
         </div>
         <div class="tpl">
           <header><b>적대적 검증 — 코드·게이트·설계</b><span class="kind" style="color:var(--adv)">adversarial</span><button class="copy" type="button" data-target="t2">복사</button></header>
-<pre id="t2">너는 이 변경을 내보내지 말아야 할 이유를 찾는 검증자다. 작성자의 설명이 아니라 실험 결과로 판단한다.
+<pre class="prompt" id="t2">너는 이 변경을 내보내지 말아야 할 이유를 찾는 검증자다. 작성자의 설명이 아니라 실험 결과로 판단한다.
 
 대상: &lt;저장소 경로와 커밋 범위&gt;
 원본은 고치지 않는다. &lt;사본 경로&gt;에 복사해서 실험하고, 빌드 산출물도 사본마다 따로 둔다.
@@ -233,7 +233,7 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
         </div>
         <div class="tpl">
           <header><b>회귀 재검증 — 수정 라운드 뒤</b><span class="kind" style="color:var(--reg)">regression</span><button class="copy" type="button" data-target="t3">복사</button></header>
-<pre id="t3">지난 검토에서 낸 발견을 수정했다. 커밋 &lt;이전&gt;..&lt;이후&gt;. 다시 사본에서, 사본마다 빌드 디렉터리를 따로 두고 검증해 줘.
+<pre class="prompt" id="t3">지난 검토에서 낸 발견을 수정했다. 커밋 &lt;이전&gt;..&lt;이후&gt;. 다시 사본에서, 사본마다 빌드 디렉터리를 따로 두고 검증해 줘.
 지난 발견 목록: &lt;같은 에이전트에게 보내면 생략. 다른 에이전트라면 지난 보고서를 그대로 붙인다&gt;
 
 1. 발견마다 지난번과 같은 실험을 다시 돌려 FIXED / PARTIAL / NOT FIXED 로 판정한다. 판정마다 실행한 실험을 적는다.
@@ -245,7 +245,7 @@ description: 교차검증·적대적 검증·회귀검증의 차이와 쓰는 �
         </div>
         <div class="tpl">
           <header><b>결과 보고 형식 — 모든 검증자에게 붙이기</b><span class="kind" style="color:var(--accent)">format</span><button class="copy" type="button" data-target="t4">복사</button></header>
-<pre id="t4">보고 규칙:
+<pre class="prompt" id="t4">보고 규칙:
 - 근거 등급을 붙인다: 확인(직접 실행·측정·열람, 다시 실행하거나 조회할 수 있는 근거 — 명령, URL, 파일 내용 자체가 주장이면 path@sha), 도출(확인된 값에서 계산), 추론(판단·가정), 미확인,
   기록됨(다른 세션·에이전트의 기록), 문서(외부 문서에 적힌 것).
   발견 하나하나는 VERIFIED(재현함) 또는 SUSPECTED(추정)로 표시한다.

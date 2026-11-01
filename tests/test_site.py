@@ -84,10 +84,13 @@ class RealSiteTests(unittest.TestCase):
         src = (ROOT / "scripts" / "build_site.py").read_text(encoding="utf-8")
         block = src[src.index("GRADE_DEF = {"):src.index("}", src.index("GRADE_DEF = {"))]
         norm = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-        words = _re.findall(r'"(\S+)": "([^"]+)"', block)
+        words = dict(_re.findall(r'"(\S+)": "([^"]+)"', block))
+        row = next(ln for ln in norm.splitlines() if ln.startswith("| 등급 | "))
+        cell = row[len("| 등급 | "):].rsplit(" |", 1)[0]
+        norm_words = {g: _re.sub(r" \(D\d+\)$", "", t)  # a trailing decision reference is not part of the words
+                      for g, t in _re.findall(r"\[(\S+)\] (.*?)(?= · \[|$)", cell)}
         self.assertEqual(len(words), 6)
-        for grade, text in words:
-            self.assertIn(f"[{grade}] {text}", norm, grade)
+        self.assertEqual(words, norm_words, "the legend says exactly what the norm says, word for word")
 
     def test_built_pages_have_no_placeholders_or_secrets(self):
         with tempfile.TemporaryDirectory() as d:
@@ -273,8 +276,13 @@ class BuildCheckTests(unittest.TestCase):
     def test_terminal_excerpt_needs_a_log(self):
         self.body('<pre class="term">$ bench\nmedian 101 ms (-46.8%)</pre>')
         self.refused("needs data-log")
-        self.body('<pre class="term" data-unverified>$ cargo check\nerror</pre>')
+        self.body('<figure><pre class="term" data-unverified>$ cargo check\nerror</pre>'
+                  '<figcaption>기록 <span class="g g-rec">기록됨</span></figcaption></figure>')
         self.ok()
+        self.body('<pre class="term" data-unverified>$ bench\nmedian 101 ms (-46.8%)</pre>')
+        self.refused("data-unverified excerpt needs a [기록됨] badge in the same <figure>")
+        self.body('<pre>$ bench\nmedian 101 ms (-46.8%)</pre>')
+        self.refused("a <pre> with measured quantities needs data-log")
         self.body('<pre data-log="logs/run.txt"><span class="dim"># 99% faster</span>verdict: identical</pre>')
         self.refused("measured quantity(ies) outside the registry: 99%")
 
@@ -282,6 +290,12 @@ class BuildCheckTests(unittest.TestCase):
         self.claims[0]["evidence"] = [{"kind": "cmd", "ref": "python -m unittest discover -s tests (other repo, patched)"}]
         self.write()
         self.refused("cmd ref is not a valid shell command")
+        self.claims[0]["evidence"] = [{"kind": "cmd", "ref": "sort <in.txt >out.txt"}]  # a redirection, not a placeholder
+        self.write()
+        self.ok()
+        self.claims[0]["evidence"] = [{"kind": "cmd", "ref": "sort <input file> out.txt"}]
+        self.write()
+        self.refused("cmd ref has a <placeholder>")
 
     def test_evidence_fields_and_scope_type(self):
         self.claims[0]["evidence"][0]["note"] = "x"
@@ -291,7 +305,8 @@ class BuildCheckTests(unittest.TestCase):
 
     def test_own_repo_url_variants(self):
         for url in ("https://github.com/D-J-Lee/agent-ops-kit/blob/main/README.md", "https://github.com/d-j-lee/agent-ops-kit/pull/4",
-                    "https://raw.githubusercontent.com/d-j-lee/agent-ops-kit/main/README.md"):
+                    "https://raw.githubusercontent.com/d-j-lee/agent-ops-kit/main/README.md",
+                    "https://github.com/d-j-lee/agent-ops-kit/tree/main/docs"):
             self.body(f'<a href="{url}">x</a>')
             self.refused("a link to this repository is typed as a URL")
 
@@ -305,6 +320,9 @@ class BuildCheckTests(unittest.TestCase):
         (self.root / "notes.md").write_text("untracked\n", encoding="utf-8")
         self.body("{{doc:notes.md}}")
         self.refused("doc link to a file git does not track")
+        (self.root / "logs" / "new.txt").write_text("verdict: identical\n", encoding="utf-8")
+        self.body('<pre data-log="logs/new.txt">verdict: identical</pre>')
+        self.refused("data-log points at a file git does not track")
         self.body("")
         self.claims.append({"id": "C2", "claim": "기록.", "grade": "기록됨", "evidence": [{"kind": "file", "ref": "README.md@0000000"}]})
         self.figures["f2"] = {"text": "2", "claim": "C2"}
@@ -326,16 +344,61 @@ class BuildCheckTests(unittest.TestCase):
         self.body("<p>30%가 줄었고 190ms에서 101ms로, 약3배, 9.5× 빨라졌다. 1~3분기 자료.</p>"
                   "<p>53분에서 3시간으로, 2.5초, 40µs, 7밀리초, 1.2s, 16KB·3MB·2GB였다.</p>")
         err = self.refused("measured quantity(ies) outside the registry")
-        for q in ("30%", "190ms", "101ms", "3배", "9.5×", "53분", "3시간", "2.5초", "40µs", "7밀리초", "1.2s",
+        for q in ("30%", "190ms", "101ms", "3배", "9.5×", "53분", "3시간", "2.5초", "40μs", "7밀리초", "1.2s",
                   "16KB", "3MB", "2GB"):
             self.assertIn(q, err)
         self.assertIn(": 14 measured quantity", err, "1~3분기 is a quarter, not a duration")
 
+    def test_measured_quantity_in_hidden_forms(self):
+        self.pages["index.html"] = PAGE.replace("nav: 시험", "nav: 3배 빠름").replace(
+            "BODY", '<p>46&#8203;%, ４６％, 9.5x, 16kB, 2 min, 1.5 sec, 40us, 5 ns, 190μs, 306바이트, 1.28M 토큰, 46 퍼센트, '
+                    '<abbr title="101 ms">x</abbr></p>')
+        self.write()
+        err = self.refused("measured quantity(ies) outside the registry")
+        for q in ("46%", "9.5x", "16kB", "2 min", "1.5 sec", "40us", "5 ns", "190μs", "306바이트", "1.28M 토큰",
+                  "46 퍼센트", "101 ms", "3배"):
+            self.assertIn(q, err)
+        self.assertNotIn("0x1F", self.refused_text('<p>0x1F, 3 x 4 행렬</p>'))
+
+    def refused_text(self, html_body):
+        """the build output for a page body (empty when the build passes)"""
+        self.body(html_body)
+        code, _, err = self.build()
+        if code == 0:
+            shutil.rmtree(self.root / "out")
+        return err
+
     def test_context_and_code_numbers_are_exempt(self):
         self.body('<p><span class="ctx">2 vCPU, 4,334줄, 16KB</span> <code>--timeout 30s</code> 1~3분기</p>'
-                  '<pre>12 ms</pre>')
+                  '<pre class="prompt">time budget 12 ms</pre><pre class="tree">a  # 3 KB</pre>')
         code, _, err = self.build()
         self.assertEqual(code, 0, err)
+
+    def test_badges_and_legends_in_any_form(self):
+        for badge in ('<span class="g&#32;g-ok">확인</span>', '<span title=">" class="g g-ok">확인</span>',
+                      '<code><span class="g g-ok">확인</span></code>', '<span class="ctx"><b class="g g-ok">확인</b></span>',
+                      '<SPAN CLASS="g g-ok">확인</SPAN>'):
+            self.body(badge)
+            self.refused("a [확인] badge is typed into the page")
+        for legend in ('<ol class="legend"><li>x</li></ol>', '<div class="legend">x</div>'):
+            self.body(legend)
+            self.refused("a grade legend is typed into the page")
+
+    def test_values_split_by_tags_or_entities(self):
+        self.body('<a href="https://github&#46;com/d-j-lee/agent-ops-kit/blob/main/README.md">x</a>')
+        self.refused("a link to this repository is typed as a URL")
+        self.body('<p>https://github.com/d-j-lee/agent-ops-kit/<wbr>tree/main</p>')
+        self.refused("a link to this repository is typed as a URL")
+        self.body('<p>123e4567-e89b-&shy;12d3-a456-426614174000</p>')
+        self.refused("contains a uuid")
+        self.body('<p>claude.ai/public/<wbr>artifacts/0123456789abcdef</p>')
+        self.refused("contains a claude_artifact_url")
+
+    def test_data_log_must_be_a_raw_log(self):
+        self.body('<pre data-log="site/pages/index.html">값</pre>')
+        self.refused("data-log must point at a raw log")
+        self.body('<pre data-log="logs/run.txt"><span class="dim">$ run</span></pre>')
+        self.refused("has no line to check")
 
     def test_own_repo_url_must_use_doc(self):
         self.body('<a href="https://github.com/d-j-lee/agent-ops-kit/blob/main/README.md">x</a>')

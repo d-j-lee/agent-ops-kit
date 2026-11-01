@@ -90,12 +90,12 @@ class DiffcheckTests(unittest.TestCase):
     def test_whitespace_only_is_empty(self):
         code, r, _ = self.diff("--base", py("print()"), "--cand", py("print('  ')"))
         self.assertEqual((code, r["verdict"]), (1, "empty"))
-        self.assertEqual(r["problems"], [f"empty output: {s} printed nothing or only whitespace" for s in ("base", "cand")])
+        self.assertEqual(r["problems"], [f"empty output: {s} printed nothing or only whitespace (stdout)" for s in ("base", "cand")])
 
     def test_one_side_empty(self):
         code, r, _ = self.diff("--base", py("print('x')"), "--cand", py("pass"))
         self.assertEqual(r["verdict"], "empty")
-        self.assertEqual(r["problems"], ["empty output: cand printed nothing or only whitespace"])
+        self.assertEqual(r["problems"], ["empty output: cand printed nothing or only whitespace (stdout)"])
 
     def test_normalizing_everything_is_empty(self):
         # a regex that eats the whole output must not turn 'apple' vs 'banana' into "identical"
@@ -237,12 +237,35 @@ class DiffcheckTests(unittest.TestCase):
         e2 = py("import sys; print('a'); print('other 2', file=sys.stderr)")
         code, r, _ = self.diff("--base", e1, "--cand", e2, "--stderr", "--normalize", "(?s).+")
         self.assertEqual((code, r["verdict"]), (1, "empty"))
-        self.assertIn("stderr has nothing left", " ".join(r["problems"]))
+        self.assertIn("nothing left after normalization, only <N> (stdout and stderr)", " ".join(r["problems"]))
+
+    def test_stderr_counts_as_output_under_stderr(self):
+        # a hook that blocks answers on stderr only and exits 2: with --stderr that is output, not emptiness
+        block = py("import sys; print('blocked: tests fail', file=sys.stderr); sys.exit(2)")
+        code, r, _ = self.diff("--base", block, "--cand", block, "--stderr", "--allow-fail")
+        self.assertEqual((code, r["verdict"]), (0, "identical"), r["problems"])
+        code, r, _ = self.diff("--base", block, "--cand", block, "--allow-fail")
+        self.assertEqual((code, r["verdict"]), (1, "empty"))  # stdout only: nothing to compare
+        warn = py("import sys; print('a'); print('warn 1', file=sys.stderr)")
+        code, r, _ = self.diff("--base", warn, "--cand", warn, "--stderr", "--normalize", "(?m)^warn.*$")
+        self.assertEqual((code, r["verdict"]), (0, "identical"), r["problems"])  # stdout still says something
+
+    def test_literal_placeholder_is_ambiguous(self):
+        code, r, _ = self.diff("--base", py("print('x=1 y=<N>')"), "--cand", py("print('x=<N> y=2')"), "--normalize", "[0-9]")
+        self.assertEqual((code, r["verdict"]), (1, "failed"))
+        self.assertIn("printed the placeholder <N> itself", " ".join(r["problems"]))
+        code, r, _ = self.diff("--base", py("print('<N>')"), "--cand", py("print('<N>')"))
+        self.assertEqual((code, r["verdict"]), (0, "identical"), r["problems"])  # without --normalize it is just text
 
     def test_normalization_counts_must_match(self):
-        code, r, _ = self.diff("--base", py("print('x=12345')"), "--cand", py("print('x=<N>')"), "--normalize", "[0-9]+")
+        code, r, _ = self.diff("--base", py("print('xa')"), "--cand", py("print('xb')"), "--normalize", "a", "--normalize", "b")
+        self.assertEqual((code, r["verdict"]), (1, "differs"))  # both read x<N>, but a different pattern matched
+        self.assertIn("normalization counts: base [1, 0] · cand [0, 1]", r["diff_head"])
+        e1 = py("import sys; print('same'); print('a', file=sys.stderr)")
+        e2 = py("import sys; print('same'); print('b', file=sys.stderr)")
+        code, r, _ = self.diff("--base", e1, "--cand", e2, "--stderr", "--normalize", "a", "--normalize", "b")
         self.assertEqual((code, r["verdict"]), (1, "differs"))
-        self.assertIn("normalization counts: base [1] · cand [0]", r["diff_head"])
+        self.assertIn("(stderr: base [1, 0] · cand [0, 1])", r["diff_head"][0])
 
     def test_timing_uses_a_fresh_nonce_each_run(self):
         seen = self.tmp / "seen"
@@ -290,6 +313,11 @@ class DiffcheckTests(unittest.TestCase):
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timing", "-1")[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "0")[0], 2)
         self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "nan")[0], 2)
+        self.assertEqual(run_script("diffcheck", "--base", ok, "--cand", ok, "--timeout", "1e10")[0], 2)
+        if Path("/proc/self/mem").is_file():  # a file that exists but cannot be read
+            code, _, err = run_script("diffcheck", "--base", ok, "--cand", ok, "--stdin", "/proc/self/mem")
+            self.assertEqual(code, 2, err)
+            self.assertNotIn("Traceback", err)
         self.assertEqual(run_script("diffcheck", "--base", "'unclosed", "--cand", ok)[0], 2)
         self.assertEqual(run_script("diffcheck")[0], 2)
 
@@ -484,6 +512,8 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertEqual(verdict("skipme/flag.txt", "--ignore", "skipme"), "vacuous")
         self.assertEqual(verdict("node_modules/flag.txt", "--ignore", "skipme"), "vacuous")  # the defaults stay
         self.assertEqual(verdict("node_modules/flag.txt", "--ignore", "none"), "baseline_fails")
+        self.assertEqual(verdict("node_modules/flag.txt", "--ignore", "none", "--ignore", "skipme"), "baseline_fails")
+        self.assertEqual(verdict("skipme/flag.txt", "--ignore", "none", "--ignore", "skipme"), "vacuous")
 
     def test_any_file_encoding(self):
         (self.repo / "data.bin").write_bytes(b"\xff\xfe value=1\n")
@@ -533,11 +563,18 @@ class VacuityCheckTests(unittest.TestCase):
         self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutate", "calc.py", "a", "b",
                                     "--timeout", "nan")[0], 2)
         for entry, message in (({"file": "calc.py", "old": 5, "new": "x"}, "needs string fields"),
-                               ({"file": "calc.py", "old": "a", "new": "b", "expect": 5}, "expect must be a string")):
+                               ({"file": "calc.py", "old": "a", "new": "b", "expect": 5}, "expect must be a non-empty string"),
+                               ({"file": "calc.py", "old": "a", "new": "b", "expect": ""}, "expect must be a non-empty string")):
             bad.write_text(json.dumps([entry]), encoding="utf-8")
             code, _, err = run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutations", bad)
             self.assertEqual(code, 2, err)
             self.assertIn(message, err)
+        self.assertEqual(run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutate", "calc.py", "a", "b",
+                                    "--timeout", "1e308")[0], 2)
+        if Path("/proc/self/mem").is_file():  # a file that exists but cannot be read
+            code, _, err = run_script("vacuity_check", "--repo", self.repo, "--test", t, "--mutations", "/proc/self/mem")
+            self.assertEqual(code, 2, err)
+            self.assertNotIn("Traceback", err)
 
     def test_help(self):
         code, out, _ = run_script("vacuity_check", "--help")

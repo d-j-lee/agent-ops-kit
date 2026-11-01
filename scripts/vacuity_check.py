@@ -34,7 +34,8 @@ your permissions: what it does through absolute paths or links is up to it.
 
 Mutations come from repeated --mutate FILE OLD NEW options or from a JSON file
 (--mutations) holding a list of {"file", "old", "new", "label", "expect"}
-objects ("label" and "expect" optional). Use "" as NEW to delete OLD.
+objects ("label" and "expect" optional; an "expect" given is a non-empty
+string, and a mutation without one gets --expect). Use "" as NEW to delete OLD.
 
 Usage:
   vacuity_check.py --repo DIR --test CMD (--mutate FILE OLD NEW ... | --mutations FILE.json)
@@ -42,8 +43,8 @@ Usage:
 
 The test command is split with shlex (no shell) and runs with the copy as its
 working directory. Copies skip .git target node_modules .venv __pycache__;
---ignore NAME skips more names (top level or nested), --ignore none copies
-everything. --jobs N runs N mutations at once (each has its own copy;
+--ignore NAME skips more names (top level or nested); --ignore none drops the
+default list (other --ignore names still apply). --jobs N runs N mutations at once (each has its own copy;
 timing-sensitive tests may need a longer --timeout).
 
 Verdict (worst first): baseline_fails, mutation_error (a mutation did not
@@ -53,7 +54,9 @@ other_failure), guarded.
 Exit codes:
   0  guarded: the baseline passes and every mutation makes the test fail as expected
   1  any other verdict
-  2  usage or tool error: the check could not run
+  2  usage or tool error: the check could not run (missing or unreadable
+     repository or mutations file, a bad mutation entry, --timeout outside
+     (0, 86400], a test command that cannot start)
 
 Stdlib only; safe to run with `python3 -I`.
 """
@@ -92,13 +95,16 @@ def load_mutations(args) -> list[dict]:
             data = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             raise UsageError(f"mutations file is not UTF-8 JSON: {e}") from e
+        except OSError as e:
+            raise UsageError(f"cannot read mutations file {args.mutations}: {e}") from e
         if not isinstance(data, list):
             raise UsageError("mutations file must hold a JSON list")
         for i, m in enumerate(data):
             if not isinstance(m, dict) or not all(isinstance(m.get(k), str) for k in ("file", "old", "new")):
                 raise UsageError(f"mutation #{i} needs string fields file, old, new")
-            if "expect" in m and not isinstance(m["expect"], str):
-                raise UsageError(f"mutation #{i}: expect must be a string")
+            if "expect" in m and (not isinstance(m["expect"], str) or not m["expect"].strip()):
+                # an empty expect would silently switch the check (and --expect) off for this mutation
+                raise UsageError(f"mutation #{i}: expect must be a non-empty string")
             muts.append({"file": m["file"], "old": m["old"], "new": m["new"],
                          "label": m.get("label") or f"{m['file']}: {m['old'][:40]!r}",
                          "expect": m.get("expect", args.expect)})
@@ -169,7 +175,8 @@ def check(args) -> dict:
     if not argv:
         raise UsageError("empty test command")
     muts = load_mutations(args)
-    ignore = [] if args.ignore == ["none"] else DEFAULT_IGNORE + (args.ignore or [])
+    given = args.ignore or []
+    ignore = [n for n in given if n != "none"] + ([] if "none" in given else DEFAULT_IGNORE)  # 'none' drops the defaults
 
     report: dict = {"baseline": None, "mutations": [], "verdict": None}
     with tempfile.TemporaryDirectory(prefix="vacuity-") as tmp:
@@ -242,14 +249,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect", metavar="TEXT",
                     help="text a failing run must print to count as guarded (default for every mutation)")
     ap.add_argument("--ignore", action="append", metavar="NAME",
-                    help=f"more names to skip when copying (always skipped: {' '.join(DEFAULT_IGNORE)}; 'none' copies all)")
+                    help=f"more names to skip when copying (also skipped unless 'none' is given: {' '.join(DEFAULT_IGNORE)})")
     ap.add_argument("--timeout", type=float, default=600.0, help="seconds per test run (default 600)")
     ap.add_argument("--jobs", type=int, default=1, metavar="N",
                     help="mutations to run at the same time, each on its own copy (default 1)")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     args = ap.parse_args(argv)
-    if not math.isfinite(args.timeout) or args.timeout <= 0 or args.jobs < 1:
-        print("error: --timeout must be a finite number > 0 and --jobs >= 1", file=sys.stderr)
+    if not math.isfinite(args.timeout) or not 0 < args.timeout <= 86400 or args.jobs < 1:
+        print("error: --timeout must be a number of seconds in (0, 86400] and --jobs >= 1", file=sys.stderr)
         return 2
     try:
         report = check(args)

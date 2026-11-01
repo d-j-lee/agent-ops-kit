@@ -11,7 +11,7 @@
 > 커밋 전에 반드시 검사한다.
 >
 > ```sh
-> python3 -I scripts/secret_scan.py knowledge/
+> python3 -I scripts/secret_scan.py --strict knowledge/
 > ```
 >
 > `error`가 하나라도 있으면 커밋하지 않는다. `warn`(이메일, `session_0…`·`cse_…`·`trig_…` ID, Artifact 링크)도
@@ -81,6 +81,6 @@ candidate ─(검증 통과)→ active ─(60일 재확인 없음)→ stale
 
 ## 검증 도구
 
-- `python3 -I scripts/secret_scan.py knowledge/` — 비밀값과 공개 레포 위생 검사
+- `python3 -I scripts/secret_scan.py --strict knowledge/` — 비밀값과 공개 레포 위생 검사(`--strict`는 ID·이메일·Artifact URL 경고도 실패로)
 - `python3 -I scripts/harvest_events.py IN... --out rows.jsonl` — 저장한 도구 결과를 JSONL로
 - YAML 파일은 JSON으로 바꾼 뒤 `schemas/card.schema.json`, `schemas/seed.schema.json`으로 검증한다

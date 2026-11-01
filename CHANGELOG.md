@@ -7,10 +7,10 @@
 ### 추가
 
 - ⑦ 회귀 고정(D25): 런북 `docs/patterns/regression.md`, 스킬 `.claude/skills/aok-regress`, 도구 두 개
-  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함, `--stderr`면 stderr도)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)는 실패. 양쪽의 정규화 횟수가 다르면 `differs`. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
-  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`(낱말 단위로 맞춤)에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬
+  - `scripts/diffcheck.py`: 같은 입력을 기준·후보 명령에 넣어 종료 코드와 stdout(`--stderr`면 stderr도)을 바이트로 비교한다. 빈 출력(공백뿐이거나 정규화 뒤 `<N>`만 남은 것 포함, `--stderr`면 stdout과 stderr를 합쳐서)·0이 아닌 종료·시간 초과·실행마다 다른 결과(`--determinism`)·정규화를 쓸 때 출력에 글자 그대로 있는 `<N>`은 실패. 양쪽의 정규화 횟수가 다르면 `differs`. `--allow-fail`이어도 종료 코드는 비교한다. 정규화는 횟수 보고, `{nonce}`로 실행마다 새 키(`--same-nonce`는 한 쌍에 같은 키), `--timing`은 번갈아 측정. 실행할 수 없으면 종료 코드 2
+  - `scripts/vacuity_check.py`: 레포 사본에서 보호 코드를 바꿔 테스트가 실패하는지 확인. 변이는 정확히 한 곳, 사본 안에만 쓴다(사본 밖으로 가는 심볼릭 링크는 거부). 컴파일되지 않는 `.py` 변이(`invalid`)·시간 초과(`timeout`)·`expect`(낱말 단위로 맞춤, 빈 문자열은 사용 오류)에 없는 실패(`other_failure`)는 통과가 아니다. `--jobs`로 병렬. 읽을 수 없는 입력과 범위 밖 `--timeout`은 종료 코드 2
   - CI 자기 시험: 변이 목록에 올린 장치를 하나씩 끈 변이 104개(diffcheck 28, vacuity_check 21, build_site 55), 변이마다 잡아야 할 시험 이름(`tests/mutations/*.json`)
-- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): 페이지 본문의 날 측정 수치(조사가 붙어도)·손으로 단 [확인] 배지·손으로 쓴 등급 범례(규범 문구로 생성)·cmd·url 근거가 없는 [확인]·셸 문법에 맞지 않는 근거 명령·git에 없는 파일이나 저장소 밖 링크·원자료(data-log)와 다른 터미널 발췌와 data-log 없는 터미널 발췌·공개 레포 금지 항목은 빌드 실패. 게시 URL은 레포에 두지 않는다
+- 읽기 허브 「AOK 안내서」(D27): 원본 `site/pages`, 수치 레지스트리 `site/claims.json`·`site/figures.json`, 빌드 `scripts/build_site.py`. 수치 규칙(D28): HTML 파서로 브라우저가 보이는 대로 읽어, 페이지 본문·title 속성·메타데이터의 날 측정 수치(조사가 붙어도, 엔티티·폭 없는 문자·전각으로 써도)·어떤 꼴로든 손으로 단 [확인] 배지와 등급 범례(범례는 규범 문구로 생성)·cmd·url 근거가 없는 [확인]·셸 문법에 맞지 않거나 자리표시가 든 근거 명령·git에 없는 파일이나 저장소 밖 링크·원자료(git이 추적하는 site/ 밖 파일)와 다른 발췌·근거 없는 터미널 발췌나 측정값이 든 `<pre>`([기록됨] 배지 없는 data-unverified 포함)·렌더된 글자에서도 공개 레포 금지 항목은 빌드 실패. 작성 실수를 막는 가드레일이며 의도적 우회(CSS가 만든 글자, 말로 쓴 숫자, 목록 밖 단위)는 막지 않는다. 게시 URL은 레포에 두지 않는다
 - [문서] 등급 범위(D29): 외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. `docs/architecture.md`·`schemas/claim.schema.json`·verifier 정의
 - 시험: `tests/test_regress_tools.py`, `tests/test_site.py`
 - 제안서 `docs/proposals/regression-harness-hub.md`(⑦, ⑧ 작업 레포 하네스 제안 D26, 읽기 허브, 결정 D25–D29, ⑧에 넘기는 요구)

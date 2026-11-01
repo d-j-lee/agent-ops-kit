@@ -22,39 +22,59 @@ Placeholders in page fragments
   {{grade:ID}}   the claim's grade badge, linked the same way
   {{doc:PATH}}   a link to a repository file on GitHub (PATH must exist in the repo)
   {{docurl:PATH}} only the URL of that link, for href attributes
+  {{legend:all}} the grade legend, in the words of docs/architecture.md (a test compares them exactly)
 
 Every page gets the site navigation, and a generated "이 페이지의 수치와 근거"
 table listing each claim the page used: grade, sentence, scope and evidence.
 
 The figure rule (D28). Measured quantities on hub pages (numbers with %, 배,
-ms/s/초/분/시간, KB/MB/GB) come from the registry. The build rejects such a
-number written straight into page text. Exempt are <pre> and <code> blocks,
-and <span class="ctx">…</span> for an explicitly marked context number (a size
-or setting, not a result). Counts (건, 개, 회) cannot be told apart from
-context mechanically and stay the author's responsibility.
+×/x, time units, sizes, token counts with k/M) come from the registry. The build
+rejects such a number in page text, title/alt attributes and the page's
+title/nav/description. Text is read the way a browser shows it (entities
+decoded, zero-width characters dropped, full-width forms folded). Exempt are
+<code> and <span class="ctx">…</span> (an explicitly marked context number:
+a size or setting, not a result), and <pre class="prompt|tree"> (copyable
+prompts, file trees). Any other <pre> holding a measured quantity, and every
+<pre class="term">, needs data-log (checked against the raw log) or
+data-unverified with a [기록됨] badge in the same <figure>. Counts (건, 개,
+회) cannot be told apart from context mechanically and stay the author's
+responsibility.
+
+These checks are a guardrail against slips by the author, read with a real
+HTML parser. They do not stop a deliberate bypass (CSS-generated text, a
+number spelt out in words, a unit not in the list).
 
 Checks (any failure exits 1 and writes nothing)
   - unknown figure, claim or placeholder kind; malformed placeholders
     (anything left looking like {{ after substitution); malformed metadata
   - a figure pointing at a missing claim; a claim with an unknown grade or
     fields outside the claim schema; duplicate claim ids
-  - evidence: kind cmd|event|file|url with a ref; a file ref must exist (the
-    part before @sha); a url must be https; a cmd must be runnable as written
-    (no <placeholder>; name inputs as $VARS defined in the procedure it cites)
-  - a [확인] claim needs a cmd or url item: something to re-run or re-query
-    (§2.1 rule 1). A file pointer alone is a record, not a re-run
+  - evidence: kind cmd|event|file|url with a ref and no other fields; a file
+    ref must exist (the part before @sha) and be in git at that sha; a url must
+    be https; a cmd must pass `bash -n` and hold no <placeholder> (name inputs
+    as $VARS defined in the procedure it cites). Only the syntax is checked,
+    not that the command exists or runs
+  - a [확인] claim needs a cmd or url item: something to re-run or re-query.
+    The hub is stricter than §2.1 (which also accepts path@sha): a measured
+    figure needs its measurement, so a file pointer alone is a record
   - figures or claims no page uses (the registry stays exactly as large as the hub)
-  - a [확인] badge typed into a page (outside the grade legend): it has to come
-    from the registry, {{grade:ID}} or {{claim:ID}}, so it carries evidence
+  - a [확인] badge (an element with classes g and g-ok, anywhere, any form)
+    typed into a page: it has to come from {{grade:ID}} or {{claim:ID}} so it
+    carries evidence. An element with class "legend" typed into a page: the
+    legend comes from {{legend:all}}
   - a measured quantity outside the registry (the figure rule above)
   - a GitHub link to this repository typed as a URL instead of {{doc:}}/{{docurl:}}
-  - {{doc:}} paths that do not exist or point outside the repository
-  - <pre data-log="PATH"> excerpts: every line must appear in PATH verbatim
-    and in order; lines may be left out only where the excerpt shows a line
-    "…". Lines inside <span class="dim"> are annotations and are skipped
+  - {{doc:}} paths that do not exist, point outside the repository or are not
+    in git (git checks are skipped when the root is not a git work tree)
+  - <pre data-log="PATH"> excerpts: PATH is a tracked raw log (not under
+    site/), every line must appear in it verbatim and in order, lines may be
+    left out only where the excerpt shows a line "…", and at least one line is
+    checked. Lines inside <span class="dim"> are annotations: not compared, but
+    still under the figure rule
   - published text that scripts/secret_scan.py flags (artifact URLs,
-    session/trigger ids, emails, tokens), or any UUID (public-repo rule; the
-    hub's own URL never goes into the repo)
+    session/trigger ids, emails, tokens), or any UUID, in the page source or
+    in the text as rendered (public-repo rule; the hub's own URL never goes
+    into the repo)
 
 Usage:
   build_site.py [--root REPO] [--out DIR] [--ref BRANCH] [--check]
@@ -69,12 +89,14 @@ from __future__ import annotations
 
 import argparse
 import html
+import unicodedata
 import importlib.util
 import json
 import re
 import shutil
 import subprocess
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # --check writes nothing, not even secret_scan's bytecode
@@ -87,15 +109,17 @@ PLACEHOLDER = re.compile(r"\{\{(\w+):([^{}]+)\}\}")
 META = re.compile(r"\A\s*<!--page\s*\n(.*?)\n-->\s*\n", re.S)
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 OWN_LINK = re.compile(r"(?:github\.com|raw\.githubusercontent\.com)/d-j-lee/agent-ops-kit\b", re.I)
-CLASS_ATTR = re.compile(r"""<\w+\b[^>]*?\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""", re.I)
-# a number with a unit of measure; Korean particles may follow (30%가, 190ms에서), 분기 (quarter) is not a unit
-MEASURE = re.compile(r"(?<![A-Za-z0-9_.])[-+−~]?\d[\d,.]*\s*(?:%p|%|배|×|ms|µs|밀리초|초|분(?!기)|시간|s|KB|MB|GB)(?![A-Za-z0-9_])")
-EXEMPT = [re.compile(p, re.S | re.I) for p in (
-    r"<!--.*?-->", r"<pre\b.*?</pre>", r"<code\b.*?</code>", r"<script\b.*?</script>", r"<style\b.*?</style>",
-    r'<span class="ctx">.*?</span>')]
+# a number with a unit of measure. Korean particles may follow (30%가, 190ms에서); 분기 (a quarter) is not a unit;
+# "x" counts only right after the digits (9.5x). Text is NFKC-normalized first (４６％ → 46%, µ → μ).
+MEASURE = re.compile(r"(?<![A-Za-z0-9_.])[-+−~]?\d[\d,.]*(?:x(?![A-Za-z0-9_])|\s*(?:%p|%|퍼센트|배|×|ms|msec|[µμu]s|ns|밀리초|"
+                     r"초|분(?!기)|시간|s|sec|min|[kKMG]i?B|바이트|bytes?|[kKM]\s?토큰)(?![A-Za-z0-9_]))")
+INVISIBLE = re.compile("[\u00ad\u200b\u200c\u200d\u2060\ufeff]")  # soft hyphen and zero-width characters
+INLINE_TAG = re.compile(r"</?(?:wbr|span|b|i|em|strong|code|abbr|small|mark|s|u|sup|sub|a)\b[^>]*>", re.I)
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 PRE = re.compile(r"<pre\b([^>]*)>(.*?)</pre>", re.S | re.I)
-DATA_LOG = re.compile(r'\bdata-log="([^"]+)"')
 DIM = re.compile(r'<span class="dim">(.*?)</span>', re.S)
+# <input file> in a command is a placeholder; "sort <in.txt >out.txt" is a redirection (space before the ">")
+PLACEHOLDER_ARG = re.compile(r"<[^<>\s](?:[^<>]*[^<>\s])?>")
 EVIDENCE_KEYS = {"kind", "ref", "excerpt"}
 # the grade legend every page shows through {{legend:all}}; the same words as docs/architecture.md (a test checks)
 GRADE_DEF = {
@@ -107,6 +131,88 @@ GRADE_DEF = {
     "문서": "외부 원문(도구·제품 문서, 논문·공식 보고서)에 그렇게 적혀 있음. 내용이 맞다는 확인은 아니다",
 }
 TAG = re.compile(r"<[^>]+>")
+
+
+def visible(text: str) -> str:
+    """What a reader sees: entities decoded, invisible characters dropped, compatibility forms folded."""
+    return unicodedata.normalize("NFKC", INVISIBLE.sub("", html.unescape(text)))
+
+
+class PageScan(HTMLParser):
+    """One pass over a page source with a real HTML parser, so entities, attribute quoting and tag case do not
+    hide a badge, a legend, a link or a number from the checks."""
+    EXEMPT = {"pre", "code", "script", "style"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack: list[tuple[str, bool]] = []   # (tag, inside an exempt zone)
+        self.figure: list[int] = []
+        self.figures = 0
+        self.text: list[str] = []                 # text outside exempt zones (the figure rule)
+        self.attrs_text: list[str] = []           # title / alt / aria-label values (also shown to readers)
+        self.hrefs: list[str] = []
+        self.badges = 0                           # elements carrying the [확인] badge classes
+        self.legends = 0                          # elements carrying class "legend"
+        self.rec_in_figure: set[int] = set()      # figures that show a [기록됨] badge
+        self.pres: list[dict] = []
+        self._pre: dict | None = None
+        self._dim = 0
+
+    def exempt(self) -> bool:
+        return bool(self.stack) and self.stack[-1][1]
+
+    def handle_starttag(self, tag, attrs):
+        a = {k: (v or "") for k, v in attrs}
+        classes = set(a.get("class", "").split())
+        if {"g", "g-ok"} <= classes:
+            self.badges += 1
+        if "legend" in classes:
+            self.legends += 1
+        if "g-rec" in classes and self.figure:
+            self.rec_in_figure.add(self.figure[-1])
+        for k in ("title", "alt", "aria-label"):
+            if a.get(k):
+                self.attrs_text.append(a[k])
+        if a.get("href"):
+            self.hrefs.append(a["href"])
+        if tag in VOID:
+            return
+        if tag == "figure":
+            self.figures += 1
+            self.figure.append(self.figures)
+        if tag == "pre":
+            self._pre = {"attrs": a, "text": [], "dim": [], "figure": self.figure[-1] if self.figure else None}
+            self.pres.append(self._pre)
+        if self._pre is not None and tag == "span" and "dim" in classes:
+            self._dim += 1
+        ex = self.exempt() or tag in self.EXEMPT or (tag == "span" and "ctx" in classes)
+        self.stack.append((tag, ex))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID and self.stack and self.stack[-1][0] == tag:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        if tag in VOID:
+            return
+        while self.stack:  # close up to the matching tag (tolerates unclosed inline tags)
+            t, _ = self.stack.pop()
+            if t == "span" and self._pre is not None and self._dim:
+                self._dim -= 1
+            if t == tag:
+                break
+        if tag == "figure" and self.figure:
+            self.figure.pop()
+        if tag == "pre":
+            self._pre = None
+            self._dim = 0
+
+    def handle_data(self, data):
+        if self._pre is not None:
+            (self._pre["dim"] if self._dim else self._pre["text"]).append(data)
+        if not self.exempt():
+            self.text.append(data)
 
 
 class BuildError(Exception):
@@ -204,7 +310,7 @@ def load_registry(root: Path, site: Path) -> tuple[dict, dict, list[str]]:
                 errors.append(f"claim {cid}: file ref not in git{' at ' + sha if sha else ''} (the GitHub link would 404): {ref}")
             if e["kind"] == "url" and not ref.startswith("https://"):
                 errors.append(f"claim {cid}: url ref must start with https://: {ref[:60]}")
-            if e["kind"] == "cmd" and re.search(r"<[^<>\s][^<>]*>", ref):
+            if e["kind"] == "cmd" and PLACEHOLDER_ARG.search(ref):
                 errors.append(f"claim {cid}: cmd ref has a <placeholder>; name inputs as $VARS from a procedure: {ref[:80]}")
             elif e["kind"] == "cmd":
                 bad = bash_syntax_error(ref)
@@ -212,7 +318,8 @@ def load_registry(root: Path, site: Path) -> tuple[dict, dict, list[str]]:
                     errors.append(f"claim {cid}: cmd ref is not a valid shell command ({bad}): {ref[:80]}")
         if c.get("grade") == "확인" and not kinds & {"cmd", "url"}:
             errors.append(f"claim {cid}: [확인] needs a cmd or url evidence item to re-run or re-query "
-                          "(claim.schema rule 1; a file pointer alone is a record)")
+                          "(the hub is stricter than §2.1 here: a measured figure needs its measurement re-run, "
+                          "so a file pointer alone is a record)")
         claims[cid] = {**c, "evidence": good}
     for fid, f in figures.items():
         if not isinstance(f, dict) or not isinstance(f.get("text"), str) or not f.get("text"):
@@ -245,49 +352,62 @@ def parse_page(path: Path) -> tuple[dict, str]:
     return meta, raw[m.end():]
 
 
-def lint_source(name: str, body: str) -> list[str]:
-    """Checks on the page source before substitution: typed [확인] badges, raw figures, own-repo URLs."""
+def lint_source(name: str, body: str, meta: dict | None = None) -> list[str]:
+    """Checks on the page source before substitution: typed badges and legends, raw figures, own-repo URLs,
+    terminal excerpts without a source. A guardrail against slips, read the way a browser reads the page."""
     errors = []
-    text = PLACEHOLDER.sub(" ", body)
-    for rx in EXEMPT:
-        text = rx.sub(" ", text)
-    for m in CLASS_ATTR.finditer(text):
-        if {"g", "g-ok"} <= set((m.group(1) or m.group(2) or m.group(3) or "").split()):
-            errors.append(f"{name}: a [확인] badge is typed into the page; use {{{{grade:ID}}}} or {{{{claim:ID}}}} "
-                          "so it carries evidence")
-            break
-    if re.search(r'<ul\b[^>]*\bclass\s*=\s*["\']?[^"\'>]*\blegend\b', text):
+    scan = PageScan()
+    scan.feed(PLACEHOLDER.sub(" ", body))
+    scan.close()
+    if scan.badges:
+        errors.append(f"{name}: a [확인] badge is typed into the page; use {{{{grade:ID}}}} or {{{{claim:ID}}}} "
+                      "so it carries evidence")
+    if scan.legends:
         errors.append(f"{name}: a grade legend is typed into the page; use {{{{legend:all}}}} (the norm's words)")
-    for m in PRE.finditer(body):
-        if not DATA_LOG.search(m.group(1)) and "data-unverified" not in m.group(1) and "term" in m.group(1):
-            errors.append(f"{name}: a terminal excerpt (<pre class=\"term\">) needs data-log=\"PATH\" to be checked "
-                          "against the raw log, or data-unverified with a [기록됨] grade beside it")
-    dims = " ".join(DIM.findall(" ".join(m.group(2) for m in PRE.finditer(body))))
-    plain = html.unescape(TAG.sub(" ", text + " " + dims))
-    found = MEASURE.findall(plain)
+    for pre in scan.pres:
+        a, text = pre["attrs"], "".join(pre["text"])
+        has_log, unverified = "data-log" in a, "data-unverified" in a
+        if unverified and pre["figure"] not in scan.rec_in_figure:
+            errors.append(f"{name}: a data-unverified excerpt needs a [기록됨] badge in the same <figure>")
+        elif not has_log and not unverified and ("term" in a.get("class", "").split() or (
+                MEASURE.search(visible(text)) and not {"prompt", "tree"} & set(a.get("class", "").split()))):
+            errors.append(f"{name}: a terminal excerpt or a <pre> with measured quantities needs data-log=\"PATH\" to be "
+                          "checked against the raw log, or data-unverified with a [기록됨] badge in the same <figure>")
+    shown_text = " ".join(scan.text) + " " + " ".join(" ".join(p["dim"]) for p in scan.pres)
+    shown_text += " " + " ".join(scan.attrs_text)
+    if meta:
+        shown_text += " " + " ".join(str(meta.get(k, "")) for k in ("title", "nav", "description"))
+    found = MEASURE.findall(visible(shown_text))
     if found:
         shown = ", ".join(dict.fromkeys(f.strip() for f in found))
         errors.append(f"{name}: {len(found)} measured quantity(ies) outside the registry: {shown[:200]} "
                       "(use {{fig:ID}}, or <span class=\"ctx\"> for a context number)")
-    if OWN_LINK.search(PLACEHOLDER.sub(" ", body)):
+    if OWN_LINK.search(visible(PLACEHOLDER.sub(" ", body))) or any(OWN_LINK.search(visible(h)) for h in scan.hrefs):
         errors.append(f"{name}: a link to this repository is typed as a URL; use {{{{doc:PATH}}}} or {{{{docurl:PATH}}}}")
     return errors
 
 
 def check_logs(name: str, body: str, root: Path) -> list[str]:
     errors = []
-    for m in PRE.finditer(body):
-        dl = DATA_LOG.search(m.group(1))
-        if not dl:
+    scan = PageScan()
+    scan.feed(PLACEHOLDER.sub(" ", body))
+    scan.close()
+    for pre in scan.pres:
+        rel = pre["attrs"].get("data-log")
+        if rel is None:
             continue
-        rel, content = dl.group(1), m.group(2)
         path = inside(root, rel)
         if not path or not path.is_file():
             errors.append(f"{name}: data-log points at a missing file {rel}")
             continue
+        if Path(rel).parts[:1] == ("site",):
+            errors.append(f"{name}: data-log must point at a raw log, not at the site's own sources: {rel}")
+            continue
+        if git_tracked(root, rel) is False:
+            errors.append(f"{name}: data-log points at a file git does not track: {rel}")
+            continue
         log = [ln.rstrip() for ln in path.read_text(encoding="utf-8", errors="replace").splitlines()]
-        content = re.sub(r'<span class="dim">.*?</span>', "", content, flags=re.S)
-        lines = [ln.rstrip() for ln in html.unescape(TAG.sub("", content)).splitlines()]
+        lines = [ln.rstrip() for ln in "".join(pre["text"]).splitlines()]
         blocks, cur = [], []
         for ln in lines:
             if ln.strip() == "…":
@@ -296,6 +416,9 @@ def check_logs(name: str, body: str, root: Path) -> list[str]:
             elif ln.strip():
                 cur.append(ln)
         blocks.append(cur)
+        if not any(blocks):
+            errors.append(f"{name}: the excerpt from {rel} has no line to check (only annotations)")
+            continue
         pos = 0
         for block in (b for b in blocks if b):
             at = next((i for i in range(pos, len(log) - len(block) + 1) if log[i:i + len(block)] == block), None)
@@ -358,7 +481,7 @@ def build(root: Path, out: Path | None, ref: str) -> list[str]:
     used_claims: set[str] = set()
     rendered = {}
     for name, meta, body in pages:
-        errors += lint_source(name, body)
+        errors += lint_source(name, body, meta)
         errors += check_logs(name, body, root)
         page_claims: list[str] = []
 
@@ -448,8 +571,12 @@ def build(root: Path, out: Path | None, ref: str) -> list[str]:
                     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
                     + head + '</head>\n<body>\n' + page[len(head):] + '</body>\n</html>\n')
         # the scanner's per-line "secret-scan: allow" escape does not apply to published pages
-        hits = sorted({rule for _, _, rule, _, _ in scanner.scan_text(page.replace(scanner.ALLOW_MARKER, ""))})
-        if UUID.search(page):
+        # as rendered: entities, soft hyphens and inline tags such as <wbr> do not split a value; block tags still
+        # separate words, so a value right after other text keeps its boundary
+        seen = [visible(TAG.sub(" ", INLINE_TAG.sub("", page))), visible(TAG.sub(" ", page))]
+        hits = sorted({rule for text in (page, *seen)
+                       for _, _, rule, _, _ in scanner.scan_text(text.replace(scanner.ALLOW_MARKER, ""))})
+        if any(UUID.search(text) for text in (page, *seen)):
             hits.append("uuid")
         for rule in hits:
             errors.append(f"{name}: contains a {rule} (public-repo rule)")
@@ -499,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except OSError as e:  # the output could not be written: the build did not run to the end
-        print(f"error: cannot write the site: {e}", file=sys.stderr)
+        print(f"error: cannot read the sources or write the site: {e}", file=sys.stderr)
         return 2
     if errors:
         for e in errors:
