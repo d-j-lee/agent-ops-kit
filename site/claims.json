@@ -719,7 +719,7 @@
   "id": "C-h8-tests",
   "claim": "⑧ 하네스의 훅 다섯 개, verify, install, Python·Rust 어댑터의 동작 시험이 모두 통과한다.",
   "grade": "확인",
-  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일, 2026-11-01. 실제 fsmap 시험 1개는 AOK_FSMAP가 없으면 건너뛰므로 108개에 넣지 않았다",
+  "scope": "이 저장소, Python 3.13, git 있음, cargo·fsmap은 시험 안의 가짜 실행 파일, 2026-11-02. 실제 fsmap 시험 1개는 AOK_FSMAP가 없으면 건너뛰므로 129개에 넣지 않았다",
   "evidence": [
    {
     "kind": "cmd",

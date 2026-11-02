@@ -818,7 +818,7 @@ class PreBashTests(Harness):
                          ('gh pr create --title "x', "could not be read"),
                          ('gh pr new --title "x', "could not be read"),
                          ("env -u CLAUDECODE git push", "CLAUDECODE"),
-                         ("X=CLAUDECODE; unset $X; git push", "mentions CLAUDECODE"),  # not spelled out as a change
+                         ("printenv CLAUDE_CODE_CHILD_SESSION; git push", "mentions CLAUDECODE"),  # read, not changed
                          ("git -c push.default=matching push", "changes what git sends"),
                          ("git -c branch.main.remote=elsewhere push", "changes what git sends"),
                          ("git commit -n -m x", "hooks off")):
@@ -1009,6 +1009,43 @@ class PreBashTests(Harness):
         for cmd, why in (("CLAUDECODE= sh push.sh", "CLAUDECODE"), ("env -u CLAUDECODE sh push.sh", "CLAUDECODE"),
                          ("unset CLAUDECODE; sh push.sh", "CLAUDECODE"), ('CLAUDE""CODE= sh push.sh', "CLAUDECODE"),
                          ("export CLAUDECODE=; sh push.sh", "CLAUDECODE"), ("env --unset=CLAUDECODE sh push.sh", "CLAUDECODE"),
+                         ("CLAUDE_CODE_CHILD_SESSION= sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -u CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("unset CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         # the builtins that drop a variable's export, and the name reached indirectly
+                         ("declare +x CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("typeset +x CLAUDECODE; sh push.sh", "CLAUDECODE"),
+                         ("export -n CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION; unset $v; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("declare -n r=CLAUDE_CODE_CHILD_SESSION; unset r; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("f() { local CLAUDE_CODE_CHILD_SESSION; sh push.sh; }; f", "CLAUDE_CODE_CHILD_SESSION"),
+                         # a command the reading cannot split is judged by its text
+                         ('CLAUDE_CODE_CHILD_SESSION= sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
+                         ('declare +x CLAUDE_CODE_CHILD_SESSION; sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
+                         ('v=CLAUDE_CODE_CHILD_SESSION; unset $v; sh push.sh "x', "CLAUDE_CODE_CHILD_SESSION"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION\nunset $v\ncat <<EOF\nit's\nEOF\nsh push.sh", "CLAUDE_CODE"),
+                         # env's options as GNU env reads them: clusters, unique prefixes, -S
+                         ("env -vu CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -uCLAUDECODE sh push.sh", "CLAUDECODE"),
+                         ("env --un CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --uns=CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --u CLAUDE_CODE_CHILD_SESSION sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -S'-u CLAUDE_CODE_CHILD_SESSION' sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env -S '-u CLAUDE_CODE_CHILD_SESSION sh push.sh'", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("env --split-string='-i sh push.sh'", "clears the environment"), ("env -vi sh push.sh", "clears"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION; env -u $v sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         # a name, or the command, put together by expansion
+                         ("x=CHILD_SESSION; unset CLAUDE_CODE_$x; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("unset CLAUDE_CODE_$X; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),  # X from the environment
+                         ("u=un; ${u}set CLAUDE_CODE_CHILD_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("a=CLAUDE_CODE_CHILD; unset ${a}_SESSION; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("for v in CLAUDE_CODE_CHILD_SESSION; do unset $v; done; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("v=CLAUDE_CODE_CHILD_SESSION; declare -n r=$v; unset r; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("echo CLAUDECODE | { read v; unset $v; }; sh push.sh", "CLAUDECODE"),
+                         # builtins that set it empty: the hook only checks that it is not empty
+                         ("printf -v CLAUDE_CODE_CHILD_SESSION ''; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("read CLAUDE_CODE_CHILD_SESSION </dev/null; sh push.sh", "CLAUDE_CODE_CHILD_SESSION"),
+                         ("mapfile CLAUDECODE </dev/null; sh push.sh", "CLAUDECODE"),
                          ("env -i sh push.sh", "clears the environment"), ("env -i PATH=/bin sh push.sh", "clears the environment"),
                          ("env - sh push.sh", "clears the environment"), ("env --ignore-environment sh push.sh", "clears"),
                          ("env -u HOME -i sh push.sh", "clears the environment"), ("exec -c sh push.sh", "clears"),
@@ -1023,7 +1060,16 @@ class PreBashTests(Harness):
             out = self.bash(cmd)
             self.assertTrue(self.denied(out), cmd)
             self.assertIn(why, reason(out), cmd)
-        for cmd in ("echo $CLAUDECODE", "grep -rn CLAUDECODE docs", "git config alias.st status", "git st",
+        for cmd in ("echo $CLAUDECODE", "grep -rn CLAUDECODE docs", "echo $CLAUDE_CODE_CHILD_SESSION",
+                    "grep -rn 'unset CLAUDE_CODE_CHILD_SESSION' docs", "export FOO=1", "export CLAUDE_CODE_USE_BEDROCK=1",
+                    "env -v FOO=1 python3 -c pass", "env --chdir=docs ls", "$PYTHON -m pytest",
+                    # a builtin elsewhere in the line does not make a mention of the names a change
+                    "export GIT_PAGER=cat && git grep CLAUDE_CODE_CHILD_SESSION",
+                    "export DEBUG=1 && grep -rn CLAUDE_CODE_CHILD_SESSION harness/ > CLAUDE_CODE_CHILD_SESSION.log",
+                    "export PATH=$HOME/bin:$PATH && grep -rn CLAUDECODE docs", "unset CLAUDECODE_EXTRA",
+                    "export MY_CLAUDECODE_COPY=1", "read -r line < notes.txt", "printf '%s' CLAUDECODE",
+                    "export PATH=$PATH:/opt/CLAUDE_CODE_tools/bin && make",
+                    "git config alias.st status", "git st",
                     "git config --unset core.hooksPath", "env FOO=1 python3 -c pass", "env -u HOME python3 -c pass"):
             self.assertIsNone(self.bash(cmd), cmd)
 
@@ -1040,9 +1086,11 @@ class PushHookTests(Harness):
         self.git("push", "-q", "origin", "main")
         return remote
 
-    def push(self, *args, claude=True):
-        env = {**self.env, **({"CLAUDECODE": "1"} if claude else {})}
-        return subprocess.run(["git", *args], cwd=self.repo, env=env, capture_output=True, text=True)
+    def push(self, *args, claude=True, ide=False, cwd=None):
+        """git as Claude Code's Bash tool runs it (both markers), as a person in an IDE's terminal (CLAUDECODE only:
+        IDE extensions set it there, CLAUDE_CODE_CHILD_SESSION they do not) or in a plain terminal (neither)."""
+        marks = {"CLAUDECODE": "1"} if ide else {"CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "1"} if claude else {}
+        return subprocess.run(["git", *args], cwd=cwd or self.repo, env={**self.env, **marks}, capture_output=True, text=True)
 
     def remote_head(self, remote):
         return subprocess.run(["git", "rev-parse", "main"], cwd=remote, env=self.env, capture_output=True, text=True).stdout.strip()
@@ -1075,6 +1123,8 @@ class PushHookTests(Harness):
             self.assertEqual(self.remote_head(remote), good, args)
         self.git("update-ref", "refs/heads/main", "bad")  # moved in an earlier command
         self.assertIn("[aok-harness] push refused", self.push("push", "origin", "main").stderr)
+        self.assertEqual(self.push("push", "-q", "origin", "main", ide=True).returncode, 0)  # a person, in an IDE's terminal
+        self.git("push", "-q", "origin", f"{good}:main", "--force")  # put it back for the plain-terminal case
         self.assertEqual(self.push("push", "-q", "origin", "main", claude=False).returncode, 0)  # a person may
         self.assertNotEqual(self.remote_head(remote), good)
         self.assertEqual(self.push("push", "-q", "origin", "bad:old", claude=False).returncode, 0)
@@ -1225,6 +1275,455 @@ class PushHookTests(Harness):
         self.assertIn("core.hooksPath is set", self.start()["hookSpecificOutput"]["additionalContext"])
         self.assertFalse((self.repo / ".husky").exists())
         self.assertIsNone(self.bash("git push"))  # read from the command only, as the session start said
+
+
+class WorktreeTests(Harness):
+    """Claude Code keeps CLAUDE_PROJECT_DIR where the session started and passes the directory Claude works in as the
+    hook input's cwd (hooks docs). The session keeps one state, in the project directory, and judges every worktree of
+    the repository it worked in, wherever the turn ends: the ones a command entered (`cd`, `git -C`) or created, the
+    ones a file was edited in, and the one the turn ends in."""
+
+    def worktree(self, branch="feature", new=True, path=None):
+        wt = path or self.tmp / "wt"
+        self.git("worktree", "add", "-q", *(["-b", branch, str(wt)] if new else [str(wt), branch]))
+        return wt
+
+    push = PushHookTests.push
+
+    def at(self, wt, event, payload=None):
+        return self.hook(event, {"cwd": str(wt), **(payload or {})})
+
+    def bash_at(self, wt, command):
+        return self.at(wt, "pre-bash", {"tool_name": "Bash", "tool_input": {"command": command}})
+
+    def gitw(self, wt, *args):
+        return subprocess.run(["git", *args], cwd=wt, env=self.env, capture_output=True, text=True, check=True).stdout
+
+    def remote(self):
+        remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], env=self.env, check=True)
+        self.git("remote", "add", "origin", str(remote))
+        self.git("push", "-q", "origin", "main")
+        return remote
+
+    def test_the_worktree_claude_works_in_is_judged(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.at(wt, "stop"))  # nothing changed there yet; the worktree is remembered all the same
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)  # the next turn, by a script
+        out = self.stop()  # that turn ends in the project directory (cd, ExitWorktree): the worktree is still judged
+        self.assertTrue(self.blocked(out))
+        self.assertIn(f"{wt.resolve()}: the quick gate failed", out["reason"])
+        self.assertIn("[test] fail", out["reason"])
+        self.assertIn(str(wt.resolve()), self.at(wt, "stop")["reason"])
+        self.hook("prompt")  # the user writes: the count starts again
+        self.gitw(wt, "commit", "-qam", "bad")  # committed in the worktree: still the session's
+        self.assertIn("Block 1 of 3", self.at(wt, "stop")["reason"])
+        sub = wt / "pkg"
+        self.assertIn("Block 2 of 3", self.hook("stop", {"cwd": str(sub)})["reason"])  # a subdirectory is the same worktree
+        self.hook("prompt")
+        wt2 = self.tmp / "wt2"
+        self.git("worktree", "add", "-q", "-b", "second", str(wt2))
+        (wt2 / "pkg" / "__init__.py").write_text(ADD_BAD)  # `cd` and the edit in one command: no hook saw it clean
+        out = self.at(wt2, "stop")
+        self.assertIn(f"{wt2.resolve()}: the quick gate failed", out["reason"])
+        self.assertIn(f"{wt.resolve()}: the quick gate failed", out["reason"])  # both, in one block
+        self.assertIn("Block 1 of 3", out["reason"])
+        self.assertFalse((wt / ".git").is_dir())  # a linked worktree: its state is the project's
+        self.assertFalse(list(Path(self.gitw(wt, "rev-parse", "--absolute-git-dir").strip()).glob("aok-harness/session-*")))
+
+    def test_a_head_moved_before_the_session_looked_is_judged(self):
+        self.python_repo()
+        self.git("branch", "side")
+        self.git("checkout", "-q", "side")
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "broken on a side branch")
+        self.git("checkout", "-q", "main")
+        before = self.worktree("old")  # there when the session starts: its HEAD then is recorded
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.gitw(before, "merge", "-q", "side")  # by a script: no hook saw it
+        self.assertIsNone(self.bash_at(before, "git status"))  # the first look comes after the merge
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn(str(before.resolve()), out["reason"])
+        self.hook("prompt")
+        self.gitw(before, "reset", "-q", "--hard", "main")  # back where it was at the start: nothing to judge
+        self.assertIsNone(self.stop())
+        later = self.worktree("new", path=self.tmp / "later")  # made in the session, so judged against the refs
+        self.gitw(later, "reset", "-q", "--hard", "side")  # a branch that was there: like `worktree add later side`
+        self.assertIsNone(self.bash_at(later, "ls"))
+        self.assertIsNone(self.stop())
+        self.gitw(later, "reset", "-q", "--hard", "main")
+        self.gitw(later, "merge", "-q", "--no-ff", "-m", "merge side", "side")  # a commit of the session's own
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn(str(later.resolve()), out["reason"])
+
+    def test_a_worktree_a_command_works_in_is_remembered(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        # Claude Code takes the shell back to the project directory after a command that left it, so a sibling
+        # worktree is reached by `cd` inside the command or by `git -C`; either is read before the command runs
+        self.assertIsNone(self.bash(f"cd {wt} && sh fix.sh"))
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)  # what the command did there
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn(str(wt.resolve()), out["reason"])
+        self.hook("prompt")
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK)
+        self.assertIsNone(self.stop())
+        wt2 = self.worktree("second", path=self.tmp / "wt2")
+        self.assertIsNone(self.bash(f"git -C {wt2} commit --allow-empty -qm x"))
+        (wt2 / "README.md").write_text("notes\n")
+        (wt2 / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertIn(str(wt2.resolve()), self.stop()["reason"])
+        self.hook("prompt")
+        made = self.tmp / "made"  # created by a command: everything changed there is the session's
+        self.assertIsNone(self.bash(f"git worktree add -q -b third {made}"))
+        self.git("worktree", "add", "-q", "-b", "third", str(made))
+        (made / "pkg" / "__init__.py").write_text(ADD_BAD)
+        out = self.stop()
+        self.assertIn(str(made.resolve()), out["reason"])
+
+    def test_a_worktree_a_command_names_a_path_in_is_remembered(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        bad = self.tmp / "bad.py"
+        bad.write_text(ADD_BAD)
+        for i, cmd in enumerate(("sed -i s/+/-/ {wt}/pkg/__init__.py", "cp {bad} {wt}/pkg/__init__.py",
+                                 "cat {bad} >{wt}/pkg/__init__.py", "ln -s {wt} lk && cd lk && sh fix.sh",
+                                 "git --git-dir={wt}/.git --work-tree={wt} status")):
+            wt = self.worktree(f"b{i}", path=self.tmp / f"wt{i}")
+            cmd = cmd.format(wt=wt, bad=bad)
+            self.assertIsNone(self.bash(cmd), cmd)  # from the project directory, without cd or git -C
+            (wt / "pkg" / "__init__.py").write_text(ADD_BAD)  # what the command did there
+            out = self.stop()
+            self.assertTrue(self.blocked(out), cmd)
+            self.assertIn(str(wt.resolve()), out["reason"], cmd)
+            (wt / "pkg" / "__init__.py").write_text(ADD_OK)
+            self.hook("prompt")
+            self.assertIsNone(self.stop(), cmd)
+        self.assertIsNone(self.bash(f"cat {bad} README.md"))  # naming a path outside any worktree records nothing
+        self.assertEqual(len(json.loads(self.state_file().read_text())["trees"]), 5)
+
+    def edit_at(self, path, tool="Edit"):
+        return self.hook("post-edit", {"tool_name": tool, "tool_input": {"file_path": str(path)}})
+
+    def test_an_edit_in_a_worktree_is_remembered(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / "notes.txt").write_text("someone's\n")  # already changed there, not by this session
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertIsNone(self.edit_at(wt / "pkg" / "__init__.py"))  # the first look comes after the edit
+        out = self.stop()  # the turn ends in the project directory; the edited file is the session's
+        self.assertIn(str(wt.resolve()), out["reason"])
+        self.hook("prompt")
+        (wt / "pkg" / "other.py").write_text("def add(a, b)\n")
+        out = self.edit_at(wt / "pkg" / "other.py", tool="Write")
+        self.assertTrue(self.blocked(out))  # the edit checks run there
+        self.assertIn("pkg/other.py", out["reason"])
+        (wt / "pkg" / "other.py").unlink()
+        (wt / "pkg" / "only_here.py").write_text("X = 1\n")  # the project directory has no such file
+        self.assertIsNone(self.edit_at(wt / "pkg" / "only_here.py"))
+        (wt / "pkg" / "only_here.py").unlink()
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK.replace("a + b", "a + b  # noqa"))
+        msg = self.stop()["systemMessage"]
+        self.assertIn(f"{wt.resolve()}: weakened check: pkg/__init__.py: noqa", msg)
+        self.assertNotIn("notes.txt", msg)
+
+    def test_a_worktree_inside_the_project_is_its_own_tree(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        inner = self.worktree(path=self.repo / ".claude" / "worktrees" / "w")  # where EnterWorktree puts them
+        self.assertIsNone(self.bash("git push"))  # the project directory is clean: the worktree is not a file of it
+        self.assertIsNone(self.stop())
+        out = self.hook("post-edit", {"tool_name": "Write", "tool_input": {"file_path": str(inner / "pkg" / "__init__.py")}})
+        self.assertIsNone(out)
+        (inner / "pkg" / "__init__.py").write_text(ADD_BAD)
+        out = self.stop()
+        self.assertIn(f"{inner.resolve()}: the quick gate failed", out["reason"])
+        self.assertNotIn("the quick gate failed:\n[test]", out["reason"].split(str(inner.resolve()))[0])
+
+    def test_a_push_from_the_worktree_is_gated_there(self):
+        self.python_repo()
+        self.remote()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.gitw(wt, "commit", "-qam", "bad")
+        out = self.bash_at(wt, "git push origin feature")
+        self.assertTrue(self.denied(out))
+        self.assertIn("[test] fail", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "feature", cwd=wt).stderr)
+        for cmd in (f"cd {wt} && git push origin feature", f"git -C {wt} push origin feature",
+                    f"pushd {wt} >/dev/null && git push origin feature"):  # from the project directory
+            self.assertIn("[test] fail", self.bash(cmd)["hookSpecificOutput"]["permissionDecisionReason"], cmd)
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK + "\n")
+        self.assertIn(f"uncommitted changes in {wt.resolve()}",
+                      self.bash(f"git -C {wt} push origin feature")["hookSpecificOutput"]["permissionDecisionReason"])
+        self.gitw(wt, "commit", "-qam", "good")
+        self.assertIsNone(self.bash_at(wt, "git push origin feature"))  # passes, and is recorded for the worktree
+        self.assertEqual(self.push("push", "-q", "origin", "feature", cwd=wt).returncode, 0)
+        out = self.bash(f"git push origin main && git -C {wt} push origin feature")
+        self.assertIn("more than one worktree", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_a_removed_worktree_is_not_judged(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertTrue(self.blocked(self.stop()))
+        self.hook("prompt")
+        self.git("worktree", "remove", "--force", str(wt))  # gone, with its changes: nothing left to judge
+        self.assertIsNone(self.stop())
+
+    def test_other_ways_to_publish_from_a_worktree_are_gated_there(self):
+        self.python_repo()
+        self.git("config", "alias.p", "push")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.gitw(wt, "commit", "-qam", "bad")
+        for cmd in (f"cd {wt} && gh pr create --fill", f"git -C {wt} p origin feature"):
+            out = self.bash(cmd)
+            self.assertTrue(self.denied(out), cmd)
+            self.assertIn("[test] fail", out["hookSpecificOutput"]["permissionDecisionReason"], cmd)
+
+    def test_an_unreadable_definition_blocks_a_session_with_worktree_changes(self):
+        self.python_repo(config={"adapter": "cobol"})
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        self.assertIsNone(self.stop())  # nothing changed anywhere
+        (wt / "README.md").write_text("x\n")  # a change in the worktree only
+        out = self.stop()
+        self.assertTrue(self.blocked(out))
+        self.assertIn("the gate cannot run", out["reason"])
+
+    def test_a_worktree_made_on_an_old_commit_has_not_moved(self):
+        self.python_repo()
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.git("commit", "-qam", "broken")
+        old = self.git("rev-parse", "HEAD").strip()
+        self.write("pkg/__init__.py", ADD_OK)
+        self.git("commit", "-qam", "fixed")  # the broken commit is no ref's tip now
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.tmp / "bisect"
+        cmd = f"git worktree add -q --detach {wt} {old}"
+        self.assertIsNone(self.bash(cmd))  # read before it runs: the commit it checks out is the worktree's start
+        self.git("worktree", "add", "-q", "--detach", str(wt), old)
+        self.assertIsNone(self.stop())  # looking at an old commit changes nothing
+        self.gitw(wt, "commit", "--allow-empty", "-qm", "the session's")
+        self.assertTrue(self.blocked(self.stop()))  # a commit of its own there: the whole tree is judged
+
+    def test_a_harness_change_in_a_worktree_is_a_persons_to_publish(self):
+        self.python_repo()
+        self.remote()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        (wt / ".github" / "workflows").mkdir(parents=True)
+        (wt / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
+        self.gitw(wt, "add", "-A")
+        self.gitw(wt, "commit", "-qm", "ci")
+        self.assertIn("harness file changed in this session: .github/workflows/ci.yml", self.at(wt, "stop")["systemMessage"])
+        out = self.bash_at(wt, "git push origin feature")
+        self.assertIn("a person reviews and publishes", out["hookSpecificOutput"]["permissionDecisionReason"])
+        # the end of the turn passed, but a commit with a harness change is not recorded: a script cannot push it
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "feature", cwd=wt).stderr)
+        self.assertEqual(self.push("push", "-q", "origin", "feature", cwd=wt, claude=False).returncode, 0)  # a person may
+        self.write(".github/workflows/ci.yml", "on: push\n")  # the same in the project directory
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ci")
+        self.assertIn("harness file changed", self.stop()["systemMessage"])
+        self.assertIn("[aok-harness] push refused", self.push("push", "origin", "main").stderr)
+
+    def test_an_ignored_harness_file_in_a_worktree_is_watched(self):
+        self.python_repo()
+        self.write(".gitignore", ".aok/local/\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ignore")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))  # the harness files' hashes there, as first seen
+        (wt / ".aok" / "local").mkdir(parents=True)
+        (wt / ".aok" / "local" / "override.json").write_text("{}\n")  # git status does not show it
+        out = self.bash_at(wt, "git push origin feature")
+        self.assertIn(".aok/local/override.json", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_one_state_for_every_worktree(self):
+        self.python_repo()
+        self.remote()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertIn("Block 1 of 3", self.at(wt, "stop")["reason"])
+        self.assertIn("Block 2 of 3", self.stop()["reason"])  # one count for the session, wherever the turn ends
+        self.at(wt, "prompt")  # a prompt resets it from anywhere
+        self.assertIn("Block 1 of 3", self.at(wt, "stop")["reason"])
+        self.assertIn("Block 2 of 3", self.at(wt, "stop")["reason"])
+        self.assertIn("Block 3 of 3", self.at(wt, "stop")["reason"])
+        self.assertNotIn("decision", self.at(wt, "stop"))  # the fourth end is let through: the exit holds there too
+        self.state_file().unlink()  # the one state is gone: nothing says which changes are the session's
+        self.assertIn("no baseline", self.at(wt, "stop")["reason"])
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK + "\n")
+        self.gitw(wt, "commit", "-qam", "good")
+        self.assertIn("no baseline", self.bash_at(wt, "git push origin feature")["hookSpecificOutput"]["permissionDecisionReason"])
+        self.state_file().write_text(json.dumps({"baseline": {"head": None, "pending": {}}, "trees": {str(wt): []}}))
+        self.assertIn("damaged", self.at(wt, "stop")["reason"])
+
+    def slow_test(self, seconds=None, started=None, release=None):
+        """A test the gate runs that takes `seconds`, or (with files) says it started and waits to be released."""
+        body = (f"        time.sleep({seconds})\n" if seconds else
+                f"        Path({str(started)!r}).write_text('1')\n"
+                f"        end = time.monotonic() + 120\n"
+                f"        while not Path({str(release)!r}).exists() and time.monotonic() < end:\n"
+                f"            time.sleep(0.05)\n")
+        self.write("tests/test_slow.py", "import time\nimport unittest\nfrom pathlib import Path\n\n\n"
+                                         f"class S(unittest.TestCase):\n    def test_slow(self):\n{body}")
+
+    def test_a_worktree_remembered_by_a_parallel_hook_is_kept(self):
+        self.python_repo()
+        started, release = self.tmp / "started", self.tmp / "release"
+        self.slow_test(started=started, release=release)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "slow")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        payload = {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
+        env = {**self.env, "CLAUDE_PROJECT_DIR": str(self.repo)}
+        push = subprocess.Popen([sys.executable, "-I", str(CORE), "hook", "pre-bash"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        push.stdin.write(json.dumps(payload))
+        push.stdin.close()  # it reads the state, then its gate runs until released
+        end = time.monotonic() + 120
+        while not started.exists() and push.poll() is None and time.monotonic() < end:
+            time.sleep(0.05)
+        self.assertTrue(started.exists(), push.stderr.read() if push.poll() is not None else "the gate did not start")
+        self.assertIsNone(self.bash(f"cd {wt} && sh fix.sh"))  # a parallel command, while that gate runs
+        release.write_text("1")  # the push's hook saves its state after this command's hook did
+        out, err = push.communicate(timeout=120)
+        self.assertEqual(push.returncode, 0, err)
+        self.assertEqual(out.strip(), "")  # the push's gate passed and saved its state
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertIn(str(wt.resolve()), self.stop()["reason"])  # the worktree the other hook remembered is kept
+
+    def test_a_tree_that_passed_beside_a_failing_one_is_reviewed_later(self):
+        self.python_repo()
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        self.write("pkg/__init__.py", ADD_OK.replace("a + b", "a + b  # noqa"))  # passes, with a weakening to report
+        (wt / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.assertTrue(self.blocked(self.stop()))
+        self.hook("prompt")
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK)
+        self.assertIn("weakened check: pkg/__init__.py: noqa ×1", self.stop()["systemMessage"])  # said once all passed
+
+    def test_one_gate_budget_for_every_tree(self):
+        self.python_repo(config={"budget": {"gate": 8}})
+        self.slow_test(4)  # the first tree leaves less than 4 seconds; alone, each fits with room to spare
+        self.git("add", "-A")
+        self.git("commit", "-qm", "slow")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        wt = self.worktree()
+        self.assertIsNone(self.bash_at(wt, "ls"))
+        self.write("README.md", "x\n")
+        (wt / "README.md").write_text("x\n")
+        out = self.stop()  # each tree alone fits the budget; together they would outrun the hook's timeout
+        self.assertTrue(self.blocked(out))
+        self.assertIn("could not run", out["reason"])
+
+    def test_a_worktree_from_before_the_session_is_not_its_own(self):
+        self.python_repo()
+        self.git("branch", "theirs")
+        wt = self.worktree("theirs", new=False)
+        (wt / "pkg" / "__init__.py").write_text(ADD_OK.replace("a + b", "a - b  # noqa"))
+        self.gitw(wt, "commit", "-qam", "someone else's, broken")
+        (wt / "notes.txt").write_text("theirs, uncommitted\n")
+        detached = self.tmp / "detached"  # a commit on no branch: only the worktree's HEAD reaches it
+        self.git("worktree", "add", "-q", "--detach", str(detached))
+        (detached / "pkg" / "__init__.py").write_text(ADD_BAD)
+        self.gitw(detached, "commit", "-qam", "someone's experiment")
+        self.stub("ruff", "exit 0\n")
+        self.start()  # the session starts in the project directory after that
+        self.assertIsNone(self.bash_at(wt, "/bin/ls -la"))  # no word names a path there: the shell's directory does
+        self.assertIsNone(self.at(wt, "stop"))  # their commit and their uncommitted file are not the session's
+        self.assertIsNone(self.at(detached, "stop"))
+        (wt / "README.md").write_text("notes\n")
+        out = self.at(wt, "stop")  # now the session changed something there: the whole tree is judged
+        self.assertTrue(self.blocked(out))
+        self.assertIn("tell the user instead of editing unrelated code", out["reason"])
+
+    def test_another_repository_is_not_this_harnesss(self):
+        self.python_repo()
+        self.start()
+        other = self.tmp / "other"
+        other.mkdir()
+        (other / "pyproject.toml").write_text('[project]\nname = "o"\n')
+        subprocess.run(["git", "init", "-q"], cwd=other, env=self.env, check=True)
+        self.assertIsNone(self.hook("stop", {"cwd": str(other)}))  # the project directory is judged, and it is unchanged
+        self.write("pkg/__init__.py", ADD_BAD)  # the project directory has uncommitted changes
+        for cmd in (f"git -C {other} push origin main", f"cd {other} && git push origin main"):
+            self.assertIsNone(self.bash(cmd), cmd)  # its pushes are its own hooks' to judge
+        self.write("pkg/__init__.py", ADD_OK)
+        subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "o"], cwd=other, env=self.env, check=True)
+        theirs = self.tmp / "theirs"  # a worktree of the other repository
+        self.assertIsNone(self.bash(f"git -C {other} worktree add -q {theirs}"))
+        subprocess.run(["git", "worktree", "add", "-q", str(theirs)], cwd=other, env=self.env, check=True)
+        (theirs / "x.txt").write_text("x\n")
+        self.assertIsNone(self.stop())  # not this session's tree: its gate is not run here
+        self.write("pkg/__init__.py", ADD_BAD)
+        self.assertTrue(self.denied(self.bash(f"cd {self.tmp / 'nowhere'} && git push")))  # a failed cd stays here
+
+    def test_the_hook_is_kept_from_a_worktree_too(self):
+        self.python_repo()
+        self.start()
+        wt = self.worktree()
+        hook = self.repo / ".git" / "hooks" / "pre-push"  # one hooks directory for every worktree
+        script = hook.read_text()
+        hook.write_text("#!/bin/sh\nexit 0\n")
+        out = self.bash_at(wt, "ls")
+        self.assertIn("restored", out["systemMessage"])
+        self.assertEqual(hook.read_text(), script)
+
+    def test_an_earlier_cores_hook_is_kept_until_a_new_session(self):
+        self.python_repo()
+        self.start()
+        hook = self.repo / ".git" / "hooks" / "pre-push"
+        current = hook.read_text()
+        legacy = current.replace("# Outside Claude Code's own subprocesses (a person in a terminal, or in an IDE's "
+                                 "terminal) it does nothing.\n", "# Outside Claude Code (a person in a terminal) it does "
+                                 "nothing.\n").replace("$CLAUDE_CODE_CHILD_SESSION", "$CLAUDECODE")
+        self.assertNotEqual(legacy, current)
+        hook.write_text(legacy)  # written by a session on the core before CLAUDE_CODE_CHILD_SESSION, in another worktree
+        self.assertIsNone(self.bash("ls"))  # not rewritten: the two cores would take turns
+        self.assertEqual(hook.read_text(), legacy)
+        self.assertNotIn("restored", json.dumps(self.bash("git push") or {}))
+        self.start()  # a new session upgrades it
+        self.assertEqual(hook.read_text(), current)
+        hook.write_text(legacy.replace("exec python3", "exit 0 #"))  # an earlier script that no longer runs the core
+        self.assertIn("restored", self.bash("ls")["systemMessage"])
 
 
 class VerifyTests(Harness):

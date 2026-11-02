@@ -16,9 +16,9 @@ Commands
                         commit: CI passes the base branch). Exit 0 passed, 1 a step failed,
                         2 the gate could not run (a required tool missing, a
                         step timed out, the configuration unreadable)
-  git-pre-push          git's pre-push hook (session-start installs it): inside Claude
-                        Code, refuse to push any commit the gate has not passed on a
-                        clean tree
+  git-pre-push          git's pre-push hook (session-start installs it): in what Claude
+                        Code spawns (CLAUDE_CODE_CHILD_SESSION), refuse to push a ref
+                        whose tip the gate has not passed on a clean tree
   install --repo DIR --adapter NAME [--yes]
                         copy the harness into DIR/.aok/harness and add the hooks
                         to DIR/.claude/settings.json. Without --yes it only
@@ -27,9 +27,10 @@ Commands
 
 What the hooks do
   session-start  On `startup`, or when this session id has no usable state yet,
-                 record the baseline (HEAD, the refs that exist, hashes of files
-                 already changed and of the harness files) and install the git
-                 pre-push hook in the git directory. A session that continues another one
+                 record the baseline (HEAD, the refs that exist, the other
+                 worktrees' HEADs, hashes of files already changed and of the
+                 harness files) and install the git pre-push hook in the git
+                 directory. A session that continues another one
                  (resume or fork without state) counts every changed file as its
                  own. Tell Claude which adapter and tool versions are active, or
                  that the harness is OFF and why.
@@ -50,7 +51,8 @@ What the hooks do
                  A pass (here, or before a push in the same turn) reports checks
                  the session weakened (suppressions, skipped or removed tests,
                  removed assertions, a root file shadowing a standard module) and
-                 changes to the harness files. A changed pre-push hook is put back
+                 changes to the harness files; a commit with a harness change is
+                 not recorded for the pre-push hook. A changed pre-push hook is put back
                  and said; core.hooksPath set during the session blocks. While
                  background agents (subagents, teammates, ...) still run, it
                  leaves the gate to the real end; a background shell does not
@@ -58,11 +60,14 @@ What the hooks do
   prompt         The user wrote: reset the strike count.
   pre-bash       Every command: deny one that switches git hooks off (--no-verify
                  and its abbreviations, commit -n, core.hooksPath; unsetting it is
-                 let through) or changes what the pre-push hook sees (CLAUDECODE,
-                 env -i, GIT_CONFIG_*, files under .git/hooks, a shell alias), and
+                 let through) or changes what the pre-push hook sees
+                 (CLAUDE_CODE_CHILD_SESSION or CLAUDECODE assigned, unset or no
+                 longer exported, env -i, GIT_CONFIG_*, files under .git/hooks, a
+                 shell alias), and
                  put a changed pre-push hook back first. For a command that
                  publishes (git push or an alias of it, gh pr create; send-pack is
-                 refused outright): deny it when it publishes anything but the
+                 refused outright), in the tree it publishes from: deny it when it
+                 publishes from more than one worktree, anything but the
                  checked-out branch, moves HEAD or a branch in the same command,
                  right after the hook was put back or while it cannot run, when
                  the harness files, its settings or the CI workflows changed in
@@ -70,6 +75,17 @@ What the hooks do
                  what is pushed, or when the quick gate fails or cannot run. A pass
                  records the commit for the pre-push hook, which then judges the
                  tip of each ref git actually sends.
+
+Worktrees: Claude Code keeps CLAUDE_PROJECT_DIR where the session started and
+passes the current directory as the hook input's cwd. The session keeps one state,
+in the project directory, and judges the project directory and every other
+worktree of the repository it worked in, wherever the turn ends: one a command
+entered (`cd X`, `git -C X`) or named a path in (`sed -i X/f`, `> X/f`), read
+before the command runs, or created (`git worktree add`), one a file was edited
+in, and the one the turn ends in. A worktree's HEAD is judged against its HEAD
+at the session's start (or, for one made later, against the refs then); its
+files against what was changed when the session first looked. A push is gated in
+the tree it runs from. Another repository is not this harness's.
 
 The gate definition (.aok/harness.json) and the adapters copied into
 .aok/harness/adapters are read from the commit the session started on, not from
@@ -142,11 +158,22 @@ GIT_BUILTINS = {"status", "log", "diff", "show", "add", "commit", "push", "pull"
                 "send-pack", "http-push", "filter-branch", "replace", "help", "version", "var", "archive",
                 "range-diff", "sparse-checkout", "maintenance", "check-ignore", "hash-object", "merge-base",
                 "ls-remote", "show-ref", "whatchanged", "difftool", "mergetool", "citool", "gui", "request-pull"}
-# what an environment change in a command can do to the pre-push hook (it only judges when CLAUDECODE is set) or to
+# what an environment change in a command can do to the pre-push hook (it judges only when CLAUDE_CODE_CHILD_SESSION,
+# which Claude Code sets in what it spawns, is set; CLAUDECODE is kept as well, for tools that read it) or to
 # git's configuration (hooks switched off, aliases defined where the command reading cannot see them)
-CLAUDECODE_CHANGE = re.compile(r"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?CLAUDECODE=|"
-                               r"\bunset\b[^;&|\n]*\bCLAUDECODE\b|(?:^|\s)(?:-u\s*|--unset[=\s])CLAUDECODE\b|"
-                               r"\bexport\s+-n\b[^;&|\n]*\bCLAUDECODE\b")
+HOOK_VARS = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")
+_HV = r"(?:CLAUDECODE|CLAUDE_CODE_CHILD_SESSION)"
+# shell builtins that change a variable's value or export (unset, export -n, declare +x, nameref, readonly...): with
+# one of them anywhere in the command, naming a hook variable anywhere (v=NAME; unset $v) is refused
+# shell builtins that can unset a variable, stop exporting it, or set it empty (the hook only checks it is not empty)
+VAR_BUILTINS = ("unset", "export", "declare", "typeset", "local", "readonly", "read", "mapfile", "readarray")
+# pieces of the two names: a name put together from parts (x=CHILD_SESSION; unset CLAUDE_CODE_$x) holds one of them
+HOOK_VAR_PARTS = ("CLAUDECODE", "CLAUDE_CODE_", "CHILD_SESSION")
+_VB = r"\b(?:unset|export|declare|typeset|local|readonly|read|mapfile|readarray|printf|env)\b|\$"
+_HP = r"(?:CLAUDECODE|CLAUDE_CODE_|CHILD_SESSION)"
+CLAUDECODE_CHANGE = re.compile(rf"(?:^|[\s;&|(`$])(?:export\s+|declare\s+-x\s+)?{_HV}=|"
+                               rf"(?:^|\s)(?:-u\s*|--unset[=\s]){_HV}\b|"
+                               rf"(?:{_VB})(?=.*{_HP})|{_HP}(?=.*(?:{_VB}))", re.S)
 CLEAR_ENV = re.compile(r"\benv(?:\s+(?:-u\s*\S+|--unset=\S+|-[^\s]+))*?\s+(?:-i|--ignore-environment|-)(?=\s|$)")
 GIT_CONFIG_ENV = re.compile(r"\bGIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=|--config-env\b")
 GIT_HOOK_FILES = re.compile(r"\.git/hooks\b|\bhooks/pre-push\b")
@@ -200,7 +227,8 @@ def file_hash(path: Path) -> str:
 
 
 def dirty_paths(root: Path) -> list[str]:
-    """Paths git reports as changed or untracked (ignored files excluded), repo-relative."""
+    """Paths git reports as changed or untracked (ignored files excluded), repo-relative. Another worktree inside
+    the tree (EnterWorktree puts them under .claude/worktrees/) is a tree of its own, not an untracked file here."""
     out = git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", binary=True)
     if out is None:
         return []
@@ -213,6 +241,10 @@ def dirty_paths(root: Path) -> list[str]:
             if "R" in code or "C" in code:
                 i += 1  # the source path of a rename/copy follows
         i += 1
+    if any(q.endswith("/") for q in paths):  # git shows a nested repository as a directory
+        me = root.resolve()
+        nested = {Path(t).relative_to(me).as_posix() for t in worktree_heads(root) if me in Path(t).parents}
+        paths = [q for q in paths if q.rstrip("/") not in nested]
     return sorted(set(paths))
 
 
@@ -272,18 +304,18 @@ def protected_hashes(root: Path) -> dict[str, str]:
     return {f: settings_hash(root / f) if is_settings(f) else file_hash(root / f) for f in sorted(files)}
 
 
-def protected_changes(root: Path, state: dict) -> list[str]:
-    before = (state.get("baseline") or {}).get("protected")
+def protected_changes(root: Path, before: dict | None) -> list[str]:
     if not isinstance(before, dict):
         return []
     now = protected_hashes(root)
     return sorted(f for f in set(before) | set(now) if before.get(f, "missing") != now.get(f, "missing"))
 
 
-def harness_changes(root: Path, base: str | None, mine: list[str], state: dict) -> list[str]:
+def harness_changes(root: Path, base: str | None, mine: list[str], before: dict | None) -> list[str]:
     """The harness files this session changed: its own changes under PROTECTED (a settings file only when the keys
-    the harness watches differ from the base commit's), and any protected file whose hash moved, ignored ones too."""
-    out = set(protected_changes(root, state))
+    the harness watches differ from the base commit's), and any protected file whose hash moved since `before` (the
+    hashes when the session started or first saw the tree), ignored ones too."""
+    out = set(protected_changes(root, before))
     for f in mine:
         if not f.startswith(PROTECTED):
             continue
@@ -330,8 +362,13 @@ def load_state(root: Path, session: str) -> dict:
     if not isinstance(data, dict):
         return {"damaged": True}
     b = data.get("baseline")
-    if b is not None and not (isinstance(b, dict) and isinstance(b.get("head"), (str, type(None)))
-                              and isinstance(b.get("pending", {}), dict) and isinstance(b.get("protected", {}), dict)):
+    trees = data.get("trees", {})
+    if (b is not None and not (isinstance(b, dict) and isinstance(b.get("head"), (str, type(None)))
+                               and isinstance(b.get("pending", {}), dict) and isinstance(b.get("protected", {}), dict)
+                               and isinstance(b.get("worktrees", {}), dict))) \
+            or not isinstance(trees, dict) or not all(
+                isinstance(r, dict) and isinstance(r.get("pending", {}), dict)
+                and isinstance(r.get("protected"), (dict, type(None))) for r in trees.values()):
         return {"damaged": True, "strikes": data.get("strikes", 0) if isinstance(data.get("strikes"), int) else 0}
     return data
 
@@ -372,8 +409,8 @@ def hooks_dir(root: Path) -> Path | None:
 def pre_push_script(core: str | None = None) -> str:
     return ("#!/bin/sh\n"
             f"{HOOK_MARK}: inside Claude Code, only commits the AOK harness gate passed may be pushed.\n"
-            "# Outside Claude Code (a person in a terminal) it does nothing.\n"
-            '[ -n "$CLAUDECODE" ] || exit 0\n'
+            "# Outside Claude Code's own subprocesses (a person in a terminal, or in an IDE's terminal) it does nothing.\n"
+            '[ -n "$CLAUDE_CODE_CHILD_SESSION" ] || exit 0\n'
             f'exec python3 -I {shlex.quote(core or str(Path(__file__).resolve()))} git-pre-push "$@"\n')
 
 
@@ -387,10 +424,20 @@ def harness_cores(root: Path) -> set[str]:
     return cores
 
 
-def hook_is_harness(root: Path, text: str) -> bool:
-    """Whether a pre-push hook's text is the harness's script, running one of harness_cores."""
+LEGACY_PRE_PUSH = ("#!/bin/sh\n"  # an earlier core's script (judged where CLAUDECODE is set): still the harness's
+                   f"{HOOK_MARK}: inside Claude Code, only commits the AOK harness gate passed may be pushed.\n"
+                   "# Outside Claude Code (a person in a terminal) it does nothing.\n"
+                   '[ -n "$CLAUDECODE" ] || exit 0\n')
+
+
+def hook_is_harness(root: Path, text: str, legacy: bool = True) -> bool:
+    """Whether a pre-push hook's text is the harness's script, running one of harness_cores. An earlier core's script
+    counts too (legacy), so sessions on two versions of the core do not take turns rewriting the shared hook; a new
+    session's start upgrades it (legacy=False)."""
     head_, _, _ = pre_push_script("CORE").partition("exec ")
-    m = re.fullmatch(re.escape(head_) + r'exec python3 -I (.+) git-pre-push "\$@"\n', text)
+    heads = [head_, LEGACY_PRE_PUSH] if legacy else [head_]
+    m = next(filter(None, (re.fullmatch(re.escape(h) + r'exec python3 -I (.+) git-pre-push "\$@"\n', text) for h in heads)),
+             None)
     if not m:
         return False
     try:
@@ -429,7 +476,7 @@ def ensure_pre_push(root: Path) -> str:
             marker.unlink(missing_ok=True)  # someone else's hook: never overwritten
             return (f"A git pre-push hook that is not the harness's is installed ({hook}); pushes are checked only by "
                     "reading the command.")
-        if text is None or not hook_is_harness(root, text):
+        if text is None or not hook_is_harness(root, text, legacy=False):
             write_pre_push(d)
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(str(hook), encoding="utf-8")
@@ -511,9 +558,15 @@ def session_base(root: Path, state: dict) -> tuple[str | None, dict]:
     return b.get("head"), b.get("pending", {})
 
 
-def save_state(root: Path, session: str, state: dict) -> None:
+def save_state(root: Path, session: str, state: dict, fresh: bool = False) -> None:
+    """Write the session's state. A worktree another hook remembered since this one read the state is kept (hooks of
+    parallel commands run at once); a fresh baseline (fresh=True) starts without any."""
     d = state_dir(root)
     d.mkdir(parents=True, exist_ok=True)
+    if not fresh:
+        disk = load_state(root, session)
+        if not disk.get("damaged") and disk.get("trees"):
+            state["trees"] = {**disk["trees"], **state.get("trees", {})}
     tmp = d / f".session-{safe_id(session)}.{os.getpid()}.tmp"
     tmp.write_text(json.dumps(state, ensure_ascii=True, indent=1), encoding="utf-8")
     tmp.replace(d / f"session-{safe_id(session)}.json")
@@ -838,11 +891,229 @@ def context(event: str, text: str) -> dict:
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
 
 
+def toplevel(p) -> Path | None:
+    if not isinstance(p, str) or not p or not Path(p).is_dir():
+        return None
+    top = git(Path(p), "rev-parse", "--show-toplevel")
+    return Path(top) if top else None
+
+
+def common_dir(root: Path) -> Path | None:
+    c = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(c).resolve() if c else None
+
+
 def project_root(payload: dict) -> Path:
+    """The session's project directory: Claude Code keeps CLAUDE_PROJECT_DIR where the session started (hooks docs).
+    The session's one state lives there, whichever worktree Claude works in."""
     p = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
-    root = Path(p)
-    top = git(root, "rev-parse", "--show-toplevel")
-    return Path(top) if top else root
+    return toplevel(p) or Path(p)
+
+
+def tree_of(root: Path, path) -> Path | None:
+    """Which tree holds path: root, another worktree of root's repository (its top), or None for another repository.
+    A path that is not in any repository (a failed cd, an unexpanded variable) counts as root: the shell stays there."""
+    if not isinstance(path, (str, Path)) or not str(path):
+        return root
+    d = Path(path)
+    while not d.is_dir() and d != d.parent:  # a file, or a path not there yet: its nearest directory
+        d = d.parent
+    if d.resolve() == root.resolve():
+        return root
+    t = toplevel(str(d))
+    if t is None or t.resolve() == root.resolve():
+        return root
+    mine = common_dir(t)
+    return t.resolve() if mine is not None and mine == common_dir(root) else None
+
+
+def worktree_heads(root: Path) -> dict[str, str | None]:
+    """{path: HEAD} of the repository's other worktrees (root's own is the baseline head)."""
+    out, path = {}, None
+    for line in (git(root, "worktree", "list", "--porcelain") or "").splitlines():
+        if line.startswith("worktree "):
+            path = str(Path(line[len("worktree "):]).resolve())
+            out[path] = None
+        elif line.startswith("HEAD ") and path is not None:
+            out[path] = line[len("HEAD "):]
+    out.pop(str(root.resolve()), None)
+    return out
+
+
+def touch_tree(root: Path, state: dict, tree: Path, seen: bool, skip: str | None = None) -> bool:
+    """Remember a worktree the session works in, once, in the session's one state (so it cannot be dropped on its
+    own). Seen before the session's command runs there (seen=True), the files already changed and the harness files'
+    hashes are its starting point; seen only afterwards, or about to be created, every changed file counts as the
+    session's. HEAD is judged against the session's start either way (tree_moved). True when the tree is new."""
+    trees = state.setdefault("trees", {})
+    key = str(tree)
+    if key in trees:
+        return False
+    rec: dict = {"pending": {}, "protected": None, "at": time.time()}
+    if seen and tree.is_dir():
+        rec["pending"] = {q: file_hash(tree / q) for q in dirty_paths(tree) if q != skip}
+        rec["protected"] = protected_hashes(tree)
+    trees[key] = rec
+    log(root, "worktree", tree=key, seen=seen)
+    return True
+
+
+def tree_record(state: dict, tree: Path, root: Path) -> dict:
+    """Where the session keeps a tree's last pass: the state itself for the project directory."""
+    return state if tree == root else state.setdefault("trees", {}).setdefault(str(tree), {"pending": {}, "protected": None})
+
+
+def session_trees(root: Path, state: dict) -> list[Path]:
+    """The project directory and every worktree the session worked in that is still there."""
+    out = [root]
+    for key in state.get("trees", {}):
+        t = Path(key)
+        if t.resolve() != root.resolve() and t.is_dir() and is_repo(t):
+            out.append(t)
+    return out
+
+
+def tree_moved(state: dict, tree: Path, base: str | None) -> bool:
+    """Whether a worktree's HEAD moved since the session started: against its HEAD then; for one a command made,
+    against the commit it checked out; for any other made later, against every ref then (a new worktree on an existing
+    branch has not moved; a merge or reset there has)."""
+    h = head(tree)
+    known = (state.get("baseline") or {}).get("worktrees") or {}
+    if str(tree) in known:
+        return h != known[str(tree)]
+    made = ((state.get("trees") or {}).get(str(tree)) or {}).get("start_head")
+    if isinstance(made, str):  # a command made it, on this commit
+        return h != made
+    return h not in set(start_refs(state)) | {base}
+
+
+def tree_start(tree: Path, base: str | None, refs: list[str]) -> str | None:
+    """The commit a worktree's own changes start from: the parent of its oldest own commit on the first-parent line,
+    or HEAD when it has none. None when the own commits reach a root commit (then every file is new)."""
+    own = (git(tree, "rev-list", "--first-parent", "--stdin", stdin=own_revs(base, refs)) or "").split()
+    if not own:
+        return head(tree)
+    return git(tree, "rev-parse", "--verify", "-q", f"{own[-1]}^")
+
+
+def tree_changes(root: Path, state: dict, tree: Path, base: str | None):
+    """What the session changed in a tree: (its files, whether HEAD moved, the refs whose commits are not its own,
+    the commit its changes start from, the harness files' hashes when the session started or first saw the tree)."""
+    refs = start_refs(state)
+    if tree == root:
+        b = state.get("baseline") or {}
+        return changed_since(root, base, b.get("pending", {}), refs), head(root) != base, refs, base, b.get("protected")
+    rec = tree_record(state, tree, root)
+    known = (state.get("baseline") or {}).get("worktrees") or {}
+    start = known[str(tree)] if str(tree) in known else rec["start_head"] if isinstance(rec.get("start_head"), str) \
+        else tree_start(tree, base, refs)
+    return changed_since(tree, base, rec.get("pending", {}), refs), tree_moved(state, tree, base), refs, start, \
+        rec.get("protected")
+
+
+def word_path(cur: Path, w: str) -> Path:
+    return (cur / os.path.expandvars(os.path.expanduser(w))).resolve()
+
+
+def worktree_add_path(args: list[str]) -> tuple[str | None, str | None]:
+    """`git worktree add [options] <path> [<commit-ish>]`: the path, and what it will check out (the commit-ish; a
+    new branch starts at HEAD; without either, git checks out the branch named like the path's last part, if there is
+    one, else HEAD)."""
+    plain, new_branch, orphan, i = [], False, False, 0
+    while i < len(args):
+        if args[i] in ("-b", "-B", "--reason"):
+            new_branch |= args[i] != "--reason"
+            i += 2
+            continue
+        if args[i] == "--orphan":
+            orphan = True
+        elif not args[i].startswith("-"):
+            plain.append(args[i])
+        i += 1
+    if not plain or orphan:
+        return (plain[0] if plain else None), None
+    if len(plain) > 1:
+        return plain[0], plain[1]
+    return plain[0], "HEAD" if new_branch or "--detach" in args else f"refs/heads/{Path(plain[0]).name}"
+
+
+def command_dirs(cmd: str, cwd: Path) -> tuple[list[Path], list[Path], list[tuple[Path, Path, str | None]], list[Path]]:
+    """Where a command works, read from its words like the rest: the directories it enters (`cd X`, `pushd X`) or
+    points git at (`git -C X`), the directories its publishing invocations run in (git push, send-pack, an alias,
+    gh pr create), (where git runs, the path, what it checks out) for each `git worktree add`, and every path it names (an argument, a
+    redirection's target, the value of `--opt=value`), as seen from where it stands. A `cd` inside ( ) or a script is
+    not followed exactly; there the pre-push hook is what holds."""
+    dirs, publishing, created, named, cur = [], [], [], [], cwd
+    for raw in simple_commands(cmd) or []:
+        for w in raw[:PATH_WORDS]:
+            m = REDIRECT.match(w)
+            for v in {m.group(1) if m else w, w.split("=", 1)[-1]}:
+                if v and not v.startswith("-"):
+                    try:
+                        named.append(word_path(cur, v))
+                    except (OSError, ValueError, RuntimeError):
+                        pass
+        seg = drop_redirections(raw)
+        if not seg:
+            continue
+        if seg[0] in ("cd", "pushd"):
+            if len(seg) > 1 and not seg[1].startswith(("-", "+")):
+                cur = word_path(cur, seg[1])
+                dirs.append(cur)
+            continue
+        for k, w in enumerate(seg):
+            name = Path(w).name
+            if name not in ("git", "gh"):
+                continue
+            gseg, at = seg[k:], cur
+            if name == "gh":
+                if gh_pr_create(gseg) is not None:
+                    publishing.append(at)
+                break
+            i = 1
+            while i < len(gseg) and gseg[i].startswith("-"):
+                if gseg[i] == "-C" and i + 1 < len(gseg):
+                    at = word_path(at, gseg[i + 1])
+                i += 2 if gseg[i] in GIT_GLOBAL_WITH_ARG else 1
+            if at != cur:
+                dirs.append(at)
+            sub, args = git_subcommand(gseg)
+            if sub in ("push", "send-pack", "http-push") or (sub and sub not in GIT_BUILTINS):  # an alias may publish
+                publishing.append(at)
+            if sub == "worktree" and args[:1] == ["add"]:
+                target, start = worktree_add_path(args[1:])
+                if target:
+                    created.append((at, word_path(at, target), start))
+            break
+    return dirs, publishing, created, named
+
+
+def remember_trees(root: Path, session: str, state: dict, cmd: str, cwd: Path) -> list[Path]:
+    """Before a command runs: remember each worktree it works in or names a path in (seen as it is now: `sed -i
+    WT/f`, `cp x WT/`, `> WT/f`, `ln -s WT link`) and each it creates (all its changes the session's). Returns where
+    its publishing invocations run."""
+    dirs, publishing, created, named = command_dirs(cmd, cwd)
+    if state.get("baseline") is not None and not state.get("damaged"):
+        new = False
+        for d in [cwd, *dirs]:
+            t = tree_of(root, d)
+            if t is not None and t != root:
+                new |= touch_tree(root, state, t, seen=True)
+        others = [Path(t) for t in worktree_heads(root)] if named else []
+        for t in others:
+            if any(q == t or t in q.parents for q in named):
+                new |= touch_tree(root, state, t, seen=True)
+        for at, path, start in created:
+            if tree_of(root, at) is not None and path.resolve() != root.resolve() and touch_tree(root, state, path, False):
+                new = True
+                h = git(at, "rev-parse", "--verify", "-q", f"{start}^{{commit}}") if start else None
+                if h:  # the commit it will check out, read before the command runs: its HEAD at the start
+                    state["trees"][str(path)]["start_head"] = h
+                elif start == "refs/heads/" + path.name:  # no such branch: git makes one at HEAD
+                    state["trees"][str(path)]["start_head"] = git(at, "rev-parse", "--verify", "-q", "HEAD")
+        if new:
+            save_state(root, session, state)
+    return publishing
 
 
 def versions(adapter: dict) -> list[str]:
@@ -870,11 +1141,13 @@ def on_session_start(root: Path, payload: dict, session: str) -> int:
         # a resume or fork without state carries on someone's work: every changed file counts as this session's
         carried = source in ("resume", "fork") and not state.get("damaged")
         refs = (git(root, "for-each-ref", "--format=%(objectname)") or "").split()
+        trees = worktree_heads(root)  # the other worktrees' HEADs now: what the session later does there is judged
         state = {"baseline": {"head": head(root), "at": time.time(),
                               "pending": {} if carried else {p: file_hash(root / p) for p in dirty_paths(root)},
-                              "protected": protected_hashes(root), "refs": sorted(set(refs))},
+                              "protected": protected_hashes(root), "worktrees": trees,
+                              "refs": sorted(set(refs) | {h for h in trees.values() if h})},
                  "strikes": 0, "last_pass": None}
-        save_state(root, session, state)
+        save_state(root, session, state, fresh=True)
         if carried and dirty_paths(root):
             first.append(f"This session continues another ({source}): files already changed count as its own.")
     base = state["baseline"]["head"]
@@ -923,23 +1196,28 @@ def on_post_edit(root: Path, payload: dict, session: str) -> int:
     d = delegate(adapter)
     if d:
         return relay(d, "post-edit", payload, notice)
+    tree = tree_of(root, path)
+    if tree is None or tree == root:
+        tree = root  # the project directory (a file of another repository inside it is checked as the project's)
     try:
-        rel = str(Path(path).resolve().relative_to(root.resolve()))
+        rel = Path(path).resolve().relative_to(tree.resolve()).as_posix()
     except ValueError:
-        return 0  # outside the project
+        return 0  # outside the project and its worktrees
+    if tree != root and touch_tree(root, state, tree, seen=True, skip=rel):  # the edit is the session's change there
+        save_state(root, session, state)
     edit = adapter.get("edit") or {}
     if not any(fnmatch.fnmatch(rel, m) or fnmatch.fnmatch(Path(rel).name, m) for m in edit.get("match", [])):
         return 0
-    if not (root / rel).is_file():
+    if not (tree / rel).is_file():
         return 0
     deadline = time.monotonic() + float(cfg.get("budget", {}).get("edit", EDIT_BUDGET))
     results = []
     for s in edit.get("steps", []):  # the steps share one budget: together they must finish inside the hook's timeout
         left = deadline - time.monotonic()
-        results.append(run_step(root, s, left, file=rel, env=adapter.get("env")) if left > 1 else
+        results.append(run_step(tree, s, left, file=rel, env=adapter.get("env")) if left > 1 else
                        {"name": s.get("name", s["cmd"][0]), "status": "cannot", "detail": "edit budget used up"})
     bad = [r for r in results if r["status"] in ("fail", "cannot")]
-    log(root, "post-edit", file=rel, result=[r["status"] for r in results])
+    log(root, "post-edit", file=rel, result=[r["status"] for r in results], **({"tree": str(tree)} if tree != root else {}))
     if not bad:
         return 0
     text = describe({"steps": bad})
@@ -956,15 +1234,20 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
                                      f"({', '.join(agents)}); it runs when the turn really ends"})
     state = load_state(root, session)
     try:
-        base, pending = session_base(root, state)
+        base, _ = session_base(root, state)
     except HarnessError as e:
         return strike(root, session, state, f"the gate cannot run: {e}")
+    here = tree_of(root, payload.get("cwd"))
+    new_tree = here is not None and here != root and touch_tree(root, state, here, seen=False)  # first seen at the end
+    trees = session_trees(root, state)  # every tree the session worked in, wherever the turn ends
     try:
         cfg, cfg_text, notes = read_config(root, base)
         adapter = load_adapter(root, cfg, base, notes)
     except HarnessError as e:
-        if is_repo(root) and head(root) == base and not changed_since(root, base, pending, start_refs(state)):
+        if is_repo(root) and not any(mine or moved for mine, moved, *_ in (tree_changes(root, state, t, base) for t in trees)):
             log(root, "stop", result="skip-no-session-change", error=str(e)[:200])
+            if new_tree:
+                save_state(root, session, state)
             return 0
         return strike(root, session, state, f"the gate cannot run: {e}")
     d = delegate(adapter)
@@ -974,35 +1257,52 @@ def on_stop(root: Path, payload: dict, session: str) -> int:
     hook_problem = pre_push_problem(root)
     if hook_problem:  # git push would no longer be judged, whatever this turn changed
         return strike(root, session, state, hook_problem)
-    fp = fingerprint(root, cfg_text)
-    mine: list[str] = []
-    gate = None
-    if fp is not None:  # with git: skip a tree already passed and reviewed, and a session that changed nothing
-        if fp == state.get("last_pass") and state.get("reviewed") == fp:
-            log(root, "stop", result="skip-unchanged")
-            return notice(restored) if restored else 0
-        mine = changed_since(root, base, pending, start_refs(state))
-        if not mine and fp != state.get("last_pass") and head(root) == base:  # HEAD moved (a merge): judge the tree
-            log(root, "stop", result="skip-no-session-change")
-            return notice(restored) if restored else 0
-    if fp is None or fp != state.get("last_pass"):  # passed before a push in this turn: only its review is due
-        gate = run_gate(root, adapter, "quick", float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
-        log(root, "stop", result=gate["verdict"], steps=[(r["name"], r["status"]) for r in gate["steps"]])
-        if gate["verdict"] != "pass":
-            what = "failed" if gate["verdict"] == "fail" else "could not run"
-            return strike(root, session, state, f"the quick gate {what}:\n{describe(gate)}\n\nThe whole tree is judged once "
-                          "this session changed anything: if a failure is in code it did not touch and was already "
-                          "there, tell the user instead of editing unrelated code.")
-        fp = fingerprint(root, cfg_text)  # the tree as the gate left it (a step may write caches)
-    state["last_pass"], state["reviewed"], state["strikes"] = fp, fp, 0
-    if fp is not None:
-        record_passed(root)
-    report = notes + [f"weakened check: {w}" for w in weakenings(root, adapter, base, mine, start_refs(state))]
-    report += [f"harness file changed in this session: {f}" for f in harness_changes(root, base, mine, state)]
+    deadline = time.monotonic() + float(cfg.get("budget", {}).get("gate", GATE_BUDGET))  # one budget for every tree
+    failures, report, passed, missing = [], list(notes), [], []
+    for t in trees:
+        rec, where = tree_record(state, t, root), "" if t == root else f"{t}: "
+        extra = {} if t == root else {"tree": str(t)}
+        fp = fingerprint(t, cfg_text)
+        mine, moved, refs, start, before = tree_changes(root, state, t, base)
+        if fp is not None:  # with git: skip a tree already passed and reviewed, and one the session did not change
+            if fp == rec.get("last_pass") and rec.get("reviewed") == fp:
+                log(root, "stop", result="skip-unchanged", **extra)
+                continue
+            if not mine and fp != rec.get("last_pass") and not moved:  # HEAD moved (a merge): judge the tree
+                log(root, "stop", result="skip-no-session-change", **extra)
+                continue
+        gate = None
+        if fp is None or fp != rec.get("last_pass"):  # passed before a push in this turn: only its review is due
+            gate = run_gate(t, adapter, "quick", deadline - time.monotonic())
+            log(root, "stop", result=gate["verdict"], steps=[(r["name"], r["status"]) for r in gate["steps"]], **extra)
+            if gate["verdict"] != "pass":
+                what = "failed" if gate["verdict"] == "fail" else "could not run"
+                failures.append(f"{where}the quick gate {what}:\n{describe(gate)}")
+                continue
+            fp = fingerprint(t, cfg_text)  # the tree as the gate left it (a step may write caches)
+            missing += [r["name"] for r in gate["steps"] if r["status"] == "missing"]
+        rec["last_pass"] = fp
+        passed.append((rec, fp))
+        touched = harness_changes(t, start, mine, before)
+        if fp is not None and not touched:  # a harness change is a person's to publish: its commit is not recorded
+            record_passed(t)
+        report += [f"{where}weakened check: {w}" for w in weakenings(t, adapter, start, mine, refs)]
+        report += [f"{where}harness file changed in this session: {f}" for f in touched]
+    if failures:  # the trees that passed are reviewed at the next end of a turn
+        return strike(root, session, state, "\n\n".join(failures) + "\n\nThe whole tree is judged once this session "
+                      "changed anything: if a failure is in code it did not touch and was already there, tell the user "
+                      "instead of editing unrelated code.")
+    if not passed:
+        if new_tree:
+            save_state(root, session, state)
+        return notice(restored) if restored else 0
+    for rec, fp in passed:
+        rec["reviewed"] = fp
+    state["strikes"] = 0
     if restored:
         report.append(restored)
     told = set(state.get("told_missing", []))
-    missing = [r["name"] for r in (gate or {}).get("steps", []) if r["status"] == "missing" and r["name"] not in told]
+    missing = sorted(set(missing) - told)
     if missing:  # said once per session: a skipped check must be visible, not repeated every turn
         report.append(f"optional step(s) skipped, tool not installed: {', '.join(missing)}")
         state["told_missing"] = sorted(told | set(missing))
@@ -1253,17 +1553,131 @@ def hooks_off(cmd: str) -> str | None:
     return None
 
 
-CLAUDECODE_MSG = ("this command changes CLAUDECODE, which the git pre-push hook reads (it judges only inside Claude "
-                  "Code); run it without that")
-CLEAR_ENV_MSG = ("this command clears the environment (env -i / exec -c), which hides CLAUDECODE from the git pre-push "
-                 "hook; pass the variables you need instead")
+CLAUDECODE_MSG = ("this command changes CLAUDECODE or CLAUDE_CODE_CHILD_SESSION, which the git pre-push hook reads (it "
+                  "judges only what Claude Code runs); run it without that")
+CLEAR_ENV_MSG = ("this command clears the environment (env -i / exec -c), which hides CLAUDE_CODE_CHILD_SESSION from the git "
+                 "pre-push hook; pass the variables you need instead")
 GIT_CONFIG_MSG = ("this command points git at other configuration (GIT_CONFIG_* / --config-env), where hooks can be "
                   "switched off and aliases defined out of the harness's sight; use the repository's configuration")
 GIT_HOOKS_MSG = "the harness owns the git hooks (.git/hooks); leave them alone, or ask the user"
 SHELL_ALIAS_MSG = ("this command defines a shell alias (alias.*=!...), which can publish where the command reading "
                    "cannot see; run the commands directly")
 ASSIGN_GIT_CONFIG = re.compile(r"GIT_CONFIG(?:_GLOBAL|_SYSTEM|_PARAMETERS|_COUNT|_KEY_\w+|_VALUE_\w+)?=")
-ENV_WITH_VALUE = {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}
+PATH_WORDS = 1000  # words of one simple command read as paths (a command naming more is read up to there)
+ENV_LONG = ("unset", "ignore-environment", "chdir", "split-string", "argv0", "null", "debug", "block-signal",
+            "default-signal", "ignore-signal", "list-signal-handling", "help", "version")
+ENV_LONG_WITH_VALUE = {"unset", "chdir", "split-string", "argv0"}
+ENV_SHORT_WITH_VALUE = "uCSa"
+
+
+def env_options(args: list[str], depth: int = 0) -> str | list[str]:
+    """What `env <args>` does to the environment, read as GNU env reads its options: short options in clusters
+    (`-vu NAME`, `-uNAME`), long ones by any unique prefix (`--un NAME`, `--uns=NAME`), and the words of `-S`.
+    "clear" when it empties the environment (-i, -), else the names it unsets."""
+    names, i = [], 0
+    while i < len(args):
+        o = args[i]
+        if o == "-":
+            return "clear"
+        if o == "--" or not o.startswith("-"):
+            break
+        value = None
+        if o.startswith("--"):
+            name, eq, val = o[2:].partition("=")
+            hits = [x for x in ENV_LONG if x.startswith(name)] if name else []
+            full = name if name in ENV_LONG else hits[0] if len(hits) == 1 else None
+            if full == "ignore-environment":
+                return "clear"
+            if full in ENV_LONG_WITH_VALUE:
+                if eq:
+                    value = val
+                elif i + 1 < len(args):
+                    i += 1
+                    value = args[i]
+            if full == "unset" and value is not None:
+                names.append(value)
+            if full == "split-string" and value is not None and depth < 3:
+                try:
+                    inner = env_options(shlex.split(value) + args[i + 1:], depth + 1)
+                except ValueError:
+                    return "clear"
+                return inner if inner == "clear" else names + inner
+            i += 1
+            continue
+        for j, ch in enumerate(o[1:], 1):
+            if ch == "i":
+                return "clear"
+            if ch in ENV_SHORT_WITH_VALUE:
+                if j + 1 < len(o):
+                    value = o[j + 1:]
+                elif i + 1 < len(args):
+                    i += 1
+                    value = args[i]
+                if ch == "u" and value is not None:
+                    names.append(value)
+                if ch == "S" and value is not None and depth < 3:
+                    try:
+                        inner = env_options(shlex.split(value) + args[i + 1:], depth + 1)
+                    except ValueError:
+                        return "clear"
+                    return inner if inner == "clear" else names + inner
+                break
+        i += 1
+    return names
+
+
+def command_word(seg: list[str]) -> str | None:
+    """The word a simple command runs (after `NAME=value` assignments and redirections)."""
+    for w in drop_redirections(seg):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", w, re.S):
+            return w
+    return None
+
+
+def names_hook_var(w: str) -> bool:
+    """Whether a word can stand for a hook variable: a plain name only when it is one of the two (CLAUDECODE_EXTRA,
+    CLAUDE_CODE_USE_BEDROCK are other variables); `NAME=value` when NAME is one or the value holds a piece of one
+    (v=CLAUDE_CODE_CHILD_SESSION, r=... for a nameref); any other word when it holds a piece (CLAUDE_CODE_$x)."""
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", w, re.S)
+    if m:
+        return m.group(1) in HOOK_VARS or any(part in m.group(2) for part in HOOK_VAR_PARTS)
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", w):
+        return w in HOOK_VARS
+    return any(part in w for part in HOOK_VAR_PARTS)
+
+
+def operand_names_hook_var(a: str, nameref: bool) -> bool:
+    """For a word a variable-changing command operates on: `NAME=value` changes NAME, and its value names a variable
+    only for a nameref (declare -n r=NAME); export PATH=$PATH:/opt/CLAUDE_CODE_x/bin changes PATH."""
+    m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", a, re.S)
+    if m and not nameref:
+        return m.group(1) in HOOK_VARS
+    return names_hook_var(a)
+
+
+def changer_operands(seg: list[str]) -> tuple[list[str], bool, bool] | None:
+    """When a simple command can change a variable (a VAR_BUILTINS word, `printf -v`, or a command whose name is put
+    together by expansion, as in ${u}set): the words after it, whether the name it changes is put together by
+    expansion (unset $v; declare -n r=$v, whose value is a name), and whether it makes namerefs (-n). Else None."""
+    words = drop_redirections(seg)
+    for k, w in enumerate(words):
+        if w in VAR_BUILTINS or (w == "printf" and "-v" in words[k + 1:]):
+            ops = words[k + 1:]
+            break
+    else:
+        cw = command_word(seg)
+        if cw is None or not re.search(r"[$`]", cw):
+            return None
+        return words[words.index(cw) + 1:], True, False
+    nameref = any(re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", a) for a in ops)
+    computed = False
+    for a in ops:
+        if a.startswith(("-", "+")):
+            continue
+        m = re.fullmatch(r"([^=]*)=(.*)", a, re.S)
+        if re.search(r"[$`]", m.group(1) if m else a) or (nameref and m and re.search(r"[$`]", m.group(2))):
+            computed = True
+    return ops, computed, nameref
 
 
 def tamper_problem(cmd: str) -> str | None:
@@ -1276,24 +1690,34 @@ def tamper_problem(cmd: str) -> str | None:
             if rx.search(cmd):
                 return msg
         return None
+    envs = [env_options(seg[k + 1:]) for seg in cmds for k, w in enumerate(seg) if Path(w).name == "env"]
+    if any(e == "clear" for e in envs):
+        return CLEAR_ENV_MSG
+    unset_by_env = [n for e in envs if isinstance(e, list) for n in e]
+    if set(unset_by_env) & set(HOOK_VARS):
+        return CLAUDECODE_MSG
+    # a command that changes a variable is refused when what it changes can be a hook variable: its own operands
+    # name one (or a piece of one); and when it changes a name put together by expansion (unset $v, ${u}set,
+    # env -u $v, a nameref), a name or piece anywhere in the command line counts (v=NAME; for v in NAME; read v)
+    computed = any(re.search(r"[$`]", n) for n in unset_by_env)
+    for seg in cmds:
+        found = changer_operands(seg)
+        if found is None:
+            continue
+        operands, by_expansion, nameref = found
+        if any(operand_names_hook_var(a, nameref) for a in operands):
+            return CLAUDECODE_MSG
+        computed |= by_expansion
+    if computed and any(names_hook_var(w) for seg in cmds for w in seg):
+        return CLAUDECODE_MSG
     for seg in cmds:
         for k, w in enumerate(seg):
-            if w.startswith("CLAUDECODE=") or w in ("-uCLAUDECODE", "--unset=CLAUDECODE") or (
-                    w == "CLAUDECODE" and k and (seg[k - 1] in ("-u", "--unset") or "unset" in seg[:k]
-                                                 or ("export" in seg[:k] and "-n" in seg[:k]))):
+            if any(w.startswith(f"{v}=") or w in (f"-u{v}", f"--unset={v}") for v in HOOK_VARS):
                 return CLAUDECODE_MSG
             if ASSIGN_GIT_CONFIG.match(w) or w == "--config-env" or w.startswith("--config-env="):
                 return GIT_CONFIG_MSG
             if " " not in w and (".git/hooks" in w or w.endswith("hooks/pre-push")):  # `>.git/hooks/x` too
                 return GIT_HOOKS_MSG
-            if Path(w).name == "env":
-                j = k + 1
-                while j < len(seg) and seg[j].startswith("-"):
-                    o = seg[j]
-                    if o in ("-", "-i", "--ignore-environment") or (not o.startswith("--")
-                                                                     and re.fullmatch(r"-[A-Za-z]*i[A-Za-z]*", o)):
-                        return CLEAR_ENV_MSG
-                    j += 2 if o in ENV_WITH_VALUE else 1
             if w == "exec" and k + 1 < len(seg) and re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", seg[k + 1]):
                 return CLEAR_ENV_MSG
     for seg in command_segments(cmd) or []:
@@ -1429,8 +1853,12 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
     if off:
         return deny(off)
     restored = restore_pre_push(root)  # a script may have changed it since the last command
-    publishes, problems = publish_problems(root, cmd)
     state = load_state(root, session)
+    cwd = Path(payload["cwd"]) if isinstance(payload.get("cwd"), str) and Path(payload["cwd"]).is_dir() else root
+    where = {tree_of(root, d) for d in remember_trees(root, session, state, cmd, cwd)} or {tree_of(root, cwd)}
+    mine_trees = sorted(str(t) for t in where if t is not None)
+    target = Path(mine_trees[0]) if mine_trees else None  # None: every push goes from another repository
+    publishes, problems = publish_problems(target, cmd) if target is not None else (False, [])
     if not publishes:  # a delegate (fsmap) judges every command; the core only publishing ones
         try:
             base, _ = session_base(root, state)
@@ -1441,20 +1869,24 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
         if d:
             return relay(d, "pre-bash", payload, lambda m: notice(m))
         return notice(restored) if restored else 0
-    if re.search(r"\bCLAUDECODE\b", cmd):
-        problems.append("this command mentions CLAUDECODE, which the git pre-push hook reads; publish without that")
+    if len(mine_trees) > 1:
+        problems.append(f"this command publishes from more than one worktree ({', '.join(mine_trees)}); publish from one "
+                        "per command")
+    if re.search(rf"\b{_HV}\b", cmd):
+        problems.append("this command mentions CLAUDECODE or CLAUDE_CODE_CHILD_SESSION, which the git pre-push hook "
+                        "reads; publish without that")
     if restored:
         problems.append(f"{restored}; run the command again")
     if problems:
         return deny("; ".join(problems))
     try:
-        base, pending = session_base(root, state)
+        base, _ = session_base(root, state)
         cfg, cfg_text, _ = read_config(root, base)
         adapter = load_adapter(root, cfg, base)
     except HarnessError as e:
         return deny(f"the gate cannot run, so nothing is published: {e}")
-    mine = changed_since(root, base, pending, start_refs(state))
-    touched = harness_changes(root, base, mine, state)
+    mine, _, _, start, before = tree_changes(root, state, target, base)
+    touched = harness_changes(target, start, mine, before)
     if touched:
         return deny("the harness, its settings or the CI workflows changed in this session (" + ", ".join(touched[:5]) +
                     "); a person reviews and publishes such a change")
@@ -1464,22 +1896,24 @@ def on_pre_bash(root: Path, payload: dict, session: str) -> int:
     hook_problem = pre_push_problem(root)
     if hook_problem:
         return deny(hook_problem)
-    dirty = dirty_paths(root)
+    dirty = dirty_paths(target)
     if dirty:
-        return deny(f"there are uncommitted changes ({', '.join(dirty[:5])}{', ...' if len(dirty) > 5 else ''}), so the "
+        return deny(f"there are uncommitted changes{'' if target == root else f' in {target}'} "
+                    f"({', '.join(dirty[:5])}{', ...' if len(dirty) > 5 else ''}), so the "
                     "gate would check a different tree than the commit being pushed. Commit them (or remove them; a "
                     "file a check leaves behind can be ignored, but the gate also sees ignored files the commit lacks, "
                     "so CI on a clean checkout stays the check of record) in one command, then push in another")
-    fp = fingerprint(root, cfg_text)
-    if fp is not None and fp == state.get("last_pass"):
-        record_passed(root)
+    rec = tree_record(state, target, root)
+    fp = fingerprint(target, cfg_text)
+    if fp is not None and fp == rec.get("last_pass"):
+        record_passed(target)
         return 0
-    gate = run_gate(root, adapter, "quick", float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
-    log(root, "pre-bash", result=gate["verdict"])
+    gate = run_gate(target, adapter, "quick", float(cfg.get("budget", {}).get("gate", GATE_BUDGET)))
+    log(root, "pre-bash", result=gate["verdict"], **({"tree": str(target)} if target != root else {}))
     if gate["verdict"] == "pass":
-        state["last_pass"] = fingerprint(root, cfg_text)
+        rec["last_pass"] = fingerprint(target, cfg_text)
         save_state(root, session, state)
-        record_passed(root)
+        record_passed(target)
         return 0
     return deny(f"the quick gate {'failed' if gate['verdict'] == 'fail' else 'could not run'} on this tree:\n{describe(gate)}")
 
