@@ -32,7 +32,7 @@ AOK의 다른 기능은 허브와 세션의 층에서 돈다. ⑧은 자식(dev)
 |---|---|
 | 규칙의 출처는 하나 | 훅·사람·CI가 같은 `verify`를 부른다. 게이트 단계는 어댑터(데이터)와 작업 레포의 `.aok/harness.json`에서 온다 |
 | 언어 중립 | 코어는 언어를 모른다. 지문(HEAD + 바뀐 파일 내용 + 게이트 정의), 기준, 막힘 횟수, 약화 보고, 푸시 판단이 코어의 일이고, 무엇을 돌릴지는 어댑터가 정한다. 어댑터를 둘(Python, Rust) 두는 것은 이 분리가 실제로 언어와 무관한지 시험으로 보이기 위해서다 |
-| 판정받는 쪽이 정의를 못 바꾼다 | 게이트 정의(`.aok/harness.json`)와 레포에 복사된 어댑터(`.aok/harness/adapters/`)는 세션이 시작된 커밋의 것을 쓴다. 작업 트리에서 바꾼 정의는 쓰이지 않고 "differs from the version in …"으로 보고된다. 기준 커밋에 정의가 없으면 작업 트리에 새로 만든 정의도 쓰지 않는다(커밋한 뒤 시작하는 세션부터 적용). 하네스 파일, `.claude/settings*.json`의 하네스에 닿는 키, 설치된 리뷰어, `.github/workflows/`를 바꾼 세션의 푸시는 막고 사람에게 넘긴다. 코어 코드 자체는 세션 안에서 고정하지 못한다(§5). CI는 기준 브랜치의 코어·어댑터·정의로 돈다(§3) |
+| 판정받는 쪽이 정의를 못 바꾼다 | 게이트 정의(`.aok/harness.json`)와 레포에 복사된 어댑터(`.aok/harness/adapters/`)는 세션이 시작된 커밋의 것을 쓴다. 작업 트리에서 바꾼 정의는 쓰이지 않고 "differs from the version in …"으로 보고된다. 기준 커밋에 정의가 없으면 작업 트리에 새로 만든 정의도 쓰지 않는다(커밋한 뒤 시작하는 세션부터 적용). 하네스 파일, `.claude/settings*.json`의 하네스에 닿는 키, 설치된 리뷰어, `.github/workflows/`를 바꾼 세션의 푸시는 막고 사람에게 넘긴다(그런 커밋은 턴 종료가 통과해도 pre-push 훅의 통과 목록에 적지 않는다). 그런 파일을 바꾸는 것이 일인 레포는 정의에 `"protected": "report"`를 둔다. 그러면 막지 않고 통과 보고와 게시 때 알린다. 이 값도 기준 커밋에서 읽으므로 세션이 스스로 바꾸지 못한다. 코어 코드 자체는 세션 안에서 고정하지 못한다(§5). CI는 기준 브랜치의 코어·어댑터·정의로 돈다(§3) |
 | 게시는 보내는 커밋으로 판정 | 명령 읽기는 빠른 안내이고, `git push`의 결정은 git `pre-push` 훅이 보내는 ref의 끝 커밋으로 한다. 그 길로는 게이트가 깨끗한 트리에서 통과시킨 커밋만 Claude Code 안에서 나간다. 훅을 끄거나 훅이 보는 값을 바꾸는 길(`--no-verify`, `core.hooksPath`, `CLAUDE_CODE_CHILD_SESSION`, `env -i`, `GIT_CONFIG_*`, 셸 별칭, 훅 파일, 훅을 부르지 않는 `send-pack`)은 명령 읽기가 거부하고, 바뀐 훅 파일은 다음 명령 전에 되돌린다. 그 일을 스크립트 안에서 한 번에 하면 막지 못한다(§5). 그래서 정본 게이트는 CI다 |
 | 닫힌 실패 | 단계를 실행할 수 없거나(필수 도구 없음, 시간 초과, 설정 오류), 세션 상태가 손상됐거나 없거나, 위임한 fsmap이 0·2가 아닌 코드로 끝나거나 시작하지 못하거나, 하네스가 죽으면 통과로 치지 않는다. 턴 종료는 막고 푸시는 거부한다. 상태를 저장하는 일까지 실패하면 그래도 block JSON을 낸다. PreToolUse 훅에는 `onFailure: "block"`을 달아, 코어가 시작조차 못 하거나 시간을 넘기면 명령을 막는다 [문서]. 선택 도구가 없으면 건너뛰되 세션에 한 번 알린다 |
 | 출구가 있다 | 연달아 3번 막은 뒤 놓아 준다. 세 번째 사유가 "마지막"임을 Claude에게 알려, 그 턴 안에 무엇이 실패하는지 보고하게 한다(dev 자식은 부모에게 AOK/1 `blocked`). 막힌 자식이 예산을 태우며 맴돌지 않게 하기 위해서다. Claude Code에도 Stop 훅이 8번 연속 턴을 이어 가게 하면 다음 block을 무시하는 상한이 있고, 도구 호출마다 0으로 돌아가며 `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`으로 바꾼다 [문서]. 하네스의 3번은 그보다 먼저 온다 |
@@ -53,7 +53,9 @@ AOK의 다른 기능은 허브와 세션의 층에서 돈다. ⑧은 자식(dev)
    python3 -I "$RUNNER_TEMP/aok_harness.py" verify --mode full --base origin/main
    ```
    하네스를 처음 들이는 PR은 기준 브랜치에 코어가 없으므로 이 잡이 실패한다. 그 PR은 사람이 검토해 병합한다.
-5. 단계 덧붙이기·바꾸기는 `.aok/harness.json`에서 한다. 허용 키는 `adapter`(이름), `gate`(`quick`·`full` 단계 목록을 통째로 바꿈), `edit`(`match`·`steps`), `extra`(양쪽 게이트 끝에 덧붙임), `budget`(`gate` 1–840초, `edit` 1–100초. 훅 시간 제한 900초·120초에서 하네스의 git 호출 몫을 뺀 값)뿐이다. 단계는 `{"name": …, "cmd": [...], "optional": true|false}`이다. 모양이 틀리면 실행 불가(2)다.
+5. 단계 덧붙이기·바꾸기는 `.aok/harness.json`에서 한다. 허용 키는 `adapter`(이름), `gate`(`quick`·`full` 단계 목록을 통째로 바꿈), `edit`(`match`·`steps`), `extra`(양쪽 게이트 끝에 덧붙임), `budget`(`gate` 1–840초, `edit` 1–100초. 훅 시간 제한 900초·120초에서 하네스의 git 호출 몫을 뺀 값), `protected`(`refuse` 기본 · `report`, §2)뿐이다. 단계는 `{"name": …, "cmd": [...], "optional": true|false}`이다. 모양이 틀리면 실행 불가(2)다.
+
+이 키트 자체도 같은 하네스로 돈다(`.aok/harness.json`, `.claude/settings.json`). 정의는 `protected: "report"`와 턴마다 1분 남짓인 빠른 묶음이다(`scripts`·`site`·`regress_tools`·`atlas` 시험, 비밀 스캔, 사이트 점검). 이 키트의 세션은 CI와 하네스를 고치는 것이 일이고, PR 검토와 CI(하네스·콘솔 시험, 변이 조각)가 정본이기 때문이다. 훅은 `.aok/harness/`에 설치된 사본을 돌린다. 그래서 `harness/`를 고치는 세션도 자기 검사를 바꾸지 않는다. 대신 `harness/`를 바꾸는 PR은 `python3 -I harness/aok_harness.py install --repo . --adapter python --yes`로 사본을 다시 설치해 같이 올린다(`KitInstallTests`가 사본이 원본과 같은지 본다). `ask` 규칙은 설치 기본값(`.aok/`·`.claude/` 전체)을 하네스가 지키는 파일(`.claude/settings*.json`, 리뷰어)로 좁혔다. 이 키트는 `.claude/skills/`를 늘 고친다.
 
 ## 4. 어댑터
 

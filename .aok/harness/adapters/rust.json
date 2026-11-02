@@ -1,0 +1,43 @@
+{
+  "name": "rust",
+  "detect": ["Cargo.toml"],
+  "delegate": {
+    "bin": "fsmap",
+    "probe": ["fsmap", "hook", "--help"],
+    "hook": ["fsmap", "hook", "{event}"],
+    "events": {"session-start": "session-start", "post-edit": "post-edit", "stop": "stop", "prompt": "prompt", "pre-bash": "pre-bash"},
+    "verify": ["fsmap", "verify", "--mode", "{mode}"],
+    "json": ["--json"],
+    "note": "fsmap (d-j-lee/filesystemMap) is the first-round Rust harness: integrity checks of cargo/rustfmt/clippy/toolchain config, environment cleanup, git pre-push verification and audit. When it is installed, every hook and verify is handed to it."
+  },
+  "versions": [["rustc", "--version"], ["cargo", "--version"], ["cargo", "clippy", "--version"]],
+  "edit": {
+    "match": ["*.rs", "Cargo.toml", "build.rs"],
+    "steps": [
+      {"name": "check", "cmd": ["cargo", "check", "--all-targets", "--offline", "--quiet", "--message-format", "short"]}
+    ]
+  },
+  "gate": {
+    "quick": [
+      {"name": "fmt", "cmd": ["cargo", "fmt", "--all", "--", "--check"]},
+      {"name": "clippy", "cmd": ["cargo", "clippy", "--all-targets", "--quiet", "--", "-D", "warnings"]},
+      {"name": "test", "cmd": ["cargo", "test", "--quiet"]}
+    ],
+    "full": [
+      {"name": "fmt", "cmd": ["cargo", "fmt", "--all", "--", "--check"]},
+      {"name": "clippy", "cmd": ["cargo", "clippy", "--all-targets", "--quiet", "--", "-D", "warnings"]},
+      {"name": "test", "cmd": ["cargo", "test", "--quiet"]},
+      {"name": "deny", "cmd": ["cargo", "deny", "check"], "optional": true}
+    ]
+  },
+  "test_files": ["tests/*.rs"],
+  "check_config": [".cargo/config.toml", ".cargo/config", "*/.cargo/config.toml", "Cargo.toml", "*/Cargo.toml", "rust-toolchain", "rust-toolchain.toml", "clippy.toml", ".clippy.toml", "rustfmt.toml", ".rustfmt.toml", "deny.toml", "build.rs", "*/build.rs"],
+  "weakening": [
+    {"name": "allow-attribute", "added": "#!?\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?(?:allow|expect)\\s*\\("},
+    {"name": "ignored-test", "added": "#\\[\\s*(?:cfg_attr\\s*\\(.*,\\s*)?ignore\\b"},
+    {"name": "cfg-false", "added": "#!?\\[\\s*cfg\\s*\\(\\s*(?:false|any\\s*\\(\\s*\\)|not\\s*\\(\\s*all\\s*\\(\\s*\\)\\s*\\))"},
+    {"name": "unsafe", "added": "\\bunsafe\\s*(?:\\{|\\(|fn\\b|impl\\b|trait\\b|extern\\b)"},
+    {"name": "assertion-removed", "removed": "^\\s*(debug_)?assert(_eq|_ne)?!\\("},
+    {"name": "test-removed", "removed": "^\\s*#\\[(tokio::)?test\\b"}
+  ]
+}

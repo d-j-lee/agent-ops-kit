@@ -1130,6 +1130,33 @@ class PushHookTests(Harness):
         self.assertEqual(self.push("push", "-q", "origin", "bad:old", claude=False).returncode, 0)
         self.assertEqual(self.push("push", "-q", "origin", ":old").returncode, 0)  # a deletion sends no commit
 
+    def test_harness_changes_can_be_reported_instead_of_refused(self):
+        self.remote_repo()
+        self.write(".aok/harness.json", json.dumps({"protected": "report"}))  # a person's choice, in the base commit
+        self.git("add", "-A")
+        self.git("commit", "-qm", "report harness changes")
+        self.stub("ruff", "exit 0\n")
+        self.start()
+        self.write(".github/workflows/ci.yml", "on: push\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ci")
+        self.assertIn("harness file changed in this session: .github/workflows/ci.yml", self.stop()["systemMessage"])
+        self.assertEqual(self.push("push", "-q", "origin", "main").returncode, 0)  # recorded: it goes out
+        self.write(".github/workflows/ci.yml", "on: [push]\n")
+        self.git("commit", "-qam", "ci again")
+        out = self.bash("git push origin main")
+        self.assertFalse(self.denied(out))
+        self.assertIn("publishing a change to the harness", out["systemMessage"])  # out, but never quietly
+        self.write(".aok/harness.json", json.dumps({"protected": "refuse"}))  # the session cannot change the policy
+        self.git("commit", "-qam", "back")
+        self.assertIn("publishing a change", self.bash("git push origin main")["systemMessage"])
+
+    def test_an_unknown_protected_policy_switches_the_harness_off(self):
+        self.python_repo(config={"protected": "allow"})
+        msg = self.start()["systemMessage"]
+        self.assertIn("OFF", msg)
+        self.assertIn("protected must be one of refuse, report", msg)
+
     def test_a_pass_on_a_dirty_tree_does_not_clear_the_commit(self):
         remote = self.remote_repo()
         self.stub("ruff", "exit 0\n")
@@ -1724,6 +1751,21 @@ class WorktreeTests(Harness):
         self.assertEqual(hook.read_text(), current)
         hook.write_text(legacy.replace("exec python3", "exit 0 #"))  # an earlier script that no longer runs the core
         self.assertIn("restored", self.bash("ls")["systemMessage"])
+
+
+class KitInstallTests(unittest.TestCase):
+    """This kit runs its own harness from the installed copy in .aok/ (the hooks keep running what was installed, so a
+    session that edits harness/ does not change its own checks). The copy must be the source as it is here: a pull
+    request that changes harness/ installs it again (`install --repo . --adapter python --yes`)."""
+
+    def test_the_installed_copy_is_the_current_core(self):
+        src = CORE.parent
+        files = sorted(f.relative_to(src) for f in src.rglob("*") if f.is_file() and "__pycache__" not in f.parts)
+        self.assertIn(Path("aok_harness.py"), files)
+        for rel in files:
+            installed = ROOT / ".aok" / "harness" / rel
+            self.assertTrue(installed.is_file(), f".aok/harness/{rel} is missing: install again")
+            self.assertEqual(installed.read_bytes(), (src / rel).read_bytes(), f".aok/harness/{rel} is stale: install again")
 
 
 class VerifyTests(Harness):
